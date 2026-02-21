@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { FileText, Users, History } from "lucide-react";
+import { PageHeader } from "@/components/layout/page-header";
+import { SectionLabel } from "@/components/ui/section-label";
 
 export const metadata: Metadata = {
   title: "About",
@@ -21,28 +23,23 @@ export default function AboutPage() {
   return (
     <div>
       {/* Page Header */}
-      <section className="bg-green-700 text-white py-16">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <h1 className="text-4xl font-bold text-white">About the Trust</h1>
-          <p className="mt-4 text-lg text-green-100 max-w-2xl">
-            The Loddiswell Playing Fields and Village Hall Trust was formed to
-            maintain and manage community facilities for the benefit of
-            Loddiswell Parish inhabitants.
-          </p>
-        </div>
-      </section>
+      <PageHeader
+        label="Who We Are"
+        title="About the Trust"
+        subtitle="The Loddiswell Playing Fields and Village Hall Trust was formed to maintain and manage community facilities for the benefit of Loddiswell Parish inhabitants."
+      />
 
       {/* History & Mission */}
-      <section className="py-16 bg-background">
+      <section className="py-20 sm:py-24 bg-background">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 gap-12 lg:grid-cols-2">
             <div>
               <div className="flex items-center gap-3 mb-6">
                 <History
-                  className="h-8 w-8 text-green-600"
+                  className="h-8 w-8 text-sage-600"
                   aria-hidden="true"
                 />
-                <h2 className="text-2xl font-bold">Our History</h2>
+                <h2 className="font-serif text-2xl">Our History</h2>
               </div>
               <div className="prose text-muted-foreground space-y-4">
                 <p>
@@ -67,10 +64,10 @@ export default function AboutPage() {
             <div>
               <div className="flex items-center gap-3 mb-6">
                 <Users
-                  className="h-8 w-8 text-green-600"
+                  className="h-8 w-8 text-sage-600"
                   aria-hidden="true"
                 />
-                <h2 className="text-2xl font-bold">Our Mission</h2>
+                <h2 className="font-serif text-2xl">Our Mission</h2>
               </div>
               <div className="prose text-muted-foreground space-y-4">
                 <p>
@@ -106,9 +103,12 @@ export default function AboutPage() {
       </section>
 
       {/* Trustees */}
-      <section className="py-16 bg-white">
+      <section className="py-20 sm:py-24 bg-card">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <h2 className="text-2xl font-bold mb-8">Our Trustees</h2>
+          <SectionLabel>The Committee</SectionLabel>
+          <h2 className="font-serif text-3xl sm:text-4xl mb-4">
+            Our Trustees
+          </h2>
           <p className="text-muted-foreground mb-8 max-w-2xl">
             The Trust is managed by a dedicated committee of volunteers from the
             local community. They give their time freely to ensure our facilities
@@ -129,20 +129,20 @@ export default function AboutPage() {
       </section>
 
       {/* Documents */}
-      <section className="py-16 bg-muted">
+      <section className="py-20 sm:py-24 bg-muted">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3 mb-8">
             <FileText
-              className="h-8 w-8 text-green-600"
+              className="h-8 w-8 text-sage-600"
               aria-hidden="true"
             />
-            <h2 className="text-2xl font-bold">Documents</h2>
+            <h2 className="font-serif text-2xl">Documents</h2>
           </div>
           <p className="text-muted-foreground mb-8">
             Meeting minutes, AGM documents, and policies are available below.
             These are regularly updated by the Trust committee.
           </p>
-          <div className="rounded-xl border border-border bg-white p-8 text-center">
+          <div className="rounded-lg border border-border bg-card p-8 text-center">
             <p className="text-muted-foreground">
               Documents will be available here once uploaded by the Trust
               committee.
@@ -152,10 +152,10 @@ export default function AboutPage() {
       </section>
 
       {/* Get Involved CTA */}
-      <section className="py-16 bg-green-700 text-white">
+      <section className="py-20 sm:py-24 bg-sage-800 text-sage-50">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl font-bold text-white">Get Involved</h2>
-          <p className="mt-4 text-green-100 max-w-xl mx-auto">
+          <h2 className="font-serif text-3xl sm:text-4xl">Get Involved</h2>
+          <p className="mt-4 text-sage-200 max-w-xl mx-auto">
             Whether you&apos;d like to volunteer, join a club, or support the
             Trust through our community lottery, there are many ways to get
             involved.
@@ -163,13 +163,13 @@ export default function AboutPage() {
           <div className="mt-8 flex flex-wrap justify-center gap-4">
             <Link
               href="/contact"
-              className="inline-flex items-center rounded-md bg-white px-5 py-3 text-sm font-semibold text-green-700 no-underline hover:bg-green-50 transition-colors"
+              className="inline-flex items-center rounded-md bg-copper-500 px-5 py-3 text-sm font-semibold text-white no-underline hover:bg-copper-600 transition-colors"
             >
               Contact Us
             </Link>
             <Link
               href="/lottery"
-              className="inline-flex items-center rounded-md border border-green-300 px-5 py-3 text-sm font-semibold text-white no-underline hover:bg-green-600 transition-colors"
+              className="inline-flex items-center rounded-md border border-sage-500 px-5 py-3 text-sm font-semibold text-sage-50 no-underline hover:bg-sage-700 transition-colors"
             >
               Join the Lottery
             </Link>

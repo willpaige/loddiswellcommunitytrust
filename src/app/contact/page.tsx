@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Mail, Phone, MapPin } from "lucide-react";
 import { ContactForm } from "@/components/contact-form";
+import { PageHeader } from "@/components/layout/page-header";
 
 export const metadata: Metadata = {
   title: "Contact",
@@ -11,40 +12,41 @@ export const metadata: Metadata = {
 export default function ContactPage() {
   return (
     <div>
-      {/* Page Header */}
-      <section className="bg-green-700 text-white py-16">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <h1 className="text-4xl font-bold text-white">Contact Us</h1>
-          <p className="mt-4 text-lg text-green-100 max-w-2xl">
-            Have a question, want to book a facility, or get involved? We&apos;d
-            love to hear from you.
-          </p>
-        </div>
-      </section>
+      <PageHeader
+        label="Get in Touch"
+        title="Contact Us"
+        subtitle="Have a question, want to book a facility, or get involved? We'd love to hear from you."
+      />
 
-      <section className="py-16 bg-background">
+      <section className="py-20 sm:py-24 bg-background">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 gap-12 lg:grid-cols-2">
             {/* Contact Form */}
             <div>
-              <h2 className="text-2xl font-bold mb-6">Send Us a Message</h2>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-copper-500 mb-3">
+                Write to Us
+              </p>
+              <h2 className="font-serif text-2xl mb-6">Send Us a Message</h2>
               <ContactForm />
             </div>
 
             {/* Contact Details */}
             <div className="space-y-8">
               <div>
-                <h2 className="text-2xl font-bold mb-6">Get in Touch</h2>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-copper-500 mb-3">
+                  Contact Details
+                </p>
+                <h2 className="font-serif text-2xl mb-6">Get in Touch</h2>
                 <div className="space-y-6">
                   <div className="flex items-start gap-4">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-100 text-green-700 flex-shrink-0">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sage-100 text-sage-700 flex-shrink-0">
                       <Mail className="h-5 w-5" aria-hidden="true" />
                     </div>
                     <div>
                       <h3 className="font-medium">Email</h3>
                       <a
                         href="mailto:hello@loddiswellcommunitytrust.org"
-                        className="text-sm text-muted-foreground hover:text-foreground"
+                        className="text-sm text-muted-foreground hover:text-copper-500"
                       >
                         hello@loddiswellcommunitytrust.org
                       </a>
@@ -52,14 +54,14 @@ export default function ContactPage() {
                   </div>
 
                   <div className="flex items-start gap-4">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-100 text-green-700 flex-shrink-0">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sage-100 text-sage-700 flex-shrink-0">
                       <Phone className="h-5 w-5" aria-hidden="true" />
                     </div>
                     <div>
                       <h3 className="font-medium">Bookings Secretary</h3>
                       <a
                         href="tel:07716162407"
-                        className="text-sm text-muted-foreground hover:text-foreground"
+                        className="text-sm text-muted-foreground hover:text-copper-500"
                       >
                         07716 162407
                       </a>
@@ -70,7 +72,7 @@ export default function ContactPage() {
                   </div>
 
                   <div className="flex items-start gap-4">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-100 text-green-700 flex-shrink-0">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sage-100 text-sage-700 flex-shrink-0">
                       <MapPin className="h-5 w-5" aria-hidden="true" />
                     </div>
                     <div>
@@ -88,7 +90,7 @@ export default function ContactPage() {
                   </div>
 
                   <div className="flex items-start gap-4">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-100 text-green-700 flex-shrink-0">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sage-100 text-sage-700 flex-shrink-0">
                       <MapPin className="h-5 w-5" aria-hidden="true" />
                     </div>
                     <div>
@@ -106,7 +108,7 @@ export default function ContactPage() {
               </div>
 
               {/* Map Embed */}
-              <div className="rounded-xl border border-border overflow-hidden">
+              <div className="rounded-lg border border-border overflow-hidden">
                 <iframe
                   src="https://www.openstreetmap.org/export/embed.html?bbox=-3.7900%2C50.3100%2C-3.7600%2C50.3300&amp;layer=mapnik&amp;marker=50.3200%2C-3.7750"
                   title="Map showing Loddiswell village location"

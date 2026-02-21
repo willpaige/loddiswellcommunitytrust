@@ -5,37 +5,52 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme {
-  /* Extended palette for direct use (hero sections, etc.) */
-  --color-green-50: #f0f7ec;
-  --color-green-100: #ddefd4;
-  --color-green-200: #bddead;
-  --color-green-300: #93c87e;
-  --color-green-400: #6aad53;
-  --color-green-500: #4a8f36;
-  --color-green-600: #3a7229;
-  --color-green-700: #2d5016;
-  --color-green-800: #284a1a;
-  --color-green-900: #233f19;
-  --color-green-950: #0f220a;
+  /* Devon Stone — Sage palette (replaces green) */
+  --color-sage-50: #F2F4EF;
+  --color-sage-100: #E1E6DA;
+  --color-sage-200: #C4CDB6;
+  --color-sage-300: #9EAC8A;
+  --color-sage-400: #7A8B65;
+  --color-sage-500: #5E7049;
+  --color-sage-600: #4A5A3C;
+  --color-sage-700: #3B4830;
+  --color-sage-800: #2E3826;
+  --color-sage-900: #1F2619;
+  --color-sage-950: #11150E;
 
-  --color-amber-50: #fdf8ef;
-  --color-amber-100: #faecd6;
-  --color-amber-200: #f4d5ab;
-  --color-amber-300: #ecb875;
-  --color-amber-400: #d4a843;
-  --color-amber-500: #d48f27;
-  --color-amber-600: #bc751c;
-  --color-amber-700: #9c5a19;
-  --color-amber-800: #7f481c;
-  --color-amber-900: #683c1a;
-  --color-amber-950: #3b1e0b;
+  /* Devon Stone — Copper palette (replaces amber) */
+  --color-copper-50: #FBF3EF;
+  --color-copper-100: #F4DFD6;
+  --color-copper-200: #E8C0AC;
+  --color-copper-300: #D49A7D;
+  --color-copper-400: #C47A5A;
+  --color-copper-500: #B5654A;
+  --color-copper-600: #9A5039;
+  --color-copper-700: #7D3F2E;
+  --color-copper-800: #633225;
+  --color-copper-900: #4A251C;
+  --color-copper-950: #2E1610;
 
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  /* Stone neutrals for general use */
+  --color-stone-50: #FDFBF7;
+  --color-stone-100: #F5F0EA;
+  --color-stone-200: #EDE8E0;
+  --color-stone-300: #E8E2D9;
+  --color-stone-400: #D9D2C8;
+  --color-stone-500: #B5AFA5;
+  --color-stone-600: #8F8A82;
+  --color-stone-700: #7A746D;
+  --color-stone-800: #5A554F;
+  --color-stone-900: #3D3935;
+  --color-stone-950: #2C2825;
+
+  --font-sans: var(--font-dm-sans, "DM Sans"), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-dm-serif, "DM Serif Display"), ui-serif, Georgia, serif;
 }
 
 @layer base {
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply bg-background text-foreground antialiased font-sans;
   }
 
   * {
@@ -46,8 +61,12 @@
     @apply underline-offset-2;
   }
 
-  h1, h2, h3, h4, h5, h6 {
-    @apply font-semibold tracking-tight;
+  h1, h2, h3, h4 {
+    @apply font-serif tracking-tight;
+  }
+
+  h5, h6 {
+    @apply font-sans font-semibold tracking-tight;
   }
 }
 
@@ -61,10 +80,10 @@
   @apply min-h-[200px] p-4 focus:outline-none;
 }
 .ProseMirror h2 {
-  @apply text-xl font-bold mt-6 mb-2;
+  @apply text-xl font-serif mt-6 mb-2;
 }
 .ProseMirror h3 {
-  @apply text-lg font-semibold mt-4 mb-2;
+  @apply text-lg font-serif mt-4 mb-2;
 }
 .ProseMirror p {
   @apply mb-3 leading-relaxed;
@@ -130,37 +149,37 @@
 }
 
 :root {
-  --radius: 0.625rem;
-  /* Green-themed palette mapped to shadcn semantic tokens */
-  --background: #fafaf8;
-  --foreground: #1a1a1a;
-  --card: #ffffff;
-  --card-foreground: #1a1a1a;
-  --popover: #ffffff;
-  --popover-foreground: #1a1a1a;
-  --primary: #2d5016;
-  --primary-foreground: #ffffff;
-  --secondary: #f0f7ec;
-  --secondary-foreground: #2d5016;
-  --muted: #f5f5f0;
-  --muted-foreground: #6b6b6b;
-  --accent: #d4a843;
-  --accent-foreground: #3b1e0b;
-  --destructive: #dc2626;
-  --border: #e5e5de;
-  --input: #e5e5de;
-  --ring: #4a8f36;
-  --chart-1: #2d5016;
-  --chart-2: #4a8f36;
-  --chart-3: #d4a843;
-  --chart-4: #6aad53;
-  --chart-5: #93c87e;
-  --sidebar: #fafaf8;
-  --sidebar-foreground: #1a1a1a;
-  --sidebar-primary: #2d5016;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #f0f7ec;
-  --sidebar-accent-foreground: #2d5016;
-  --sidebar-border: #e5e5de;
-  --sidebar-ring: #4a8f36;
+  --radius: 0.375rem;
+  /* Devon Stone palette — semantic tokens */
+  --background: #F5F0EA;
+  --foreground: #2C2825;
+  --card: #FDFBF7;
+  --card-foreground: #2C2825;
+  --popover: #FDFBF7;
+  --popover-foreground: #2C2825;
+  --primary: #4A5A3C;
+  --primary-foreground: #F5F0EA;
+  --secondary: #EDE8E0;
+  --secondary-foreground: #4A5A3C;
+  --muted: #E8E2D9;
+  --muted-foreground: #7A746D;
+  --accent: #B5654A;
+  --accent-foreground: #FDFBF7;
+  --destructive: #C4453A;
+  --border: #D9D2C8;
+  --input: #D9D2C8;
+  --ring: #4A5A3C;
+  --chart-1: #4A5A3C;
+  --chart-2: #5E7049;
+  --chart-3: #B5654A;
+  --chart-4: #7A8B65;
+  --chart-5: #9EAC8A;
+  --sidebar: #F5F0EA;
+  --sidebar-foreground: #2C2825;
+  --sidebar-primary: #4A5A3C;
+  --sidebar-primary-foreground: #F5F0EA;
+  --sidebar-accent: #EDE8E0;
+  --sidebar-accent-foreground: #4A5A3C;
+  --sidebar-border: #D9D2C8;
+  --sidebar-ring: #4A5A3C;
 }

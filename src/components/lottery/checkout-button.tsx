@@ -47,7 +47,7 @@ export function LotteryCheckoutButton() {
           <Minus className="h-4 w-4" />
         </Button>
         <div className="text-center min-w-[80px]">
-          <p className="text-3xl font-bold">{quantity}</p>
+          <p className="text-3xl font-serif">{quantity}</p>
           <p className="text-xs text-muted-foreground">
             ticket{quantity !== 1 ? "s" : ""}
           </p>
@@ -76,7 +76,7 @@ export function LotteryCheckoutButton() {
         onClick={handleCheckout}
         disabled={loading}
         size="lg"
-        className="w-full text-lg py-6"
+        className="w-full text-lg py-6 bg-sage-600 hover:bg-sage-700"
       >
         {loading ? (
           <>

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ExternalLink, Phone, Mail } from "lucide-react";
+import { PageHeader } from "@/components/layout/page-header";
+import { SectionLabel } from "@/components/ui/section-label";
 
 export const metadata: Metadata = {
   title: "Booking",
@@ -59,22 +61,20 @@ const hireFacilities = [
 export default function BookingPage() {
   return (
     <div>
-      {/* Page Header */}
-      <section className="bg-green-700 text-white py-16">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <h1 className="text-4xl font-bold text-white">Book a Facility</h1>
-          <p className="mt-4 text-lg text-green-100 max-w-2xl">
-            Check availability and hire rates for the Village Hall, Pavilion,
-            and Tennis Courts. Contact us to make a booking.
-          </p>
-        </div>
-      </section>
+      <PageHeader
+        label="Hire Our Spaces"
+        title="Book a Facility"
+        subtitle="Check availability and hire rates for the Village Hall, Pavilion, and Tennis Courts. Contact us to make a booking."
+      />
 
       {/* Booking Calendar Placeholder */}
-      <section className="py-16 bg-background">
+      <section className="py-20 sm:py-24 bg-background">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <h2 className="text-2xl font-bold mb-6">Availability Calendar</h2>
-          <div className="rounded-xl border border-border bg-white p-12 text-center">
+          <SectionLabel>Availability</SectionLabel>
+          <h2 className="font-serif text-2xl sm:text-3xl mb-6">
+            Availability Calendar
+          </h2>
+          <div className="rounded-lg border border-border bg-card p-12 text-center">
             <p className="text-muted-foreground">
               The online booking calendar is coming soon. In the meantime,
               please contact our Bookings Secretary to check availability.
@@ -82,14 +82,14 @@ export default function BookingPage() {
             <div className="mt-6 flex flex-wrap justify-center gap-4">
               <a
                 href="tel:07716162407"
-                className="inline-flex items-center gap-2 rounded-md bg-green-700 px-5 py-3 text-sm font-semibold text-white no-underline hover:bg-green-800 transition-colors"
+                className="inline-flex items-center gap-2 rounded-lg bg-sage-600 px-5 py-3 text-sm font-semibold text-white no-underline hover:bg-sage-700 transition-colors"
               >
                 <Phone className="h-4 w-4" aria-hidden="true" />
                 07716 162407
               </a>
               <a
                 href="mailto:hello@loddiswellcommunitytrust.org"
-                className="inline-flex items-center gap-2 rounded-md border border-border px-5 py-3 text-sm font-semibold text-foreground no-underline hover:bg-muted transition-colors"
+                className="inline-flex items-center gap-2 rounded-lg border border-border px-5 py-3 text-sm font-semibold text-foreground no-underline hover:bg-muted transition-colors"
               >
                 <Mail className="h-4 w-4" aria-hidden="true" />
                 Email Us
@@ -100,18 +100,21 @@ export default function BookingPage() {
       </section>
 
       {/* Hire Rates & Terms */}
-      <section className="py-16 bg-white">
+      <section className="py-20 sm:py-24 bg-card">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <h2 className="text-2xl font-bold mb-8">Hire Rates & Terms</h2>
+          <SectionLabel>Pricing</SectionLabel>
+          <h2 className="font-serif text-2xl sm:text-3xl mb-8">
+            Hire Rates & Terms
+          </h2>
           <div className="space-y-8">
             {hireFacilities.map((facility) => (
               <div
                 key={facility.name}
-                className="rounded-xl border border-border p-8"
+                className="rounded-lg border border-border bg-background p-8"
               >
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
                   <div>
-                    <h3 className="text-xl font-bold">{facility.name}</h3>
+                    <h3 className="font-serif text-xl">{facility.name}</h3>
                     <p className="mt-1 text-muted-foreground">
                       {facility.description}
                     </p>
@@ -121,7 +124,7 @@ export default function BookingPage() {
                       href={facility.externalBookingUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 rounded-md bg-green-700 px-4 py-2 text-sm font-semibold text-white no-underline hover:bg-green-800 transition-colors flex-shrink-0"
+                      className="inline-flex items-center gap-2 rounded-lg bg-copper-500 px-4 py-2 text-sm font-semibold text-white no-underline hover:bg-copper-600 transition-colors flex-shrink-0"
                     >
                       Book Online
                       <ExternalLink className="h-4 w-4" aria-hidden="true" />
@@ -132,7 +135,7 @@ export default function BookingPage() {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                   {/* Rates Table */}
                   <div>
-                    <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                    <h4 className="text-xs font-semibold uppercase tracking-[0.2em] text-copper-500 mb-3">
                       Rates
                     </h4>
                     <table className="w-full">
@@ -166,7 +169,7 @@ export default function BookingPage() {
 
                   {/* Terms */}
                   <div>
-                    <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                    <h4 className="text-xs font-semibold uppercase tracking-[0.2em] text-copper-500 mb-3">
                       Terms of Hire
                     </h4>
                     <ul className="space-y-2">
@@ -175,7 +178,7 @@ export default function BookingPage() {
                           key={term}
                           className="flex items-start gap-2 text-sm text-muted-foreground"
                         >
-                          <span className="h-1.5 w-1.5 rounded-full bg-green-500 mt-1.5 flex-shrink-0" />
+                          <span className="h-1.5 w-1.5 rounded-full bg-copper-500 mt-1.5 flex-shrink-0" />
                           {term}
                         </li>
                       ))}
@@ -189,17 +192,20 @@ export default function BookingPage() {
       </section>
 
       {/* Contact CTA */}
-      <section className="py-16 bg-muted">
+      <section className="py-20 sm:py-24 bg-sage-800 text-sage-50">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-2xl font-bold">Need Help with Your Booking?</h2>
-          <p className="mt-3 text-muted-foreground max-w-xl mx-auto">
+          <SectionLabel>Support</SectionLabel>
+          <h2 className="font-serif text-2xl sm:text-3xl">
+            Need Help with Your Booking?
+          </h2>
+          <p className="mt-3 text-sage-200 max-w-xl mx-auto leading-relaxed">
             If you have any questions about hiring our facilities, please
             don&apos;t hesitate to get in touch.
           </p>
-          <div className="mt-6">
+          <div className="mt-8">
             <Link
               href="/contact"
-              className="inline-flex items-center rounded-md bg-green-700 px-5 py-3 text-sm font-semibold text-white no-underline hover:bg-green-800 transition-colors"
+              className="inline-flex items-center rounded-lg bg-copper-500 px-5 py-3 text-sm font-semibold text-white no-underline hover:bg-copper-600 transition-colors"
             >
               Contact Us
             </Link>

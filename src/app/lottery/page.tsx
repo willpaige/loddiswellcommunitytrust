@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Ticket, Gift, Heart, HelpCircle } from "lucide-react";
 import { LotteryCheckoutButton } from "@/components/lottery/checkout-button";
+import { PageHeader } from "@/components/layout/page-header";
 
 export const metadata: Metadata = {
   title: "Community Lottery",
@@ -11,22 +12,20 @@ export const metadata: Metadata = {
 export default function LotteryPage() {
   return (
     <div>
-      {/* Page Header */}
-      <section className="bg-green-700 text-white py-16">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <h1 className="text-4xl font-bold text-white">Community Lottery</h1>
-          <p className="mt-4 text-lg text-green-100 max-w-2xl">
-            Support the Trust and help maintain our community facilities. Every
-            ticket makes a difference to Loddiswell.
-          </p>
-        </div>
-      </section>
+      <PageHeader
+        label="Community Lottery"
+        title="Community Lottery"
+        subtitle="Support the Trust and help maintain our community facilities. Every ticket makes a difference to Loddiswell."
+      />
 
       {/* How It Works */}
-      <section className="py-16 bg-background">
+      <section className="py-20 sm:py-24 bg-background">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold">How It Works</h2>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-copper-500 mb-3">
+              How It Works
+            </p>
+            <h2 className="font-serif text-3xl">How It Works</h2>
             <p className="mt-3 text-muted-foreground max-w-xl mx-auto">
               It&apos;s simple — buy a ticket, support the village, and you
               could win a prize!
@@ -35,7 +34,7 @@ export default function LotteryPage() {
 
           <div className="grid grid-cols-1 gap-8 sm:grid-cols-3">
             <div className="text-center">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-copper-100 text-copper-600">
                 <Ticket className="h-8 w-8" aria-hidden="true" />
               </div>
               <h3 className="mt-4 text-lg font-semibold">Buy a Ticket</h3>
@@ -46,7 +45,7 @@ export default function LotteryPage() {
             </div>
 
             <div className="text-center">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-green-600">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-sage-100 text-sage-600">
                 <Gift className="h-8 w-8" aria-hidden="true" />
               </div>
               <h3 className="mt-4 text-lg font-semibold">Enter the Draw</h3>
@@ -57,7 +56,7 @@ export default function LotteryPage() {
             </div>
 
             <div className="text-center">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-green-600">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-sage-100 text-sage-600">
                 <Heart className="h-8 w-8" aria-hidden="true" />
               </div>
               <h3 className="mt-4 text-lg font-semibold">Support the Village</h3>
@@ -71,14 +70,14 @@ export default function LotteryPage() {
       </section>
 
       {/* Ticket Purchase */}
-      <section className="py-16 bg-white">
+      <section className="py-20 sm:py-24 bg-card">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mx-auto max-w-2xl text-center">
-            <div className="rounded-2xl border-2 border-green-200 bg-green-50 p-8 sm:p-12">
-              <h2 className="text-3xl font-bold text-green-800">
+            <div className="rounded-lg border-2 border-copper-200 bg-sage-50 p-8 sm:p-12">
+              <h2 className="font-serif text-3xl text-sage-800">
                 £12 per ticket
               </h2>
-              <p className="mt-2 text-green-700">per year</p>
+              <p className="mt-2 text-sage-600">per year</p>
               <p className="mt-4 text-muted-foreground">
                 Each ticket is just £12 for the year — that&apos;s £1 a month.
                 Buy 2 or more tickets to make an even bigger difference to the
@@ -97,14 +96,17 @@ export default function LotteryPage() {
       </section>
 
       {/* FAQ */}
-      <section className="py-16 bg-muted">
+      <section className="py-20 sm:py-24 bg-muted">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <h2 className="text-2xl font-bold mb-8">Frequently Asked Questions</h2>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-copper-500 mb-3">
+            FAQ
+          </p>
+          <h2 className="font-serif text-2xl mb-8">Frequently Asked Questions</h2>
           <div className="space-y-6 max-w-3xl">
-            <div className="rounded-xl border border-border bg-white p-6">
+            <div className="rounded-lg border border-border bg-card p-6">
               <div className="flex items-start gap-3">
                 <HelpCircle
-                  className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0"
+                  className="h-5 w-5 text-sage-600 mt-0.5 flex-shrink-0"
                   aria-hidden="true"
                 />
                 <div>
@@ -118,10 +120,10 @@ export default function LotteryPage() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-border bg-white p-6">
+            <div className="rounded-lg border border-border bg-card p-6">
               <div className="flex items-start gap-3">
                 <HelpCircle
-                  className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0"
+                  className="h-5 w-5 text-sage-600 mt-0.5 flex-shrink-0"
                   aria-hidden="true"
                 />
                 <div>
@@ -134,10 +136,10 @@ export default function LotteryPage() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-border bg-white p-6">
+            <div className="rounded-lg border border-border bg-card p-6">
               <div className="flex items-start gap-3">
                 <HelpCircle
-                  className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0"
+                  className="h-5 w-5 text-sage-600 mt-0.5 flex-shrink-0"
                   aria-hidden="true"
                 />
                 <div>
@@ -154,10 +156,10 @@ export default function LotteryPage() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-border bg-white p-6">
+            <div className="rounded-lg border border-border bg-card p-6">
               <div className="flex items-start gap-3">
                 <HelpCircle
-                  className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0"
+                  className="h-5 w-5 text-sage-600 mt-0.5 flex-shrink-0"
                   aria-hidden="true"
                 />
                 <div>

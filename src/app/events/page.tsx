@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { CalendarDays, MapPin, Clock } from "lucide-react";
+import { PageHeader } from "@/components/layout/page-header";
+import { SectionLabel } from "@/components/ui/section-label";
 
 export const metadata: Metadata = {
   title: "Events",
@@ -42,36 +44,32 @@ const sampleEvents = [
 export default function EventsPage() {
   return (
     <div>
-      {/* Page Header */}
-      <section className="bg-green-700 text-white py-16">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <h1 className="text-4xl font-bold text-white">Events</h1>
-          <p className="mt-4 text-lg text-green-100 max-w-2xl">
-            See what&apos;s happening in Loddiswell. From community gatherings
-            and sports events to club meetings and celebrations.
-          </p>
-        </div>
-      </section>
+      <PageHeader
+        label="What's On"
+        title="Events"
+        subtitle="See what's happening in Loddiswell. From community gatherings and sports events to club meetings and celebrations."
+      />
 
       {/* Events List */}
-      <section className="py-16 bg-background">
+      <section className="py-20 sm:py-24 bg-background">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <SectionLabel>Upcoming Events</SectionLabel>
           <div className="space-y-6">
             {sampleEvents.map((event) => (
               <article
                 key={event.id}
-                className="rounded-xl border border-border bg-white p-8 hover:border-green-300 hover:shadow-sm transition-all"
+                className="rounded-lg border border-border bg-card p-8 hover:border-copper-300 hover:shadow-sm transition-all"
               >
                 <div className="flex flex-col sm:flex-row gap-6">
                   {/* Date badge */}
                   <div className="flex-shrink-0">
-                    <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-green-100 text-green-700">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-sage-100 text-sage-700">
                       <CalendarDays className="h-8 w-8" aria-hidden="true" />
                     </div>
                   </div>
 
                   <div className="flex-1">
-                    <h2 className="text-xl font-bold text-foreground">
+                    <h2 className="font-serif text-xl text-foreground">
                       {event.title}
                     </h2>
                     <div className="mt-2 flex flex-wrap gap-4 text-sm text-muted-foreground">
@@ -101,12 +99,12 @@ export default function EventsPage() {
           </div>
 
           {/* Empty state info */}
-          <div className="mt-12 rounded-xl border border-border bg-muted p-8 text-center">
+          <div className="mt-12 rounded-lg border border-border bg-muted p-8 text-center">
             <CalendarDays
               className="h-12 w-12 text-muted-foreground mx-auto mb-4"
               aria-hidden="true"
             />
-            <h3 className="text-lg font-semibold">More Events Coming Soon</h3>
+            <h3 className="font-serif text-lg">More Events Coming Soon</h3>
             <p className="mt-2 text-muted-foreground max-w-md mx-auto">
               Events will be regularly updated by the Trust committee. Check back
               soon or follow us for the latest updates.
@@ -116,23 +114,26 @@ export default function EventsPage() {
       </section>
 
       {/* Host Event CTA */}
-      <section className="py-16 bg-white">
+      <section className="py-20 sm:py-24 bg-sage-800 text-sage-50">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-2xl font-bold">Want to Host an Event?</h2>
-          <p className="mt-3 text-muted-foreground max-w-xl mx-auto">
+          <SectionLabel>Get Involved</SectionLabel>
+          <h2 className="font-serif text-2xl sm:text-3xl">
+            Want to Host an Event?
+          </h2>
+          <p className="mt-3 text-sage-200 max-w-xl mx-auto leading-relaxed">
             Our Village Hall and Pavilion are available for hire. Get in touch to
             discuss your event.
           </p>
-          <div className="mt-6 flex flex-wrap justify-center gap-4">
+          <div className="mt-8 flex flex-wrap justify-center gap-4">
             <Link
               href="/booking"
-              className="inline-flex items-center rounded-md bg-green-700 px-5 py-3 text-sm font-semibold text-white no-underline hover:bg-green-800 transition-colors"
+              className="inline-flex items-center rounded-lg bg-copper-500 px-5 py-3 text-sm font-semibold text-white no-underline hover:bg-copper-600 transition-colors"
             >
               Book a Venue
             </Link>
             <Link
               href="/contact"
-              className="inline-flex items-center rounded-md border border-border px-5 py-3 text-sm font-semibold text-foreground no-underline hover:bg-muted transition-colors"
+              className="inline-flex items-center rounded-lg border border-sage-500 px-5 py-3 text-sm font-semibold text-sage-50 no-underline hover:bg-sage-700 transition-colors"
             >
               Contact Us
             </Link>

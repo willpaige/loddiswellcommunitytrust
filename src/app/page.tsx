@@ -6,34 +6,36 @@ import {
   Building2,
   TreePine,
   Trophy,
+  ArrowRight,
 } from "lucide-react";
+import { SectionLabel } from "@/components/ui/section-label";
 
 const facilities = [
   {
     name: "Village Hall",
     description:
-      "Spacious hall for up to 100 people with kitchen, bar, and meeting room facilities.",
+      "Spacious hall for up to 100 people with kitchen, bar, and meeting room.",
     href: "/facilities/village-hall",
     icon: Building2,
   },
   {
     name: "Pavilion",
     description:
-      "Multi-purpose pavilion at the playing fields, ideal for sports events and gatherings.",
+      "Multi-purpose pavilion at the playing fields for sports and gatherings.",
     href: "/facilities/pavilion",
     icon: TreePine,
   },
   {
     name: "Tennis Courts",
     description:
-      "Community tennis courts available to book. Coaching and club sessions available.",
+      "Community tennis courts available to book via ClubSpark.",
     href: "/facilities/tennis-courts",
     icon: Trophy,
   },
   {
     name: "Playing Field",
     description:
-      "Open playing field for football, rounders, and other sports and community activities.",
+      "Open playing field for football, rounders, and community activities.",
     href: "/facilities/playing-field",
     icon: MapPin,
   },
@@ -45,65 +47,58 @@ const quickLinks = [
     description: "Check availability and book the hall, pavilion, or courts.",
     href: "/booking",
     icon: CalendarDays,
-    color: "bg-green-700 text-white",
   },
   {
     name: "Upcoming Events",
-    description: "See what's happening in the Loddiswell community.",
+    description: "See what\u2019s happening in the Loddiswell community.",
     href: "/events",
     icon: CalendarDays,
-    color: "bg-amber-400 text-white",
   },
   {
     name: "Community Lottery",
     description:
-      "Support the trust and win prizes. Tickets just £12 per year.",
+      "Support the trust and win prizes. Tickets just \u00a312 per year.",
     href: "/lottery",
     icon: Ticket,
-    color: "bg-green-600 text-white",
   },
 ];
 
 export default function HomePage() {
   return (
     <div>
-      {/* Hero Section with Video Background */}
+      {/* Hero Section — full-bleed with background image */}
       <section className="relative overflow-hidden text-white">
-        {/* Video background */}
-        <video
-          autoPlay
-          muted
-          loop
-          playsInline
-          className="absolute inset-0 h-full w-full object-cover"
+        <div
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: "url('/hero-bg.jpg')" }}
           aria-hidden="true"
-        >
-          <source src="/hero-bg.mp4" type="video/mp4" />
-        </video>
-        {/* Dark overlay for text readability */}
-        <div className="absolute inset-0 bg-green-900/60" />
-        {/* Content */}
-        <div className="relative mx-auto max-w-7xl px-4 py-24 sm:px-6 sm:py-32 lg:px-8">
+        />
+        <div className="absolute inset-0 bg-sage-900/70" />
+        <div className="relative mx-auto max-w-7xl px-4 pt-40 pb-32 sm:px-6 sm:pt-48 sm:pb-40 lg:px-8 lg:pt-56 lg:pb-48">
           <div className="max-w-2xl">
-            <h1 className="text-4xl font-bold tracking-tight text-white sm:text-5xl lg:text-6xl">
-              Welcome to Loddiswell
-            </h1>
-            <p className="mt-6 text-lg text-green-100 leading-relaxed">
-              The Loddiswell Playing Field & Village Hall Trust maintains
-              community facilities for the benefit of everyone in the parish.
-              From our village hall and pavilion to tennis courts and playing
-              fields — there&apos;s something for everyone.
+            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-copper-300 mb-6">
+              Loddiswell, South Hams, Devon
             </p>
-            <div className="mt-8 flex flex-wrap gap-4">
+            <h1 className="font-serif text-6xl sm:text-7xl lg:text-8xl tracking-wide text-white leading-[1.1]">
+              Heart of the
+              <br />
+              Village
+            </h1>
+            <p className="mt-6 text-lg text-sage-200 leading-relaxed max-w-xl">
+              The Playing Field & Village Hall Trust maintains community
+              facilities for the benefit of everyone in Loddiswell Parish.
+            </p>
+            <div className="mt-10 flex flex-wrap gap-4">
               <Link
                 href="/booking"
-                className="inline-flex items-center rounded-md bg-white px-5 py-3 text-sm font-semibold text-green-700 no-underline shadow-sm hover:bg-green-50 transition-colors"
+                className="inline-flex items-center gap-2 rounded-sm bg-copper-500 px-6 py-3 text-sm font-medium tracking-wide text-white no-underline hover:bg-copper-600 transition-colors"
               >
                 Book a Facility
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </Link>
               <Link
                 href="/about"
-                className="inline-flex items-center rounded-md border border-white/30 px-5 py-3 text-sm font-semibold text-white no-underline hover:bg-white/10 transition-colors"
+                className="inline-flex items-center rounded-sm border border-white/30 px-6 py-3 text-sm font-medium tracking-wide text-white no-underline hover:bg-white/10 transition-colors"
               >
                 About the Trust
               </Link>
@@ -113,18 +108,29 @@ export default function HomePage() {
       </section>
 
       {/* Quick Links */}
-      <section className="py-16 bg-background">
+      <section className="py-20 sm:py-24 bg-background">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
             {quickLinks.map((link) => (
               <Link
                 key={link.name}
                 href={link.href}
-                className={`group rounded-xl ${link.color} p-6 no-underline shadow-sm hover:shadow-md transition-all`}
+                className="group rounded-lg border-t-2 border-copper-500 bg-card p-8 no-underline shadow-sm hover:shadow-md transition-all"
               >
-                <link.icon className="h-8 w-8 mb-4" aria-hidden="true" />
-                <h2 className="text-lg font-semibold">{link.name}</h2>
-                <p className="mt-2 text-sm opacity-90">{link.description}</p>
+                <link.icon
+                  className="h-5 w-5 text-copper-500 mb-4"
+                  aria-hidden="true"
+                />
+                <h2 className="font-serif text-xl tracking-tight text-foreground">
+                  {link.name}
+                </h2>
+                <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+                  {link.description}
+                </p>
+                <span className="mt-4 inline-flex items-center gap-1 text-xs font-medium text-copper-500 uppercase tracking-wide group-hover:gap-2 transition-all">
+                  Learn more
+                  <ArrowRight className="h-3 w-3" aria-hidden="true" />
+                </span>
               </Link>
             ))}
           </div>
@@ -132,13 +138,14 @@ export default function HomePage() {
       </section>
 
       {/* Facilities Overview */}
-      <section className="py-16 bg-white">
+      <section className="py-20 sm:py-24 bg-card">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-foreground">
-              Our Facilities
+          <div className="max-w-2xl mb-16">
+            <SectionLabel>Our Facilities</SectionLabel>
+            <h2 className="font-serif text-3xl sm:text-4xl tracking-tight text-foreground">
+              Community Spaces for Everyone
             </h2>
-            <p className="mt-3 text-muted-foreground max-w-2xl mx-auto">
+            <p className="mt-4 text-muted-foreground leading-relaxed">
               We maintain a range of community facilities in the heart of
               Loddiswell for residents, groups, and visitors to enjoy.
             </p>
@@ -148,16 +155,16 @@ export default function HomePage() {
               <Link
                 key={facility.name}
                 href={facility.href}
-                className="group rounded-xl border border-border bg-white p-6 no-underline hover:border-green-300 hover:shadow-md transition-all"
+                className="group rounded-lg border border-border/60 bg-background p-8 no-underline hover:shadow-md hover:border-copper-400 transition-all"
               >
                 <facility.icon
-                  className="h-10 w-10 text-green-600 mb-4"
+                  className="h-5 w-5 text-sage-500 mb-5"
                   aria-hidden="true"
                 />
-                <h3 className="text-lg font-semibold text-foreground group-hover:text-green-700 transition-colors">
+                <h3 className="font-serif text-xl tracking-tight text-foreground group-hover:text-copper-600 transition-colors">
                   {facility.name}
                 </h3>
-                <p className="mt-2 text-sm text-muted-foreground">
+                <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
                   {facility.description}
                 </p>
               </Link>
@@ -167,14 +174,15 @@ export default function HomePage() {
       </section>
 
       {/* Community Section */}
-      <section className="py-16 bg-muted">
+      <section className="py-20 sm:py-24 bg-background">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 gap-12 lg:grid-cols-2 items-center">
+          <div className="grid grid-cols-1 gap-16 lg:grid-cols-2 items-center">
             <div>
-              <h2 className="text-3xl font-bold text-foreground">
+              <SectionLabel>Our Village</SectionLabel>
+              <h2 className="font-serif text-3xl sm:text-4xl tracking-tight text-foreground">
                 A Thriving Community
               </h2>
-              <p className="mt-4 text-muted-foreground leading-relaxed">
+              <p className="mt-6 text-muted-foreground leading-relaxed">
                 Loddiswell is a vibrant village in the South Hams, Devon, with a
                 rich history dating back to Roman times. Our community supports a
                 wide range of clubs and societies including tennis, football,
@@ -183,39 +191,63 @@ export default function HomePage() {
               <p className="mt-4 text-muted-foreground leading-relaxed">
                 The Trust is run by a dedicated committee of volunteers who work
                 to ensure our facilities are maintained and available for
-                everyone to enjoy. Whether you&apos;re looking to book a venue,
-                join a club, or support our community lottery, we&apos;d love to
-                hear from you.
+                everyone to enjoy.
               </p>
-              <div className="mt-6">
+              <div className="mt-8">
                 <Link
                   href="/contact"
-                  className="inline-flex items-center rounded-md bg-green-700 px-5 py-3 text-sm font-semibold text-white no-underline hover:bg-green-800 transition-colors"
+                  className="inline-flex items-center gap-2 text-sm font-medium text-copper-600 no-underline hover:text-copper-700 uppercase tracking-wide transition-colors"
                 >
                   Get in Touch
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
                 </Link>
               </div>
             </div>
-            <div className="rounded-xl bg-green-100 p-8 text-center">
-              <p className="text-5xl font-bold text-green-700">600+</p>
-              <p className="mt-2 text-green-800 font-medium">
+            <div className="rounded-lg bg-sage-100 p-10">
+              <p className="text-5xl font-serif text-copper-600">600+</p>
+              <p className="mt-2 text-sage-700 font-medium">
                 Parish Residents
               </p>
-              <div className="mt-6 grid grid-cols-2 gap-4 text-left">
-                <div className="rounded-lg bg-white p-4">
-                  <p className="text-2xl font-bold text-green-700">5</p>
+              <div className="mt-8 grid grid-cols-2 gap-4">
+                <div className="rounded-lg bg-card p-5">
+                  <p className="text-2xl font-serif text-copper-600">5</p>
                   <p className="text-sm text-muted-foreground">
                     Community Facilities
                   </p>
                 </div>
-                <div className="rounded-lg bg-white p-4">
-                  <p className="text-2xl font-bold text-green-700">10+</p>
+                <div className="rounded-lg bg-card p-5">
+                  <p className="text-2xl font-serif text-copper-600">10+</p>
                   <p className="text-sm text-muted-foreground">
                     Clubs & Societies
                   </p>
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA */}
+      <section className="py-20 sm:py-24 bg-sage-800 text-sage-50">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-copper-300 mb-4">
+            Support Loddiswell
+          </p>
+          <h2 className="font-serif text-3xl sm:text-4xl tracking-tight">
+            Join the Community Lottery
+          </h2>
+          <p className="mt-4 text-sage-200 max-w-xl mx-auto leading-relaxed">
+            Tickets are just &pound;12 per year. Support the maintenance of our
+            community facilities and enter the monthly prize draw.
+          </p>
+          <div className="mt-8">
+            <Link
+              href="/lottery"
+              className="inline-flex items-center gap-2 rounded-sm bg-copper-500 px-6 py-3 text-sm font-medium tracking-wide text-white no-underline hover:bg-copper-600 transition-colors"
+            >
+              Buy Lottery Tickets
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
           </div>
         </div>
       </section>

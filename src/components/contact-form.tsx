@@ -27,15 +27,15 @@ export function ContactForm() {
 
   if (status === "sent") {
     return (
-      <div className="rounded-xl border border-green-200 bg-green-50 p-8 text-center">
+      <div className="rounded-lg border border-sage-200 bg-sage-50 p-8 text-center">
         <CheckCircle
-          className="mx-auto h-12 w-12 text-green-600"
+          className="mx-auto h-12 w-12 text-sage-600"
           aria-hidden="true"
         />
-        <h3 className="mt-4 text-lg font-semibold text-green-800">
+        <h3 className="mt-4 text-lg font-semibold text-sage-800">
           Message Sent!
         </h3>
-        <p className="mt-2 text-sm text-green-700">
+        <p className="mt-2 text-sm text-sage-700">
           Thank you for getting in touch. We&apos;ll get back to you as soon as
           possible.
         </p>
@@ -57,7 +57,7 @@ export function ContactForm() {
           id="name"
           name="name"
           required
-          className="mt-1 block w-full rounded-md border border-border bg-white px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-green-500 focus:ring-2 focus:ring-green-500/20 focus:outline-none transition-colors"
+          className="mt-1 block w-full rounded-md border border-border bg-white px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-sage-500 focus:ring-2 focus:ring-sage-500/20 focus:outline-none transition-colors"
           placeholder="John Smith"
         />
       </div>
@@ -74,7 +74,7 @@ export function ContactForm() {
           id="email"
           name="email"
           required
-          className="mt-1 block w-full rounded-md border border-border bg-white px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-green-500 focus:ring-2 focus:ring-green-500/20 focus:outline-none transition-colors"
+          className="mt-1 block w-full rounded-md border border-border bg-white px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-sage-500 focus:ring-2 focus:ring-sage-500/20 focus:outline-none transition-colors"
           placeholder="john@example.com"
         />
       </div>
@@ -89,7 +89,7 @@ export function ContactForm() {
         <select
           id="subject"
           name="subject"
-          className="mt-1 block w-full rounded-md border border-border bg-white px-4 py-3 text-foreground focus:border-green-500 focus:ring-2 focus:ring-green-500/20 focus:outline-none transition-colors"
+          className="mt-1 block w-full rounded-md border border-border bg-white px-4 py-3 text-foreground focus:border-sage-500 focus:ring-2 focus:ring-sage-500/20 focus:outline-none transition-colors"
         >
           <option value="General Enquiry">General Enquiry</option>
           <option value="Booking Enquiry">Booking Enquiry</option>
@@ -112,7 +112,7 @@ export function ContactForm() {
           name="message"
           rows={5}
           required
-          className="mt-1 block w-full rounded-md border border-border bg-white px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-green-500 focus:ring-2 focus:ring-green-500/20 focus:outline-none transition-colors resize-vertical"
+          className="mt-1 block w-full rounded-md border border-border bg-white px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-sage-500 focus:ring-2 focus:ring-sage-500/20 focus:outline-none transition-colors resize-vertical"
           placeholder="How can we help?"
         />
       </div>
@@ -126,7 +126,7 @@ export function ContactForm() {
       <button
         type="submit"
         disabled={status === "sending"}
-        className="inline-flex items-center gap-2 rounded-md bg-green-700 px-6 py-3 text-sm font-semibold text-white hover:bg-green-800 transition-colors disabled:opacity-50"
+        className="inline-flex items-center gap-2 rounded-md bg-sage-600 px-6 py-3 text-sm font-semibold text-white hover:bg-sage-700 transition-colors disabled:opacity-50"
       >
         {status === "sending" ? (
           <>

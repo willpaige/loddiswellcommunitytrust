@@ -10,6 +10,7 @@ import {
   ArrowLeft,
   ExternalLink,
 } from "lucide-react";
+import { SectionLabel } from "@/components/ui/section-label";
 
 // Static facility data (will be replaced by CMS data once admin is built)
 const facilitiesData: Record<
@@ -154,32 +155,35 @@ export default async function FacilityPage({ params }: Props) {
   return (
     <div>
       {/* Page Header */}
-      <section className="bg-green-700 text-white py-16">
+      <section className="bg-sage-800 text-sage-50 pt-36 sm:pt-40 pb-20 sm:pb-24">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <Link
             href="/facilities"
-            className="inline-flex items-center gap-2 text-sm text-green-200 no-underline hover:text-white mb-6 transition-colors"
+            className="inline-flex items-center gap-2 text-sm text-sage-300 no-underline hover:text-copper-300 mb-6 transition-colors"
           >
             <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             All Facilities
           </Link>
           <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-green-600">
+            <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-sage-700">
               <Icon className="h-7 w-7" aria-hidden="true" />
             </div>
-            <h1 className="text-4xl font-bold text-white">{facility.name}</h1>
+            <h1 className="font-serif text-4xl sm:text-5xl tracking-tight">
+              {facility.name}
+            </h1>
           </div>
-          <p className="mt-3 text-green-200">{facility.address}</p>
+          <p className="mt-3 text-sage-300">{facility.address}</p>
         </div>
       </section>
 
       {/* Content */}
-      <section className="py-16 bg-background">
+      <section className="py-20 sm:py-24 bg-background">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 gap-12 lg:grid-cols-3">
             {/* Main content */}
             <div className="lg:col-span-2">
-              <h2 className="text-2xl font-bold mb-6">About this Facility</h2>
+              <SectionLabel>Overview</SectionLabel>
+              <h2 className="font-serif text-2xl mb-6">About this Facility</h2>
               <div className="space-y-4">
                 {facility.description.split("\n\n").map((paragraph, i) => (
                   <p key={i} className="text-muted-foreground leading-relaxed">
@@ -189,14 +193,14 @@ export default async function FacilityPage({ params }: Props) {
               </div>
 
               {/* Features */}
-              <h3 className="text-xl font-bold mt-10 mb-4">Features</h3>
+              <h3 className="font-serif text-xl mt-10 mb-4">Features</h3>
               <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {facility.features.map((feature) => (
                   <li
                     key={feature}
                     className="flex items-center gap-2 text-muted-foreground"
                   >
-                    <span className="h-2 w-2 rounded-full bg-green-500 flex-shrink-0" />
+                    <span className="h-2 w-2 rounded-full bg-copper-500 flex-shrink-0" />
                     {feature}
                   </li>
                 ))}
@@ -207,8 +211,8 @@ export default async function FacilityPage({ params }: Props) {
             <div className="space-y-6">
               {/* Rates */}
               {facility.rates && (
-                <div className="rounded-xl border border-border bg-white p-6">
-                  <h3 className="text-lg font-bold mb-4">Hire Rates</h3>
+                <div className="rounded-lg border border-border bg-card p-6">
+                  <h3 className="font-serif text-lg mb-4">Hire Rates</h3>
                   <dl className="space-y-3">
                     {Object.entries(facility.rates).map(([key, value]) => (
                       <div key={key} className="flex justify-between">
@@ -222,8 +226,8 @@ export default async function FacilityPage({ params }: Props) {
 
               {/* Booking Info */}
               {facility.bookingInfo && (
-                <div className="rounded-xl border border-border bg-white p-6">
-                  <h3 className="text-lg font-bold mb-4">
+                <div className="rounded-lg border border-border bg-card p-6">
+                  <h3 className="font-serif text-lg mb-4">
                     Booking Information
                   </h3>
                   <p className="text-sm text-muted-foreground">
@@ -234,7 +238,7 @@ export default async function FacilityPage({ params }: Props) {
                       href={facility.externalBookingUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="mt-4 inline-flex items-center gap-2 rounded-md bg-green-700 px-4 py-2 text-sm font-semibold text-white no-underline hover:bg-green-800 transition-colors"
+                      className="mt-4 inline-flex items-center gap-2 rounded-md bg-copper-500 px-4 py-2 text-sm font-semibold text-white no-underline hover:bg-copper-600 transition-colors"
                     >
                       Book Online
                       <ExternalLink className="h-4 w-4" aria-hidden="true" />
@@ -243,7 +247,7 @@ export default async function FacilityPage({ params }: Props) {
                   {!facility.externalBookingUrl && slug !== "pump-track" && (
                     <Link
                       href="/booking"
-                      className="mt-4 inline-flex items-center rounded-md bg-green-700 px-4 py-2 text-sm font-semibold text-white no-underline hover:bg-green-800 transition-colors"
+                      className="mt-4 inline-flex items-center rounded-md bg-copper-500 px-4 py-2 text-sm font-semibold text-white no-underline hover:bg-copper-600 transition-colors"
                     >
                       Check Availability
                     </Link>
@@ -252,8 +256,8 @@ export default async function FacilityPage({ params }: Props) {
               )}
 
               {/* Location */}
-              <div className="rounded-xl border border-border bg-white p-6">
-                <h3 className="text-lg font-bold mb-4">Location</h3>
+              <div className="rounded-lg border border-border bg-card p-6">
+                <h3 className="font-serif text-lg mb-4">Location</h3>
                 <p className="text-sm text-muted-foreground">
                   {facility.address}
                 </p>
