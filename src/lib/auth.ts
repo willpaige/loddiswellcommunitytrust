@@ -1,5 +1,5 @@
 import NextAuth from "next-auth";
-import Resend from "next-auth/providers/resend";
+import Postmark from "next-auth/providers/postmark";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import { db } from "@/lib/db";
 import { eq } from "drizzle-orm";
@@ -8,9 +8,9 @@ import { users } from "@/lib/db/schema";
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: DrizzleAdapter(db),
   providers: [
-    Resend({
-      from: process.env.RESEND_FROM_EMAIL || "noreply@loddiswellcommunitytrust.org",
-      apiKey: process.env.RESEND_API_KEY,
+    Postmark({
+      from: process.env.EMAIL_FROM || "noreply@loddiswellcommunitytrust.org",
+      server: process.env.POSTMARK_API_KEY,
     }),
   ],
   pages: {

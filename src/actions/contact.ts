@@ -1,9 +1,9 @@
 "use server";
 
-import { Resend } from "resend";
+import { ServerClient } from "postmark";
 
-function getResend() {
-  return new Resend(process.env.RESEND_API_KEY);
+function getPostmark() {
+  return new ServerClient(process.env.POSTMARK_API_KEY!);
 }
 
 export async function sendContactEmail(formData: FormData) {
@@ -17,12 +17,12 @@ export async function sendContactEmail(formData: FormData) {
   }
 
   try {
-    await getResend().emails.send({
-      from: process.env.RESEND_FROM_EMAIL || "noreply@loddiswellcommunitytrust.org",
-      to: process.env.CONTACT_EMAIL || "hello@loddiswellcommunitytrust.org",
-      replyTo: email,
-      subject: `[Website] ${subject}: Message from ${name}`,
-      text: `Name: ${name}\nEmail: ${email}\nSubject: ${subject}\n\nMessage:\n${message}`,
+    await getPostmark().sendEmail({
+      From: process.env.EMAIL_FROM || "noreply@loddiswellcommunitytrust.org",
+      To: process.env.CONTACT_EMAIL || "hello@loddiswellcommunitytrust.org",
+      ReplyTo: email,
+      Subject: `[Website] ${subject}: Message from ${name}`,
+      TextBody: `Name: ${name}\nEmail: ${email}\nSubject: ${subject}\n\nMessage:\n${message}`,
     });
 
     return { success: true };

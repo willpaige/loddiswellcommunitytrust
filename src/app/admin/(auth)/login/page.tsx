@@ -26,7 +26,7 @@ export default function AdminLoginPage() {
     setError("");
 
     try {
-      const result = await signIn("resend", {
+      const result = await signIn("postmark", {
         email,
         redirect: false,
         callbackUrl: "/admin",
