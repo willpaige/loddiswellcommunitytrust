@@ -1,0 +1,54 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary-50: #f0f7ec;
+  --color-primary-100: #ddefd4;
+  --color-primary-200: #bddead;
+  --color-primary-300: #93c87e;
+  --color-primary-400: #6aad53;
+  --color-primary-500: #4a8f36;
+  --color-primary-600: #3a7229;
+  --color-primary-700: #2d5016;
+  --color-primary-800: #284a1a;
+  --color-primary-900: #233f19;
+  --color-primary-950: #0f220a;
+
+  --color-accent-50: #fdf8ef;
+  --color-accent-100: #faecd6;
+  --color-accent-200: #f4d5ab;
+  --color-accent-300: #ecb875;
+  --color-accent-400: #d4a843;
+  --color-accent-500: #d48f27;
+  --color-accent-600: #bc751c;
+  --color-accent-700: #9c5a19;
+  --color-accent-800: #7f481c;
+  --color-accent-900: #683c1a;
+  --color-accent-950: #3b1e0b;
+
+  --color-background: #fafaf8;
+  --color-foreground: #1a1a1a;
+  --color-muted: #f5f5f0;
+  --color-muted-foreground: #6b6b6b;
+  --color-border: #e5e5de;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+
+  a {
+    @apply text-primary-700 underline-offset-2 hover:underline;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight text-foreground;
+  }
+}
+
+/* Skip to main content link for accessibility */
+.skip-link {
+  @apply absolute -top-10 left-4 z-50 bg-primary-700 text-white px-4 py-2 rounded-b-md transition-all focus:top-0;
+}
