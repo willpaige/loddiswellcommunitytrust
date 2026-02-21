@@ -32,9 +32,10 @@ export default function AdminLoginPage() {
         callbackUrl: "/admin",
       });
 
+      console.log("signIn result:", result);
       if (result?.error) {
         setError(
-          "Unable to send login link. Please check your email address is authorised."
+          `Unable to send login link: ${result.error === "Configuration" ? "Email provider not configured correctly — check Postmark API key and verified sender." : "Please check your email address is authorised."}`
         );
       } else {
         setSent(true);
