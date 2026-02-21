@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Ticket, Gift, Heart, HelpCircle } from "lucide-react";
+import { LotteryCheckoutButton } from "@/components/lottery/checkout-button";
 
 export const metadata: Metadata = {
   title: "Community Lottery",
@@ -12,10 +12,10 @@ export default function LotteryPage() {
   return (
     <div>
       {/* Page Header */}
-      <section className="bg-primary-700 text-white py-16">
+      <section className="bg-green-700 text-white py-16">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <h1 className="text-4xl font-bold text-white">Community Lottery</h1>
-          <p className="mt-4 text-lg text-primary-100 max-w-2xl">
+          <p className="mt-4 text-lg text-green-100 max-w-2xl">
             Support the Trust and help maintain our community facilities. Every
             ticket makes a difference to Loddiswell.
           </p>
@@ -35,7 +35,7 @@ export default function LotteryPage() {
 
           <div className="grid grid-cols-1 gap-8 sm:grid-cols-3">
             <div className="text-center">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-accent-100 text-accent-600">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 text-amber-600">
                 <Ticket className="h-8 w-8" aria-hidden="true" />
               </div>
               <h3 className="mt-4 text-lg font-semibold">Buy a Ticket</h3>
@@ -46,7 +46,7 @@ export default function LotteryPage() {
             </div>
 
             <div className="text-center">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary-100 text-primary-600">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-green-600">
                 <Gift className="h-8 w-8" aria-hidden="true" />
               </div>
               <h3 className="mt-4 text-lg font-semibold">Enter the Draw</h3>
@@ -57,7 +57,7 @@ export default function LotteryPage() {
             </div>
 
             <div className="text-center">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary-100 text-primary-600">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-green-600">
                 <Heart className="h-8 w-8" aria-hidden="true" />
               </div>
               <h3 className="mt-4 text-lg font-semibold">Support the Village</h3>
@@ -74,11 +74,11 @@ export default function LotteryPage() {
       <section className="py-16 bg-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mx-auto max-w-2xl text-center">
-            <div className="rounded-2xl border-2 border-primary-200 bg-primary-50 p-8 sm:p-12">
-              <h2 className="text-3xl font-bold text-primary-800">
+            <div className="rounded-2xl border-2 border-green-200 bg-green-50 p-8 sm:p-12">
+              <h2 className="text-3xl font-bold text-green-800">
                 £12 per ticket
               </h2>
-              <p className="mt-2 text-primary-700">per year</p>
+              <p className="mt-2 text-green-700">per year</p>
               <p className="mt-4 text-muted-foreground">
                 Each ticket is just £12 for the year — that&apos;s £1 a month.
                 Buy 2 or more tickets to make an even bigger difference to the
@@ -88,18 +88,8 @@ export default function LotteryPage() {
                 If you can afford more, then please do — every ticket helps.
               </p>
 
-              {/* Stripe checkout button - placeholder until Stripe is configured */}
               <div className="mt-8">
-                <Link
-                  href="/contact"
-                  className="inline-flex items-center gap-2 rounded-md bg-primary-700 px-8 py-4 text-lg font-semibold text-white no-underline hover:bg-primary-800 transition-colors"
-                >
-                  <Ticket className="h-5 w-5" aria-hidden="true" />
-                  Buy Lottery Tickets
-                </Link>
-                <p className="mt-3 text-xs text-muted-foreground">
-                  Secure payment via Stripe. Coming soon!
-                </p>
+                <LotteryCheckoutButton />
               </div>
             </div>
           </div>
@@ -114,7 +104,7 @@ export default function LotteryPage() {
             <div className="rounded-xl border border-border bg-white p-6">
               <div className="flex items-start gap-3">
                 <HelpCircle
-                  className="h-5 w-5 text-primary-600 mt-0.5 flex-shrink-0"
+                  className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0"
                   aria-hidden="true"
                 />
                 <div>
@@ -131,7 +121,7 @@ export default function LotteryPage() {
             <div className="rounded-xl border border-border bg-white p-6">
               <div className="flex items-start gap-3">
                 <HelpCircle
-                  className="h-5 w-5 text-primary-600 mt-0.5 flex-shrink-0"
+                  className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0"
                   aria-hidden="true"
                 />
                 <div>
@@ -147,7 +137,7 @@ export default function LotteryPage() {
             <div className="rounded-xl border border-border bg-white p-6">
               <div className="flex items-start gap-3">
                 <HelpCircle
-                  className="h-5 w-5 text-primary-600 mt-0.5 flex-shrink-0"
+                  className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0"
                   aria-hidden="true"
                 />
                 <div>
@@ -167,7 +157,7 @@ export default function LotteryPage() {
             <div className="rounded-xl border border-border bg-white p-6">
               <div className="flex items-start gap-3">
                 <HelpCircle
-                  className="h-5 w-5 text-primary-600 mt-0.5 flex-shrink-0"
+                  className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0"
                   aria-hidden="true"
                 />
                 <div>

@@ -76,10 +76,10 @@ export default function FacilitiesPage() {
   return (
     <div>
       {/* Page Header */}
-      <section className="bg-primary-700 text-white py-16">
+      <section className="bg-green-700 text-white py-16">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <h1 className="text-4xl font-bold text-white">Our Facilities</h1>
-          <p className="mt-4 text-lg text-primary-100 max-w-2xl">
+          <p className="mt-4 text-lg text-green-100 max-w-2xl">
             We maintain a range of community facilities in the heart of
             Loddiswell for residents, groups, and visitors to enjoy.
           </p>
@@ -94,16 +94,16 @@ export default function FacilitiesPage() {
               <Link
                 key={facility.slug}
                 href={`/facilities/${facility.slug}`}
-                className="group block rounded-xl border border-border bg-white p-8 no-underline hover:border-primary-300 hover:shadow-md transition-all"
+                className="group block rounded-xl border border-border bg-white p-8 no-underline hover:border-green-300 hover:shadow-md transition-all"
               >
                 <div className="flex flex-col sm:flex-row gap-6">
                   <div className="flex-shrink-0">
-                    <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-primary-100 text-primary-700 group-hover:bg-primary-200 transition-colors">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-green-100 text-green-700 group-hover:bg-green-200 transition-colors">
                       <facility.icon className="h-8 w-8" aria-hidden="true" />
                     </div>
                   </div>
                   <div className="flex-1">
-                    <h2 className="text-xl font-bold text-foreground group-hover:text-primary-700 transition-colors">
+                    <h2 className="text-xl font-bold text-foreground group-hover:text-green-700 transition-colors">
                       {facility.name}
                     </h2>
                     <p className="mt-1 text-sm text-muted-foreground">
@@ -131,7 +131,7 @@ export default function FacilitiesPage() {
       </section>
 
       {/* Booking CTA */}
-      <section className="py-16 bg-accent-400 text-white">
+      <section className="py-16 bg-amber-400 text-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-3xl font-bold text-white">
             Want to Book a Facility?
@@ -143,7 +143,7 @@ export default function FacilitiesPage() {
           <div className="mt-8">
             <Link
               href="/booking"
-              className="inline-flex items-center rounded-md bg-white px-6 py-3 text-sm font-semibold text-accent-700 no-underline hover:bg-accent-50 transition-colors"
+              className="inline-flex items-center rounded-md bg-white px-6 py-3 text-sm font-semibold text-amber-700 no-underline hover:bg-amber-50 transition-colors"
             >
               View Booking Information
             </Link>

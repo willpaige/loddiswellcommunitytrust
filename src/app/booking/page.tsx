@@ -60,10 +60,10 @@ export default function BookingPage() {
   return (
     <div>
       {/* Page Header */}
-      <section className="bg-primary-700 text-white py-16">
+      <section className="bg-green-700 text-white py-16">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <h1 className="text-4xl font-bold text-white">Book a Facility</h1>
-          <p className="mt-4 text-lg text-primary-100 max-w-2xl">
+          <p className="mt-4 text-lg text-green-100 max-w-2xl">
             Check availability and hire rates for the Village Hall, Pavilion,
             and Tennis Courts. Contact us to make a booking.
           </p>
@@ -82,7 +82,7 @@ export default function BookingPage() {
             <div className="mt-6 flex flex-wrap justify-center gap-4">
               <a
                 href="tel:07716162407"
-                className="inline-flex items-center gap-2 rounded-md bg-primary-700 px-5 py-3 text-sm font-semibold text-white no-underline hover:bg-primary-800 transition-colors"
+                className="inline-flex items-center gap-2 rounded-md bg-green-700 px-5 py-3 text-sm font-semibold text-white no-underline hover:bg-green-800 transition-colors"
               >
                 <Phone className="h-4 w-4" aria-hidden="true" />
                 07716 162407
@@ -121,7 +121,7 @@ export default function BookingPage() {
                       href={facility.externalBookingUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 rounded-md bg-primary-700 px-4 py-2 text-sm font-semibold text-white no-underline hover:bg-primary-800 transition-colors flex-shrink-0"
+                      className="inline-flex items-center gap-2 rounded-md bg-green-700 px-4 py-2 text-sm font-semibold text-white no-underline hover:bg-green-800 transition-colors flex-shrink-0"
                     >
                       Book Online
                       <ExternalLink className="h-4 w-4" aria-hidden="true" />
@@ -175,7 +175,7 @@ export default function BookingPage() {
                           key={term}
                           className="flex items-start gap-2 text-sm text-muted-foreground"
                         >
-                          <span className="h-1.5 w-1.5 rounded-full bg-primary-500 mt-1.5 flex-shrink-0" />
+                          <span className="h-1.5 w-1.5 rounded-full bg-green-500 mt-1.5 flex-shrink-0" />
                           {term}
                         </li>
                       ))}
@@ -199,7 +199,7 @@ export default function BookingPage() {
           <div className="mt-6">
             <Link
               href="/contact"
-              className="inline-flex items-center rounded-md bg-primary-700 px-5 py-3 text-sm font-semibold text-white no-underline hover:bg-primary-800 transition-colors"
+              className="inline-flex items-center rounded-md bg-green-700 px-5 py-3 text-sm font-semibold text-white no-underline hover:bg-green-800 transition-colors"
             >
               Contact Us
             </Link>

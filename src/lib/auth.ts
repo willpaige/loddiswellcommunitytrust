@@ -36,7 +36,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           .from(users)
           .where(eq(users.id, user.id))
           .limit(1);
-        (session.user as Record<string, unknown>).role =
+        (session.user as unknown as Record<string, unknown>).role =
           dbUser[0]?.role || "editor";
       }
       return session;

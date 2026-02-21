@@ -21,10 +21,10 @@ export default function AboutPage() {
   return (
     <div>
       {/* Page Header */}
-      <section className="bg-primary-700 text-white py-16">
+      <section className="bg-green-700 text-white py-16">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <h1 className="text-4xl font-bold text-white">About the Trust</h1>
-          <p className="mt-4 text-lg text-primary-100 max-w-2xl">
+          <p className="mt-4 text-lg text-green-100 max-w-2xl">
             The Loddiswell Playing Fields and Village Hall Trust was formed to
             maintain and manage community facilities for the benefit of
             Loddiswell Parish inhabitants.
@@ -39,7 +39,7 @@ export default function AboutPage() {
             <div>
               <div className="flex items-center gap-3 mb-6">
                 <History
-                  className="h-8 w-8 text-primary-600"
+                  className="h-8 w-8 text-green-600"
                   aria-hidden="true"
                 />
                 <h2 className="text-2xl font-bold">Our History</h2>
@@ -67,7 +67,7 @@ export default function AboutPage() {
             <div>
               <div className="flex items-center gap-3 mb-6">
                 <Users
-                  className="h-8 w-8 text-primary-600"
+                  className="h-8 w-8 text-green-600"
                   aria-hidden="true"
                 />
                 <h2 className="text-2xl font-bold">Our Mission</h2>
@@ -133,7 +133,7 @@ export default function AboutPage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3 mb-8">
             <FileText
-              className="h-8 w-8 text-primary-600"
+              className="h-8 w-8 text-green-600"
               aria-hidden="true"
             />
             <h2 className="text-2xl font-bold">Documents</h2>
@@ -152,10 +152,10 @@ export default function AboutPage() {
       </section>
 
       {/* Get Involved CTA */}
-      <section className="py-16 bg-primary-700 text-white">
+      <section className="py-16 bg-green-700 text-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-3xl font-bold text-white">Get Involved</h2>
-          <p className="mt-4 text-primary-100 max-w-xl mx-auto">
+          <p className="mt-4 text-green-100 max-w-xl mx-auto">
             Whether you&apos;d like to volunteer, join a club, or support the
             Trust through our community lottery, there are many ways to get
             involved.
@@ -163,13 +163,13 @@ export default function AboutPage() {
           <div className="mt-8 flex flex-wrap justify-center gap-4">
             <Link
               href="/contact"
-              className="inline-flex items-center rounded-md bg-white px-5 py-3 text-sm font-semibold text-primary-700 no-underline hover:bg-primary-50 transition-colors"
+              className="inline-flex items-center rounded-md bg-white px-5 py-3 text-sm font-semibold text-green-700 no-underline hover:bg-green-50 transition-colors"
             >
               Contact Us
             </Link>
             <Link
               href="/lottery"
-              className="inline-flex items-center rounded-md border border-primary-300 px-5 py-3 text-sm font-semibold text-white no-underline hover:bg-primary-600 transition-colors"
+              className="inline-flex items-center rounded-md border border-green-300 px-5 py-3 text-sm font-semibold text-white no-underline hover:bg-green-600 transition-colors"
             >
               Join the Lottery
             </Link>

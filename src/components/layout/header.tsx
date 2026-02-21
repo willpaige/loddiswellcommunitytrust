@@ -24,7 +24,7 @@ export function Header() {
         aria-label="Main navigation"
       >
         <Link href="/" className="flex items-center gap-3 no-underline">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-700 text-white font-bold text-lg">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-700 text-white font-bold text-lg">
             L
           </div>
           <div className="hidden sm:block">

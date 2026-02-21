@@ -20,6 +20,34 @@ export const metadata: Metadata = {
   },
 };
 
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "CommunityOrganization",
+  name: "Loddiswell Playing Field & Village Hall Trust",
+  description:
+    "Community trust managing the Village Hall, Pavilion, Playing Fields, Tennis Courts, and Play Park in Loddiswell, South Hams, Devon.",
+  url: "https://loddiswellcommunitytrust.org",
+  email: "hello@loddiswellcommunitytrust.org",
+  telephone: "07716162407",
+  address: {
+    "@type": "PostalAddress",
+    streetAddress: "South Brent Road",
+    addressLocality: "Loddiswell",
+    addressRegion: "Devon",
+    postalCode: "TQ7 4RH",
+    addressCountry: "GB",
+  },
+  geo: {
+    "@type": "GeoCoordinates",
+    latitude: 50.32,
+    longitude: -3.775,
+  },
+  areaServed: {
+    "@type": "Place",
+    name: "Loddiswell Parish, South Hams, Devon",
+  },
+};
+
 export default function RootLayout({
   children,
 }: {
@@ -27,6 +55,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
+      <head>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+      </head>
       <body className="flex min-h-screen flex-col">
         <a href="#main-content" className="skip-link">
           Skip to main content

@@ -11,7 +11,7 @@ export default function LotterySuccessPage() {
     <div className="py-24 bg-background">
       <div className="mx-auto max-w-lg px-4 text-center">
         <CheckCircle
-          className="h-16 w-16 text-primary-600 mx-auto"
+          className="h-16 w-16 text-green-600 mx-auto"
           aria-hidden="true"
         />
         <h1 className="mt-6 text-3xl font-bold">Thank You!</h1>
@@ -25,7 +25,7 @@ export default function LotterySuccessPage() {
         <div className="mt-8">
           <Link
             href="/"
-            className="inline-flex items-center rounded-md bg-primary-700 px-5 py-3 text-sm font-semibold text-white no-underline hover:bg-primary-800 transition-colors"
+            className="inline-flex items-center rounded-md bg-green-700 px-5 py-3 text-sm font-semibold text-white no-underline hover:bg-green-800 transition-colors"
           >
             Back to Home
           </Link>

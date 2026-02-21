@@ -21,7 +21,7 @@ export default function LotteryCancelPage() {
         <div className="mt-8 flex flex-wrap justify-center gap-4">
           <Link
             href="/lottery"
-            className="inline-flex items-center rounded-md bg-primary-700 px-5 py-3 text-sm font-semibold text-white no-underline hover:bg-primary-800 transition-colors"
+            className="inline-flex items-center rounded-md bg-green-700 px-5 py-3 text-sm font-semibold text-white no-underline hover:bg-green-800 transition-colors"
           >
             Try Again
           </Link>

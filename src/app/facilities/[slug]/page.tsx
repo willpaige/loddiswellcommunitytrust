@@ -154,22 +154,22 @@ export default async function FacilityPage({ params }: Props) {
   return (
     <div>
       {/* Page Header */}
-      <section className="bg-primary-700 text-white py-16">
+      <section className="bg-green-700 text-white py-16">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <Link
             href="/facilities"
-            className="inline-flex items-center gap-2 text-sm text-primary-200 no-underline hover:text-white mb-6 transition-colors"
+            className="inline-flex items-center gap-2 text-sm text-green-200 no-underline hover:text-white mb-6 transition-colors"
           >
             <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             All Facilities
           </Link>
           <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary-600">
+            <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-green-600">
               <Icon className="h-7 w-7" aria-hidden="true" />
             </div>
             <h1 className="text-4xl font-bold text-white">{facility.name}</h1>
           </div>
-          <p className="mt-3 text-primary-200">{facility.address}</p>
+          <p className="mt-3 text-green-200">{facility.address}</p>
         </div>
       </section>
 
@@ -196,7 +196,7 @@ export default async function FacilityPage({ params }: Props) {
                     key={feature}
                     className="flex items-center gap-2 text-muted-foreground"
                   >
-                    <span className="h-2 w-2 rounded-full bg-primary-500 flex-shrink-0" />
+                    <span className="h-2 w-2 rounded-full bg-green-500 flex-shrink-0" />
                     {feature}
                   </li>
                 ))}
@@ -234,7 +234,7 @@ export default async function FacilityPage({ params }: Props) {
                       href={facility.externalBookingUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="mt-4 inline-flex items-center gap-2 rounded-md bg-primary-700 px-4 py-2 text-sm font-semibold text-white no-underline hover:bg-primary-800 transition-colors"
+                      className="mt-4 inline-flex items-center gap-2 rounded-md bg-green-700 px-4 py-2 text-sm font-semibold text-white no-underline hover:bg-green-800 transition-colors"
                     >
                       Book Online
                       <ExternalLink className="h-4 w-4" aria-hidden="true" />
@@ -243,7 +243,7 @@ export default async function FacilityPage({ params }: Props) {
                   {!facility.externalBookingUrl && slug !== "pump-track" && (
                     <Link
                       href="/booking"
-                      className="mt-4 inline-flex items-center rounded-md bg-primary-700 px-4 py-2 text-sm font-semibold text-white no-underline hover:bg-primary-800 transition-colors"
+                      className="mt-4 inline-flex items-center rounded-md bg-green-700 px-4 py-2 text-sm font-semibold text-white no-underline hover:bg-green-800 transition-colors"
                     >
                       Check Availability
                     </Link>

@@ -43,10 +43,10 @@ export default function EventsPage() {
   return (
     <div>
       {/* Page Header */}
-      <section className="bg-primary-700 text-white py-16">
+      <section className="bg-green-700 text-white py-16">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <h1 className="text-4xl font-bold text-white">Events</h1>
-          <p className="mt-4 text-lg text-primary-100 max-w-2xl">
+          <p className="mt-4 text-lg text-green-100 max-w-2xl">
             See what&apos;s happening in Loddiswell. From community gatherings
             and sports events to club meetings and celebrations.
           </p>
@@ -60,12 +60,12 @@ export default function EventsPage() {
             {sampleEvents.map((event) => (
               <article
                 key={event.id}
-                className="rounded-xl border border-border bg-white p-8 hover:border-primary-300 hover:shadow-sm transition-all"
+                className="rounded-xl border border-border bg-white p-8 hover:border-green-300 hover:shadow-sm transition-all"
               >
                 <div className="flex flex-col sm:flex-row gap-6">
                   {/* Date badge */}
                   <div className="flex-shrink-0">
-                    <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-primary-100 text-primary-700">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-green-100 text-green-700">
                       <CalendarDays className="h-8 w-8" aria-hidden="true" />
                     </div>
                   </div>
@@ -126,7 +126,7 @@ export default function EventsPage() {
           <div className="mt-6 flex flex-wrap justify-center gap-4">
             <Link
               href="/booking"
-              className="inline-flex items-center rounded-md bg-primary-700 px-5 py-3 text-sm font-semibold text-white no-underline hover:bg-primary-800 transition-colors"
+              className="inline-flex items-center rounded-md bg-green-700 px-5 py-3 text-sm font-semibold text-white no-underline hover:bg-green-800 transition-colors"
             >
               Book a Venue
             </Link>
