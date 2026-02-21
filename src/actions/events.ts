@@ -7,6 +7,7 @@ import { eq, desc } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { logAudit } from "@/lib/audit";
 
 export async function getEvents() {
   return db.select().from(events).orderBy(desc(events.startDate));
@@ -46,6 +47,13 @@ export async function createEvent(formData: FormData) {
     createdBy: session.user.id,
   });
 
+  await logAudit({
+    action: "create",
+    entity: "event",
+    entityId: id,
+    description: `Created event: ${formData.get("title")}`,
+  });
+
   revalidatePath("/admin/events");
   revalidatePath("/events");
   redirect("/admin/events");
@@ -72,6 +80,13 @@ export async function updateEvent(id: string, formData: FormData) {
     })
     .where(eq(events.id, id));
 
+  await logAudit({
+    action: "update",
+    entity: "event",
+    entityId: id,
+    description: `Updated event: ${formData.get("title")}`,
+  });
+
   revalidatePath("/admin/events");
   revalidatePath("/events");
   redirect("/admin/events");
@@ -82,6 +97,13 @@ export async function deleteEvent(id: string) {
   if (!session?.user) throw new Error("Unauthorized");
 
   await db.delete(events).where(eq(events.id, id));
+
+  await logAudit({
+    action: "delete",
+    entity: "event",
+    entityId: id,
+    description: "Deleted event",
+  });
 
   revalidatePath("/admin/events");
   revalidatePath("/events");

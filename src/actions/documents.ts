@@ -7,6 +7,7 @@ import { eq, desc } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { put, del } from "@vercel/blob";
 import { revalidatePath } from "next/cache";
+import { logAudit } from "@/lib/audit";
 
 export async function getDocuments() {
   return db.select().from(documents).orderBy(desc(documents.createdAt));
@@ -52,6 +53,13 @@ export async function uploadDocument(formData: FormData) {
     uploadedBy: session.user.id,
   });
 
+  await logAudit({
+    action: "upload",
+    entity: "document",
+    description: `Uploaded document: ${formData.get("title")}`,
+    metadata: { fileName: file.name, fileSize: file.size, category: formData.get("category") },
+  });
+
   revalidatePath("/admin/documents");
   revalidatePath("/about");
 }
@@ -73,6 +81,13 @@ export async function deleteDocument(id: string) {
       // Blob may already be deleted
     }
     await db.delete(documents).where(eq(documents.id, id));
+
+    await logAudit({
+      action: "delete",
+      entity: "document",
+      entityId: id,
+      description: `Deleted document: ${doc[0].title}`,
+    });
   }
 
   revalidatePath("/admin/documents");

@@ -158,6 +158,24 @@ export const images = pgTable("images", {
   uploadedBy: text("uploaded_by").references(() => users.id),
 });
 
+export const auditLog = pgTable("audit_log", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => createId()),
+  userId: text("user_id").references(() => users.id),
+  userEmail: text("user_email"),
+  action: text("action", {
+    enum: ["create", "update", "delete", "publish", "unpublish", "upload", "login"],
+  }).notNull(),
+  entity: text("entity", {
+    enum: ["event", "page", "facility", "document", "image", "lottery", "user"],
+  }).notNull(),
+  entityId: text("entity_id"),
+  description: text("description"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const lotteryTickets = pgTable("lottery_tickets", {
   id: text("id")
     .primaryKey()

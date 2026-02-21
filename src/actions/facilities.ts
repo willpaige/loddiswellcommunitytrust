@@ -5,6 +5,7 @@ import { facilities } from "@/lib/db/schema";
 import { auth } from "@/lib/auth";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { logAudit } from "@/lib/audit";
 
 export async function getFacilities() {
   return db.select().from(facilities).orderBy(facilities.sortOrder);
@@ -45,6 +46,13 @@ export async function updateFacility(id: string, formData: FormData) {
       updatedAt: new Date(),
     })
     .where(eq(facilities.id, id));
+
+  await logAudit({
+    action: "update",
+    entity: "facility",
+    entityId: id,
+    description: `Updated facility: ${formData.get("name")}`,
+  });
 
   revalidatePath("/facilities");
   revalidatePath("/admin/facilities");

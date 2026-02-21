@@ -5,6 +5,7 @@ import { pages } from "@/lib/db/schema";
 import { auth } from "@/lib/auth";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { logAudit } from "@/lib/audit";
 
 export async function getPages() {
   return db.select().from(pages).orderBy(pages.slug);
@@ -33,6 +34,13 @@ export async function updatePage(slug: string, formData: FormData) {
       updatedBy: session.user.id,
     })
     .where(eq(pages.slug, slug));
+
+  await logAudit({
+    action: "update",
+    entity: "page",
+    entityId: slug,
+    description: `Updated page: ${formData.get("title")}`,
+  });
 
   revalidatePath(`/${slug}`);
   revalidatePath("/admin/pages");

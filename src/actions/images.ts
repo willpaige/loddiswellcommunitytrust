@@ -7,6 +7,7 @@ import { eq, desc } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { put, del } from "@vercel/blob";
 import { revalidatePath } from "next/cache";
+import { logAudit } from "@/lib/audit";
 
 export async function getImages() {
   return db.select().from(images).orderBy(desc(images.createdAt));
@@ -34,6 +35,13 @@ export async function uploadImage(formData: FormData) {
     uploadedBy: session.user.id,
   });
 
+  await logAudit({
+    action: "upload",
+    entity: "image",
+    description: `Uploaded image: ${altText}`,
+    metadata: { fileName: file.name, fileSize: file.size },
+  });
+
   revalidatePath("/admin/images");
 }
 
@@ -54,6 +62,13 @@ export async function deleteImage(id: string) {
       // Blob may already be deleted
     }
     await db.delete(images).where(eq(images.id, id));
+
+    await logAudit({
+      action: "delete",
+      entity: "image",
+      entityId: id,
+      description: `Deleted image: ${img[0].altText}`,
+    });
   }
 
   revalidatePath("/admin/images");
