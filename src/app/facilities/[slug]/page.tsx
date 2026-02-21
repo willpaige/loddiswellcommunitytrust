@@ -108,7 +108,7 @@ const facilitiesData: Record<
   "pump-track": {
     name: "Pump Track",
     description:
-      "Plans are underway to build a pump track at Loddiswell Playing Fields — a modern cycling facility featuring a circuit of small hills and banked corners designed for bikes, scooters, and skateboards.\n\nThe pump track will be surfaced in tarmac or concrete, requiring minimal maintenance while providing year-round use. It is designed to work for all skill levels and ages, from young children to experienced riders.\n\nThe project aims to create a vibrant hub for healthy, inclusive recreation that fosters social interaction and offers a safe space for wheeled sports.",
+      "Plans are underway to build a pump track at Loddiswell Playing Fields — a modern cycling facility featuring a circuit of small hills and banked corners designed for bikes, scooters, and skateboards.\n\nThe pump track will be surfaced in tarmac or concrete, requiring minimal maintenance while providing year-round use. It is designed to work for all skill levels and ages, from young children to experienced riders.\n\nThe project aims to create a vibrant hub for healthy, inclusive recreation that fosters social interaction and offers a safe space for wheeled sports.\n\nVisit the dedicated Loddiswell Pump Track website for the latest news, fundraising progress, and ways to get involved.",
     address: "Loddiswell Playing Fields (planned)",
     features: [
       "All ages and abilities",
@@ -117,8 +117,9 @@ const facilitiesData: Record<
       "Year-round use",
       "Currently in planning/fundraising",
     ],
+    externalBookingUrl: "https://loddiswellpumptrack.co.uk/",
     bookingInfo:
-      "The pump track is currently in the planning and fundraising stage. Watch this space for updates!",
+      "The pump track is currently in the planning and fundraising stage. Visit the Loddiswell Pump Track website for the latest updates and ways to support the project.",
     icon: Bike,
   },
 };
@@ -240,7 +241,7 @@ export default async function FacilityPage({ params }: Props) {
                       rel="noopener noreferrer"
                       className="mt-4 inline-flex items-center gap-2 rounded-md bg-copper-500 px-4 py-2 text-sm font-semibold text-white no-underline hover:bg-copper-600 transition-colors"
                     >
-                      Book Online
+                      {slug === "pump-track" ? "Visit Pump Track Website" : "Book Online"}
                       <ExternalLink className="h-4 w-4" aria-hidden="true" />
                     </a>
                   )}
