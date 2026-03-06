@@ -49,6 +49,13 @@ export default function AboutPage() {
                   is a corruption of &quot;Saint Loda&apos;s well.&quot;
                 </p>
                 <p>
+                  The Village Hall began life as a Church School in 1872. After
+                  two local schools merged in 1916, it became the Village Hall.
+                  The Trust itself grew from a Welcome Home Fund set up in 1947
+                  to honour villagers returning from the Second World War. Local
+                  contributions bought the fields and built the Pavilion.
+                </p>
+                <p>
                   The Trust was established to ensure the village&apos;s
                   community facilities — the Village Hall, Pavilion, Playing
                   Fields, Tennis Courts, and Play Park — are properly maintained
