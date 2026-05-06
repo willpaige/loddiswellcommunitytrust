@@ -209,3 +209,17 @@ export function bulletList(...items: string[]): TiptapNode {
 export function inlineDoc(text: string): TiptapJSON {
   return doc(paragraph(text));
 }
+
+// Returns the plain-text contents of the first paragraph of a Tiptap doc.
+// Useful for card summaries that should show just the lede.
+export function firstParagraphText(
+  json: TiptapJSON | undefined,
+  fallback = ""
+): string {
+  if (!json || json.type !== "doc" || !json.content) return fallback;
+  const para = json.content.find((n) => n.type === "paragraph");
+  if (!para) return fallback;
+  const out: string[] = [];
+  walkText(para, out);
+  return out.join("").trim() || fallback;
+}

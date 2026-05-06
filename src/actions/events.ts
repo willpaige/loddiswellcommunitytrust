@@ -3,7 +3,7 @@
 import { db } from "@/lib/db";
 import { events } from "@/lib/db/schema";
 import { auth } from "@/lib/auth";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, gte, sql } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -18,13 +18,24 @@ export async function getEvent(id: string) {
   return result[0] || null;
 }
 
-export async function getUpcomingEvents(limit = 5) {
-  return db
+export async function getUpcomingEvents(limit?: number) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // Upcoming = published AND (endDate >= today, falling back to startDate when
+  // there's no endDate). Ordered by startDate ascending so the next event is first.
+  const query = db
     .select()
     .from(events)
-    .where(eq(events.published, true))
-    .orderBy(events.startDate)
-    .limit(limit);
+    .where(
+      and(
+        eq(events.published, true),
+        gte(sql`COALESCE(${events.endDate}, ${events.startDate})`, today)
+      )
+    )
+    .orderBy(events.startDate);
+
+  return limit ? query.limit(limit) : query;
 }
 
 export async function createEvent(formData: FormData) {

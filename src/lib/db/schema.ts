@@ -176,6 +176,20 @@ export const auditLog = pgTable("audit_log", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export const lotteryDraws = pgTable("lottery_draws", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => createId()),
+  drawDate: timestamp("draw_date", { mode: "date" }).notNull(),
+  results: jsonb("results")
+    .$type<Array<{ rank: number; winner: string; prize: string }>>()
+    .notNull(),
+  notes: text("notes"),
+  published: boolean("published").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  createdBy: text("created_by").references(() => users.id),
+});
+
 export const newsletterSubscribers = pgTable("newsletter_subscribers", {
   id: text("id")
     .primaryKey()

@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { FileText, Users, History } from "lucide-react";
+import { FileText, Users, History, Download } from "lucide-react";
+import { format } from "date-fns";
 import { PageHeader } from "@/components/layout/page-header";
 import { SectionLabel } from "@/components/ui/section-label";
+import { Badge } from "@/components/ui/badge";
 import { getPageContent } from "@/lib/cms/get-page-content";
 import { renderInline, renderRichText } from "@/lib/cms/render";
+import { getDocuments } from "@/actions/documents";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { title, metaDescription } = await getPageContent("about");
@@ -25,8 +28,26 @@ const trustees = [
   { name: "Trustee 6", role: "Trustee" },
 ];
 
+const categoryLabels: Record<string, string> = {
+  minutes: "Meeting Minutes",
+  agm: "AGM Documents",
+  policy: "Policies",
+  report: "Reports",
+  other: "Other",
+};
+
+function formatBytes(bytes: number | null): string {
+  if (!bytes) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export default async function AboutPage() {
-  const { blocks } = await getPageContent("about");
+  const [{ blocks }, documents] = await Promise.all([
+    getPageContent("about"),
+    getDocuments(),
+  ]);
 
   return (
     <div>
@@ -103,36 +124,64 @@ export default async function AboutPage() {
         </div>
       </section>
 
-      <section className="py-20 sm:py-24 bg-muted">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3 mb-8">
-            <FileText className="h-8 w-8 text-sage-600" aria-hidden="true" />
-            <h2 className="font-serif text-2xl">
-              {renderInline(blocks.documents_title, "Documents")}
-            </h2>
-          </div>
-          <div className="text-muted-foreground mb-8">
-            {renderRichText(
-              blocks.documents_intro,
-              <p>
-                Meeting minutes, AGM documents, and policies are available
-                below. These are regularly updated by the Trust committee.
-              </p>
-            )}
-          </div>
-          <div className="rounded-lg border border-border bg-card p-8 text-center">
-            <div className="text-muted-foreground">
+      {documents.length > 0 && (
+        <section className="py-20 sm:py-24 bg-muted">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center gap-3 mb-8">
+              <FileText className="h-8 w-8 text-sage-600" aria-hidden="true" />
+              <h2 className="font-serif text-2xl">
+                {renderInline(blocks.documents_title, "Documents")}
+              </h2>
+            </div>
+            <div className="text-muted-foreground mb-8">
               {renderRichText(
-                blocks.documents_placeholder,
+                blocks.documents_intro,
                 <p>
-                  Documents will be available here once uploaded by the Trust
-                  committee.
+                  Meeting minutes, AGM documents, and policies are available
+                  below. These are regularly updated by the Trust committee.
                 </p>
               )}
             </div>
+            <ul className="divide-y divide-border rounded-lg border border-border bg-card">
+              {documents.map((doc) => (
+                <li key={doc.id}>
+                  <a
+                    href={doc.fileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-start gap-4 px-6 py-4 no-underline hover:bg-muted/40 transition-colors"
+                  >
+                    <FileText
+                      className="h-5 w-5 text-sage-600 mt-0.5 flex-shrink-0"
+                      aria-hidden="true"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="font-medium text-foreground truncate">
+                          {doc.title}
+                        </p>
+                        <Badge variant="secondary" className="flex-shrink-0">
+                          {categoryLabels[doc.category] ?? doc.category}
+                        </Badge>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {doc.publishedDate &&
+                          `${format(doc.publishedDate, "d MMM yyyy")} · `}
+                        {doc.fileName}
+                        {doc.fileSize ? ` · ${formatBytes(doc.fileSize)}` : ""}
+                      </p>
+                    </div>
+                    <Download
+                      className="h-4 w-4 text-muted-foreground mt-1 flex-shrink-0"
+                      aria-hidden="true"
+                    />
+                  </a>
+                </li>
+              ))}
+            </ul>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       <section className="py-20 sm:py-24 bg-sage-800 text-sage-50">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">

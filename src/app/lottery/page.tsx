@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
-import { Ticket, Gift, Heart, HelpCircle } from "lucide-react";
+import { Ticket, Gift, Heart, HelpCircle, Trophy } from "lucide-react";
+import { format } from "date-fns";
 import { LotteryCheckoutButton } from "@/components/lottery/checkout-button";
 import { PageHeader } from "@/components/layout/page-header";
 import { getPageContent } from "@/lib/cms/get-page-content";
 import { renderInline, renderRichText } from "@/lib/cms/render";
+import { getPublishedDraws } from "@/actions/lottery-draws";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { title, metaDescription } = await getPageContent("lottery");
@@ -15,8 +17,18 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
+function rankLabel(rank: number): string {
+  if (rank === 1) return "1st";
+  if (rank === 2) return "2nd";
+  if (rank === 3) return "3rd";
+  return `${rank}th`;
+}
+
 export default async function LotteryPage() {
-  const { blocks } = await getPageContent("lottery");
+  const [{ blocks }, draws] = await Promise.all([
+    getPageContent("lottery"),
+    getPublishedDraws(12),
+  ]);
 
   const faqs = [1, 2, 3, 4].map((n) => ({
     question: blocks[`faq_q${n}`],
@@ -146,6 +158,68 @@ export default async function LotteryPage() {
           </div>
         </div>
       </section>
+
+      {draws.length > 0 && (
+        <section className="py-20 sm:py-24 bg-background">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center gap-3 mb-2">
+              <Trophy className="h-6 w-6 text-copper-500" aria-hidden="true" />
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-copper-500">
+                Winners
+              </p>
+            </div>
+            <h2 className="font-serif text-2xl sm:text-3xl mb-8">
+              Recent monthly draws
+            </h2>
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              {draws.map((draw) => (
+                <article
+                  key={draw.id}
+                  className="rounded-lg border border-border bg-card p-6"
+                >
+                  <h3 className="font-serif text-xl text-foreground">
+                    {format(draw.drawDate, "MMMM yyyy")}
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Drawn {format(draw.drawDate, "d MMMM yyyy")}
+                  </p>
+                  {draw.results.length > 0 ? (
+                    <ul className="mt-4 divide-y divide-border">
+                      {draw.results.map((r) => (
+                        <li
+                          key={r.rank}
+                          className="flex items-baseline gap-3 py-2"
+                        >
+                          <span className="text-sm font-semibold text-copper-600 w-10 flex-shrink-0">
+                            {rankLabel(r.rank)}
+                          </span>
+                          <span className="font-medium text-foreground flex-1 truncate">
+                            {r.winner || "—"}
+                          </span>
+                          {r.prize && (
+                            <span className="text-sm text-muted-foreground">
+                              {r.prize}
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-4 text-sm text-muted-foreground">
+                      No winners listed.
+                    </p>
+                  )}
+                  {draw.notes && (
+                    <p className="mt-4 text-sm text-muted-foreground">
+                      {draw.notes}
+                    </p>
+                  )}
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className="py-20 sm:py-24 bg-muted">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">

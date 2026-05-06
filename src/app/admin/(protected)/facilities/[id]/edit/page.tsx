@@ -12,6 +12,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import {
+  KeyValueEditor,
+  type KeyValuePair,
+} from "@/components/admin/key-value-editor";
+import { ImageUploadInput } from "@/components/admin/image-upload-input";
 
 export default function EditFacilityPage() {
   const params = useParams();
@@ -23,7 +28,7 @@ export default function EditFacilityPage() {
   const [address, setAddress] = useState("");
   const [capacity, setCapacity] = useState("");
   const [features, setFeatures] = useState("");
-  const [rates, setRates] = useState("");
+  const [rates, setRates] = useState<KeyValuePair[]>([]);
   const [bookingInfo, setBookingInfo] = useState("");
   const [externalBookingUrl, setExternalBookingUrl] = useState("");
   const [heroImageUrl, setHeroImageUrl] = useState("");
@@ -44,7 +49,13 @@ export default function EditFacilityPage() {
         setFeatures(
           facility.features ? (facility.features as string[]).join("\n") : ""
         );
-        setRates(facility.rates ? JSON.stringify(facility.rates, null, 2) : "");
+        setRates(
+          facility.rates
+            ? Object.entries(facility.rates as Record<string, string>).map(
+                ([key, value]) => ({ key, value })
+              )
+            : []
+        );
         setBookingInfo(facility.bookingInfo || "");
         setExternalBookingUrl(facility.externalBookingUrl || "");
         setHeroImageUrl(facility.heroImageUrl || "");
@@ -69,7 +80,17 @@ export default function EditFacilityPage() {
       "features",
       JSON.stringify(features.split("\n").filter(Boolean))
     );
-    formData.set("rates", rates || "null");
+    const ratesObject: Record<string, string> = {};
+    for (const { key, value } of rates) {
+      const k = key.trim();
+      if (k) ratesObject[k] = value.trim();
+    }
+    formData.set(
+      "rates",
+      Object.keys(ratesObject).length > 0
+        ? JSON.stringify(ratesObject)
+        : "null"
+    );
     formData.set("bookingInfo", bookingInfo);
     formData.set("externalBookingUrl", externalBookingUrl);
     formData.set("heroImageUrl", heroImageUrl);
@@ -162,18 +183,17 @@ export default function EditFacilityPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="rates">Rates (JSON format)</Label>
-              <Textarea
-                id="rates"
+              <Label>Hire rates</Label>
+              <KeyValueEditor
                 value={rates}
-                onChange={(e) => setRates(e.target.value)}
-                rows={4}
-                placeholder='{"Hourly rate": "£15", "Half day": "£50"}'
-                className="font-mono text-sm"
+                onChange={setRates}
+                keyLabel="Period"
+                valueLabel="Price"
+                keyPlaceholder="Hourly rate"
+                valuePlaceholder="£15 / Contact for rates"
+                addLabel="Add rate"
+                emptyLabel="No rates set. Add one to display a hire-rates table on the facility page."
               />
-              <p className="text-xs text-muted-foreground">
-                Enter as JSON key-value pairs, e.g., {`{"Hourly": "£15"}`}
-              </p>
             </div>
 
             <div className="space-y-2">
@@ -198,13 +218,12 @@ export default function EditFacilityPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="heroImageUrl">Hero Image URL</Label>
-              <Input
-                type="url"
-                id="heroImageUrl"
-                value={heroImageUrl}
-                onChange={(e) => setHeroImageUrl(e.target.value)}
-                placeholder="https://..."
+              <Label>Hero image</Label>
+              <ImageUploadInput
+                value={heroImageUrl || null}
+                onChange={(url) => setHeroImageUrl(url ?? "")}
+                folder={`facilities/${id}`}
+                helpText="Shown at the top of the facility page. Wide landscape photos work best."
               />
             </div>
           </CardContent>

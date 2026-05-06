@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { RichTextEditor } from "@/components/admin/rich-text-editor";
+import { ImageUploadInput } from "@/components/admin/image-upload-input";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,15 +29,22 @@ export function EventForm({ action, initialData }: EventFormProps) {
   const [description, setDescription] = useState(
     initialData?.description || "{}"
   );
+  const [imageUrl, setImageUrl] = useState<string>(
+    initialData?.imageUrl || ""
+  );
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(formData: FormData) {
     formData.set("description", description);
+    formData.set("imageUrl", imageUrl);
     setLoading(true);
     try {
       await action(formData);
-    } catch {
+    } catch (e) {
+      // Clear the spinner; re-throw so Next.js still processes redirects
+      // and unexpected errors surface in the console.
       setLoading(false);
+      throw e;
     }
   }
 
@@ -53,7 +61,7 @@ export function EventForm({ action, initialData }: EventFormProps) {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="title">Event Title *</Label>
+            <Label htmlFor="title">Event title *</Label>
             <Input
               id="title"
               name="title"
@@ -69,7 +77,7 @@ export function EventForm({ action, initialData }: EventFormProps) {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="startDate">Start Date *</Label>
+              <Label htmlFor="startDate">Start date *</Label>
               <Input
                 type="datetime-local"
                 id="startDate"
@@ -79,7 +87,7 @@ export function EventForm({ action, initialData }: EventFormProps) {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="endDate">End Date</Label>
+              <Label htmlFor="endDate">End date</Label>
               <Input
                 type="datetime-local"
                 id="endDate"
@@ -100,17 +108,13 @@ export function EventForm({ action, initialData }: EventFormProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="imageUrl">Image URL</Label>
-            <Input
-              type="url"
-              id="imageUrl"
-              name="imageUrl"
-              defaultValue={initialData?.imageUrl || ""}
-              placeholder="https://..."
+            <Label>Image</Label>
+            <ImageUploadInput
+              value={imageUrl || null}
+              onChange={(url) => setImageUrl(url ?? "")}
+              folder="events"
+              helpText="Optional. Shown alongside the event on the public Events page."
             />
-            <p className="text-xs text-muted-foreground">
-              Upload images in the Images section first, then paste the URL here.
-            </p>
           </div>
         </CardContent>
       </Card>
@@ -151,7 +155,7 @@ export function EventForm({ action, initialData }: EventFormProps) {
           {loading && (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
           )}
-          {initialData ? "Update Event" : "Create Event"}
+          {initialData ? "Update event" : "Create event"}
         </Button>
       </div>
     </form>

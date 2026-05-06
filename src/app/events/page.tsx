@@ -1,10 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import Image from "next/image";
 import { CalendarDays, MapPin, Clock } from "lucide-react";
+import { format, isSameDay } from "date-fns";
 import { PageHeader } from "@/components/layout/page-header";
 import { SectionLabel } from "@/components/ui/section-label";
 import { getPageContent } from "@/lib/cms/get-page-content";
-import { renderInline, renderRichText } from "@/lib/cms/render";
+import {
+  renderInline,
+  renderRichText,
+  type TiptapJSON,
+} from "@/lib/cms/render";
+import { getUpcomingEvents } from "@/actions/events";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { title, metaDescription } = await getPageContent("events");
@@ -16,39 +23,51 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-// Placeholder events (will be replaced by CMS data)
-const sampleEvents = [
-  {
-    id: "1",
-    title: "Loddiswell Show",
-    description:
-      "The annual Loddiswell Show returns! A celebration of local produce, crafts, sports, and community spirit. Fun for all the family.",
-    location: "Loddiswell Playing Fields",
-    date: "First Saturday in August",
-    time: "10:00am - 5:00pm",
-  },
-  {
-    id: "2",
-    title: "Tennis Club Open Day",
-    description:
-      "Come and try tennis at Loddiswell! Free taster sessions for all ages and abilities. Rackets provided.",
-    location: "Tennis Courts, Playing Fields",
-    date: "Coming Soon",
-    time: "2:00pm - 4:00pm",
-  },
-  {
-    id: "3",
-    title: "Trust AGM",
-    description:
-      "Annual General Meeting of the Loddiswell Playing Fields and Village Hall Trust. All parishioners welcome.",
-    location: "Village Hall",
-    date: "Coming Soon",
-    time: "7:30pm",
-  },
-];
+function parseDescription(raw: string | null | undefined): TiptapJSON | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") return parsed as TiptapJSON;
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
+function formatEventDate(
+  startDate: Date,
+  endDate: Date | null,
+  allDay: boolean | null
+): string {
+  if (!endDate || isSameDay(startDate, endDate)) {
+    return format(startDate, "EEEE d MMMM yyyy");
+  }
+  const sameMonth =
+    startDate.getMonth() === endDate.getMonth() &&
+    startDate.getFullYear() === endDate.getFullYear();
+  if (sameMonth) {
+    return `${format(startDate, "EEEE d")} – ${format(endDate, "d MMMM yyyy")}`;
+  }
+  return `${format(startDate, "d MMM")} – ${format(endDate, "d MMM yyyy")}`;
+}
+
+function formatEventTime(
+  startDate: Date,
+  endDate: Date | null,
+  allDay: boolean | null
+): string | null {
+  if (allDay) return "All day";
+  const start = format(startDate, "h:mma").toLowerCase();
+  if (!endDate || !isSameDay(startDate, endDate)) return start;
+  const end = format(endDate, "h:mma").toLowerCase();
+  return `${start} – ${end}`;
+}
 
 export default async function EventsPage() {
-  const { blocks } = await getPageContent("events");
+  const [{ blocks }, upcoming] = await Promise.all([
+    getPageContent("events"),
+    getUpcomingEvents(),
+  ]);
 
   return (
     <div>
@@ -66,48 +85,84 @@ export default async function EventsPage() {
           <SectionLabel>
             {renderInline(blocks.events_eyebrow, "Upcoming Events")}
           </SectionLabel>
-          <div className="space-y-6">
-            {sampleEvents.map((event) => (
-              <article
-                key={event.id}
-                className="rounded-lg border border-border bg-card p-8 hover:border-copper-300 hover:shadow-sm transition-all"
-              >
-                <div className="flex flex-col sm:flex-row gap-6">
-                  <div className="flex-shrink-0">
-                    <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-sage-100 text-sage-700">
-                      <CalendarDays className="h-8 w-8" aria-hidden="true" />
-                    </div>
-                  </div>
 
-                  <div className="flex-1">
-                    <h2 className="font-serif text-xl text-foreground">
-                      {event.title}
-                    </h2>
-                    <div className="mt-2 flex flex-wrap gap-4 text-sm text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <CalendarDays
-                          className="h-4 w-4"
-                          aria-hidden="true"
-                        />
-                        {event.date}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Clock className="h-4 w-4" aria-hidden="true" />
-                        {event.time}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <MapPin className="h-4 w-4" aria-hidden="true" />
-                        {event.location}
-                      </span>
+          {upcoming.length > 0 && (
+            <div className="space-y-6">
+              {upcoming.map((event) => {
+                const dateLabel = formatEventDate(
+                  event.startDate,
+                  event.endDate,
+                  event.allDay
+                );
+                const timeLabel = formatEventTime(
+                  event.startDate,
+                  event.endDate,
+                  event.allDay
+                );
+                const descJson = parseDescription(event.description);
+
+                return (
+                  <article
+                    key={event.id}
+                    className="rounded-lg border border-border bg-card p-8 hover:border-copper-300 hover:shadow-sm transition-all"
+                  >
+                    <div className="flex flex-col sm:flex-row gap-6">
+                      <div className="flex-shrink-0">
+                        {event.imageUrl ? (
+                          <div className="relative h-24 w-24 sm:h-28 sm:w-28 overflow-hidden rounded-lg">
+                            <Image
+                              src={event.imageUrl}
+                              alt={event.title}
+                              fill
+                              sizes="112px"
+                              className="object-cover"
+                            />
+                          </div>
+                        ) : (
+                          <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-sage-100 text-sage-700">
+                            <CalendarDays
+                              className="h-8 w-8"
+                              aria-hidden="true"
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex-1">
+                        <h2 className="font-serif text-xl text-foreground">
+                          {event.title}
+                        </h2>
+                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <CalendarDays
+                              className="h-4 w-4"
+                              aria-hidden="true"
+                            />
+                            {dateLabel}
+                          </span>
+                          {timeLabel && (
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-4 w-4" aria-hidden="true" />
+                              {timeLabel}
+                            </span>
+                          )}
+                          {event.location && (
+                            <span className="flex items-center gap-1">
+                              <MapPin className="h-4 w-4" aria-hidden="true" />
+                              {event.location}
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-3 text-muted-foreground leading-relaxed space-y-3">
+                          {renderRichText(descJson)}
+                        </div>
+                      </div>
                     </div>
-                    <p className="mt-3 text-muted-foreground">
-                      {event.description}
-                    </p>
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
 
           <div className="mt-12 rounded-lg border border-border bg-muted p-8 text-center">
             <CalendarDays

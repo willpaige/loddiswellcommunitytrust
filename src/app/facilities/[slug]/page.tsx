@@ -1,163 +1,78 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import {
-  Building2,
-  TreePine,
-  Trophy,
-  MapPin,
-  Bike,
-  ArrowLeft,
-  ExternalLink,
-} from "lucide-react";
+import { ArrowLeft, ExternalLink } from "lucide-react";
 import { SectionLabel } from "@/components/ui/section-label";
-
-// Static facility data (will be replaced by CMS data once admin is built)
-const facilitiesData: Record<
-  string,
-  {
-    name: string;
-    description: string;
-    address: string;
-    capacity?: number;
-    features: string[];
-    rates?: Record<string, string>;
-    bookingInfo?: string;
-    externalBookingUrl?: string;
-    icon: React.ElementType;
-  }
-> = {
-  "village-hall": {
-    name: "Village Hall",
-    description:
-      "The Loddiswell Village Hall is a spacious, well-maintained venue suitable for up to 100 people. Located on South Brent Road next to the main car park, the hall features a well-equipped kitchen adjacent to the main room, bar facilities, and a separate meeting room.\n\nThe hall is ideal for private parties, celebrations, community events, regular group meetings, and more. It has been the heart of many community gatherings including the annual Loddiswell Show and various club activities.",
-    address: "South Brent Road, Loddiswell, TQ7 4RH",
-    capacity: 100,
-    features: [
-      "Main hall for up to 100 people",
-      "Well-equipped kitchen",
-      "Bar facilities",
-      "Meeting room",
-      "Adjacent car parking",
-      "Accessible entrance",
-    ],
-    rates: {
-      "Hourly rate": "Contact for rates",
-      "Half day": "Contact for rates",
-      "Full day": "Contact for rates",
-      "Evening hire": "Contact for rates",
-    },
-    bookingInfo:
-      "To check availability and make a booking, please contact our Bookings Secretary on 07716 162407 or email us.",
-    icon: Building2,
-  },
-  pavilion: {
-    name: "Pavilion",
-    description:
-      "The Pavilion Building is a multi-purpose facility located at the Loddiswell Playing Fields. It serves as a hub for sports activities and community events, with changing rooms and a covered area.\n\nThe pavilion is perfect for sports events, outdoor gatherings, and community activities. It provides essential facilities for teams using the playing fields and is available for private hire.",
-    address: "Loddiswell Playing Fields, Loddiswell, TQ7 4QH",
-    features: [
-      "Changing rooms",
-      "Covered area",
-      "Adjacent to playing field",
-      "Toilet facilities",
-    ],
-    rates: {
-      "Hourly rate": "Contact for rates",
-      "Half day": "Contact for rates",
-      "Full day": "Contact for rates",
-    },
-    bookingInfo:
-      "To check availability and make a booking, please contact our Bookings Secretary on 07716 162407 or email us.",
-    icon: TreePine,
-  },
-  "tennis-courts": {
-    name: "Tennis Courts",
-    description:
-      "The Loddiswell Tennis Courts are community facilities managed by the Loddiswell Tennis Club, part of the LTA. The courts are open to both members and visitors.\n\nVisitors can book courts at £6 per hour. A key for the visitors' gate must be collected from the village Spar shop (RS Stores) — a deposit is charged which is refunded when the key is returned.\n\nThe Tennis Club offers regular club sessions, coaching, and social events throughout the year. New members of all abilities are always welcome.",
-    address: "Loddiswell Playing Fields, Loddiswell, TQ7 4QH",
-    features: [
-      "Visitors: £6 per hour",
-      "Key from RS Stores (01548 550258)",
-      "Club membership available",
-      "Coaching sessions",
-      "Social events",
-    ],
-    externalBookingUrl:
-      "https://clubspark.lta.org.uk/LoddiswellTennisClub/Booking/BookByDate",
-    bookingInfo:
-      "Visitors: Collect the court key from RS Stores (the village Spar shop) — 01548 550258. A deposit is charged and refunded when the key is returned. For club membership and sessions, visit the ClubSpark page.",
-    icon: Trophy,
-  },
-  "playing-field": {
-    name: "Playing Field",
-    description:
-      "The Loddiswell Playing Field is a large, open green space available for sports and recreational activities. The field is used for football, rounders, and other community sports throughout the year.\n\nThe field also serves as a designated landing site for the Devon Air Ambulance (including night landings) and hosts the annual Loddiswell Show — a beloved community event celebrating its centenary in 2024.\n\nThe children's play park is located on the playing field and is open to all.",
-    address: "Loddiswell Playing Fields, Loddiswell, TQ7 4QH",
-    features: [
-      "Football pitch",
-      "Open space for rounders and sports",
-      "Children's play park",
-      "Devon Air Ambulance landing site",
-      "Loddiswell Show venue",
-    ],
-    bookingInfo:
-      "The playing field is generally open for community use. For organised events or regular bookings, please contact the Trust.",
-    icon: MapPin,
-  },
-  "pump-track": {
-    name: "Pump Track",
-    description:
-      "Plans are underway to build a pump track at Loddiswell Playing Fields — a modern cycling facility featuring a circuit of small hills and banked corners designed for bikes, scooters, and skateboards.\n\nThe pump track will be surfaced in tarmac or concrete, requiring minimal maintenance while providing year-round use. It is designed to work for all skill levels and ages, from young children to experienced riders.\n\nThe project aims to create a vibrant hub for healthy, inclusive recreation that fosters social interaction and offers a safe space for wheeled sports.\n\nVisit the dedicated Loddiswell Pump Track website for the latest news, fundraising progress, and ways to get involved.",
-    address: "Loddiswell Playing Fields (planned)",
-    features: [
-      "All ages and abilities",
-      "Bikes, scooters, and skateboards",
-      "Tarmac/concrete surface",
-      "Year-round use",
-      "Currently in planning/fundraising",
-    ],
-    externalBookingUrl: "https://loddiswellpumptrack.co.uk/",
-    bookingInfo:
-      "The pump track is currently in the planning and fundraising stage. Visit the Loddiswell Pump Track website for the latest updates and ways to support the project.",
-    icon: Bike,
-  },
-};
+import { db } from "@/lib/db";
+import { facilities } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
+import { getFacility } from "@/actions/facilities";
+import { facilityIcon } from "@/lib/cms/facility-icons";
+import {
+  firstParagraphText,
+  renderRichText,
+  type TiptapJSON,
+} from "@/lib/cms/render";
 
 type Props = {
   params: Promise<{ slug: string }>;
 };
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { slug } = await params;
-  const facility = facilitiesData[slug];
-  if (!facility) return { title: "Facility Not Found" };
-
-  return {
-    title: facility.name,
-    description: facility.description.split("\n")[0],
-  };
+function parseDescription(raw: string | null | undefined): TiptapJSON | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") return parsed as TiptapJSON;
+  } catch {
+    return undefined;
+  }
+  return undefined;
 }
 
-export function generateStaticParams() {
-  return Object.keys(facilitiesData).map((slug) => ({ slug }));
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug } = await params;
+  const facility = await getFacility(slug);
+  if (!facility) return { title: "Facility Not Found" };
+  const lede = firstParagraphText(
+    parseDescription(facility.description),
+    facility.name
+  );
+  return { title: facility.name, description: lede };
+}
+
+export async function generateStaticParams() {
+  const rows = await db
+    .select({ slug: facilities.slug })
+    .from(facilities)
+    .where(eq(facilities.published, true));
+  return rows.map((r) => ({ slug: r.slug }));
 }
 
 export default async function FacilityPage({ params }: Props) {
   const { slug } = await params;
-  const facility = facilitiesData[slug];
+  const facility = await getFacility(slug);
+  if (!facility || !facility.published) notFound();
 
-  if (!facility) {
-    notFound();
-  }
-
-  const Icon = facility.icon;
+  const Icon = facilityIcon(slug);
+  const descJson = parseDescription(facility.description);
 
   return (
     <div>
-      {/* Page Header */}
-      <section className="bg-sage-800 text-sage-50 pt-36 sm:pt-40 pb-20 sm:pb-24">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <section className="relative overflow-hidden bg-sage-800 text-sage-50 pt-36 sm:pt-40 pb-20 sm:pb-24">
+        {facility.heroImageUrl && (
+          <>
+            <div
+              className="absolute inset-0 bg-cover bg-center"
+              style={{ backgroundImage: `url('${facility.heroImageUrl}')` }}
+              aria-hidden="true"
+            />
+            <div
+              className="absolute inset-0 bg-sage-900/70"
+              aria-hidden="true"
+            />
+          </>
+        )}
+        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <Link
             href="/facilities"
             className="inline-flex items-center gap-2 text-sm text-sage-300 no-underline hover:text-copper-300 mb-6 transition-colors"
@@ -166,52 +81,49 @@ export default async function FacilityPage({ params }: Props) {
             All Facilities
           </Link>
           <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-sage-700">
+            <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-sage-700/80 backdrop-blur-sm">
               <Icon className="h-7 w-7" aria-hidden="true" />
             </div>
             <h1 className="font-serif text-4xl sm:text-5xl tracking-tight">
               {facility.name}
             </h1>
           </div>
-          <p className="mt-3 text-sage-300">{facility.address}</p>
+          {facility.address && (
+            <p className="mt-3 text-sage-200">{facility.address}</p>
+          )}
         </div>
       </section>
 
-      {/* Content */}
       <section className="py-20 sm:py-24 bg-background">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 gap-12 lg:grid-cols-3">
-            {/* Main content */}
             <div className="lg:col-span-2">
               <SectionLabel>Overview</SectionLabel>
               <h2 className="font-serif text-2xl mb-6">About this Facility</h2>
-              <div className="space-y-4">
-                {facility.description.split("\n\n").map((paragraph, i) => (
-                  <p key={i} className="text-muted-foreground leading-relaxed">
-                    {paragraph}
-                  </p>
-                ))}
+              <div className="text-muted-foreground leading-relaxed space-y-4">
+                {renderRichText(descJson)}
               </div>
 
-              {/* Features */}
-              <h3 className="font-serif text-xl mt-10 mb-4">Features</h3>
-              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {facility.features.map((feature) => (
-                  <li
-                    key={feature}
-                    className="flex items-center gap-2 text-muted-foreground"
-                  >
-                    <span className="h-2 w-2 rounded-full bg-copper-500 flex-shrink-0" />
-                    {feature}
-                  </li>
-                ))}
-              </ul>
+              {facility.features && facility.features.length > 0 && (
+                <>
+                  <h3 className="font-serif text-xl mt-10 mb-4">Features</h3>
+                  <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {facility.features.map((feature) => (
+                      <li
+                        key={feature}
+                        className="flex items-center gap-2 text-muted-foreground"
+                      >
+                        <span className="h-2 w-2 rounded-full bg-copper-500 flex-shrink-0" />
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
             </div>
 
-            {/* Sidebar */}
             <div className="space-y-6">
-              {/* Rates */}
-              {facility.rates && (
+              {facility.rates && Object.keys(facility.rates).length > 0 && (
                 <div className="rounded-lg border border-border bg-card p-6">
                   <h3 className="font-serif text-lg mb-4">Hire Rates</h3>
                   <dl className="space-y-3">
@@ -225,7 +137,6 @@ export default async function FacilityPage({ params }: Props) {
                 </div>
               )}
 
-              {/* Booking Info */}
               {facility.bookingInfo && (
                 <div className="rounded-lg border border-border bg-card p-6">
                   <h3 className="font-serif text-lg mb-4">
@@ -241,7 +152,9 @@ export default async function FacilityPage({ params }: Props) {
                       rel="noopener noreferrer"
                       className="mt-4 inline-flex items-center gap-2 rounded-md bg-copper-500 px-4 py-2 text-sm font-semibold text-white no-underline hover:bg-copper-600 transition-colors"
                     >
-                      {slug === "pump-track" ? "Visit Pump Track Website" : "Book Online"}
+                      {slug === "pump-track"
+                        ? "Visit Pump Track Website"
+                        : "Book Online"}
                       <ExternalLink className="h-4 w-4" aria-hidden="true" />
                     </a>
                   )}
@@ -256,19 +169,20 @@ export default async function FacilityPage({ params }: Props) {
                 </div>
               )}
 
-              {/* Location */}
-              <div className="rounded-lg border border-border bg-card p-6">
-                <h3 className="font-serif text-lg mb-4">Location</h3>
-                <p className="text-sm text-muted-foreground">
-                  {facility.address}
-                </p>
-                <Link
-                  href="/contact"
-                  className="mt-4 inline-flex items-center rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground no-underline hover:bg-muted transition-colors"
-                >
-                  Get Directions
-                </Link>
-              </div>
+              {facility.address && (
+                <div className="rounded-lg border border-border bg-card p-6">
+                  <h3 className="font-serif text-lg mb-4">Location</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {facility.address}
+                  </p>
+                  <Link
+                    href="/contact"
+                    className="mt-4 inline-flex items-center rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground no-underline hover:bg-muted transition-colors"
+                  >
+                    Get Directions
+                  </Link>
+                </div>
+              )}
             </div>
           </div>
         </div>

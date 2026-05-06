@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { users } from "./schema";
 import { seedPages } from "./seed-pages";
+import { seedFacilities } from "./seed-facilities";
 
 const trustees = [
   { email: "zoe.c.crockford@gmail.com", name: "Zoe", role: "admin" as const },
@@ -28,6 +29,7 @@ async function seed() {
   }
 
   await seedPages();
+  await seedFacilities();
 
   console.log("Done.");
 }

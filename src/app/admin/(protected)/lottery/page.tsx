@@ -1,9 +1,11 @@
-import { Ticket, Users } from "lucide-react";
+import Link from "next/link";
+import { Ticket, Users, Plus, Pencil, Trophy } from "lucide-react";
 import { db } from "@/lib/db";
 import { lotteryTickets } from "@/lib/db/schema";
-import { desc, eq } from "drizzle-orm";
+import { desc } from "drizzle-orm";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -19,6 +21,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { DeleteButton } from "@/components/admin/delete-button";
+import { getDraws, deleteDraw } from "@/actions/lottery-draws";
 
 async function getLotteryStats() {
   const tickets = await db
@@ -34,15 +38,15 @@ async function getLotteryStats() {
 }
 
 export default async function AdminLotteryPage() {
-  const { tickets, active, totalRevenue, totalTickets } =
-    await getLotteryStats();
+  const [{ tickets, active, totalRevenue, totalTickets }, draws] =
+    await Promise.all([getLotteryStats(), getDraws()]);
 
   return (
     <div>
       <div className="mb-8">
         <h1 className="text-3xl font-bold">Lottery</h1>
         <p className="mt-1 text-muted-foreground">
-          View lottery ticket holders and statistics.
+          Publish monthly draw results and view ticket holders.
         </p>
       </div>
 
@@ -51,7 +55,9 @@ export default async function AdminLotteryPage() {
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Active Tickets</CardDescription>
-            <CardTitle className="text-3xl">{active.reduce((s, t) => s + t.quantity, 0)}</CardTitle>
+            <CardTitle className="text-3xl">
+              {active.reduce((s, t) => s + t.quantity, 0)}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-xs text-muted-foreground">
@@ -80,6 +86,85 @@ export default async function AdminLotteryPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Monthly draws */}
+      <Card className="mb-8">
+        <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Trophy className="h-5 w-5" aria-hidden="true" />
+              Monthly draws
+            </CardTitle>
+            <CardDescription className="mt-1">
+              Publish winners and prizes for each monthly draw.
+            </CardDescription>
+          </div>
+          <Button asChild>
+            <Link href="/admin/lottery/draws/new">
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              Add draw
+            </Link>
+          </Button>
+        </CardHeader>
+        {draws.length === 0 ? (
+          <CardContent className="text-sm text-muted-foreground">
+            No draws published yet.
+          </CardContent>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Draw date</TableHead>
+                <TableHead className="hidden sm:table-cell">Winners</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {draws.map((draw) => (
+                <TableRow key={draw.id}>
+                  <TableCell className="font-medium">
+                    {format(draw.drawDate, "MMMM yyyy")}
+                  </TableCell>
+                  <TableCell className="hidden sm:table-cell text-muted-foreground">
+                    {draw.results.length} winner
+                    {draw.results.length === 1 ? "" : "s"}
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={draw.published ? "default" : "secondary"}
+                    >
+                      {draw.published ? "Published" : "Draft"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        asChild
+                        className="h-8 w-8"
+                      >
+                        <Link
+                          href={`/admin/lottery/draws/${draw.id}/edit`}
+                          title="Edit draw"
+                        >
+                          <Pencil className="h-4 w-4" aria-hidden="true" />
+                        </Link>
+                      </Button>
+                      <DeleteButton
+                        id={draw.id}
+                        action={deleteDraw}
+                        label="Delete draw"
+                      />
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </Card>
 
       {/* Ticket holders */}
       {tickets.length === 0 ? (
