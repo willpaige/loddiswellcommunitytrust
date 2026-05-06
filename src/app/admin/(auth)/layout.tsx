@@ -5,7 +5,7 @@ export default function AuthLayout({
 }) {
   return (
     <>
-      <style>{`header[role="banner"], footer { display: none; } #main-content { padding: 0; }`}</style>
+      <style>{`header[role="banner"], footer, .newsletter-signup { display: none; } #main-content { padding: 0; }`}</style>
       {children}
     </>
   );

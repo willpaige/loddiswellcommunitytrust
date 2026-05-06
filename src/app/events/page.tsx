@@ -3,12 +3,18 @@ import Link from "next/link";
 import { CalendarDays, MapPin, Clock } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { SectionLabel } from "@/components/ui/section-label";
+import { getPageContent } from "@/lib/cms/get-page-content";
+import { renderInline, renderRichText } from "@/lib/cms/render";
 
-export const metadata: Metadata = {
-  title: "Events",
-  description:
-    "Upcoming events in Loddiswell - community gatherings, sports, shows, and more at the Village Hall and Playing Fields.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { title, metaDescription } = await getPageContent("events");
+  return {
+    title: title || "Events",
+    description:
+      metaDescription ||
+      "Upcoming events in Loddiswell - community gatherings, sports, shows, and more at the Village Hall and Playing Fields.",
+  };
+}
 
 // Placeholder events (will be replaced by CMS data)
 const sampleEvents = [
@@ -41,19 +47,25 @@ const sampleEvents = [
   },
 ];
 
-export default function EventsPage() {
+export default async function EventsPage() {
+  const { blocks } = await getPageContent("events");
+
   return (
     <div>
       <PageHeader
-        label="What's On"
-        title="Events"
-        subtitle="See what's happening in Loddiswell. From community gatherings and sports events to club meetings and celebrations."
+        label={renderInline(blocks.header_label, "What's On")}
+        title={renderInline(blocks.header_title, "Events")}
+        subtitle={renderInline(
+          blocks.header_subtitle,
+          "See what's happening in Loddiswell. From community gatherings and sports events to club meetings and celebrations."
+        )}
       />
 
-      {/* Events List */}
       <section className="py-20 sm:py-24 bg-background">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <SectionLabel>Upcoming Events</SectionLabel>
+          <SectionLabel>
+            {renderInline(blocks.events_eyebrow, "Upcoming Events")}
+          </SectionLabel>
           <div className="space-y-6">
             {sampleEvents.map((event) => (
               <article
@@ -61,7 +73,6 @@ export default function EventsPage() {
                 className="rounded-lg border border-border bg-card p-8 hover:border-copper-300 hover:shadow-sm transition-all"
               >
                 <div className="flex flex-col sm:flex-row gap-6">
-                  {/* Date badge */}
                   <div className="flex-shrink-0">
                     <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-sage-100 text-sage-700">
                       <CalendarDays className="h-8 w-8" aria-hidden="true" />
@@ -98,32 +109,44 @@ export default function EventsPage() {
             ))}
           </div>
 
-          {/* Empty state info */}
           <div className="mt-12 rounded-lg border border-border bg-muted p-8 text-center">
             <CalendarDays
               className="h-12 w-12 text-muted-foreground mx-auto mb-4"
               aria-hidden="true"
             />
-            <h3 className="font-serif text-lg">More Events Coming Soon</h3>
-            <p className="mt-2 text-muted-foreground max-w-md mx-auto">
-              Events will be regularly updated by the Trust committee. Check back
-              soon or follow us for the latest updates.
-            </p>
+            <h3 className="font-serif text-lg">
+              {renderInline(blocks.empty_state_title, "More Events Coming Soon")}
+            </h3>
+            <div className="mt-2 text-muted-foreground max-w-md mx-auto">
+              {renderRichText(
+                blocks.empty_state_body,
+                <p>
+                  Events will be regularly updated by the Trust committee. Check
+                  back soon or follow us for the latest updates.
+                </p>
+              )}
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Host Event CTA */}
       <section className="py-20 sm:py-24 bg-sage-800 text-sage-50">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
-          <SectionLabel>Get Involved</SectionLabel>
+          <SectionLabel>
+            {renderInline(blocks.cta_eyebrow, "Get Involved")}
+          </SectionLabel>
           <h2 className="font-serif text-2xl sm:text-3xl">
-            Want to Host an Event?
+            {renderInline(blocks.cta_title, "Want to Host an Event?")}
           </h2>
-          <p className="mt-3 text-sage-200 max-w-xl mx-auto leading-relaxed">
-            Our Village Hall and Pavilion are available for hire. Get in touch to
-            discuss your event.
-          </p>
+          <div className="mt-3 text-sage-200 max-w-xl mx-auto leading-relaxed">
+            {renderRichText(
+              blocks.cta_body,
+              <p>
+                Our Village Hall and Pavilion are available for hire. Get in
+                touch to discuss your event.
+              </p>
+            )}
+          </div>
           <div className="mt-8 flex flex-wrap justify-center gap-4">
             <Link
               href="/booking"

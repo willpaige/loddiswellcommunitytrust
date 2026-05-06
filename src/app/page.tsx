@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import {
   CalendarDays,
@@ -9,6 +10,17 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { SectionLabel } from "@/components/ui/section-label";
+import { getPageContent } from "@/lib/cms/get-page-content";
+import { renderInline, renderRichText } from "@/lib/cms/render";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const { metaDescription } = await getPageContent("home");
+  return {
+    description:
+      metaDescription ||
+      "Community facilities for Loddiswell Parish - Village Hall, Pavilion, Playing Fields, Tennis Courts. Book facilities, find events, and join our community lottery.",
+  };
+}
 
 const facilities = [
   {
@@ -27,8 +39,7 @@ const facilities = [
   },
   {
     name: "Tennis Courts",
-    description:
-      "Community tennis courts available to book via ClubSpark.",
+    description: "Community tennis courts available to book via ClubSpark.",
     href: "/facilities/tennis-courts",
     icon: Trophy,
   },
@@ -50,23 +61,35 @@ const quickLinks = [
   },
   {
     name: "Upcoming Events",
-    description: "See what\u2019s happening in the Loddiswell community.",
+    description: "See what’s happening in the Loddiswell community.",
     href: "/events",
     icon: CalendarDays,
   },
   {
     name: "Community Lottery",
     description:
-      "Support the trust and win prizes. Tickets just \u00a312 per year.",
+      "Support the trust and win prizes. Tickets just £12 per year.",
     href: "/lottery",
     icon: Ticket,
   },
 ];
 
-export default function HomePage() {
+function renderHeroTitle(text: string) {
+  // A forward slash splits the title across two lines.
+  const parts = text.split("/").map((p) => p.trim());
+  return parts.map((part, i) => (
+    <span key={i}>
+      {part}
+      {i < parts.length - 1 && <br />}
+    </span>
+  ));
+}
+
+export default async function HomePage() {
+  const { blocks } = await getPageContent("home");
+
   return (
     <div>
-      {/* Hero Section — full-bleed with background image */}
       <section className="relative overflow-hidden text-white">
         <div
           className="absolute inset-0 bg-cover bg-center"
@@ -77,17 +100,25 @@ export default function HomePage() {
         <div className="relative mx-auto max-w-7xl px-4 pt-40 pb-32 sm:px-6 sm:pt-48 sm:pb-40 lg:px-8 lg:pt-56 lg:pb-48">
           <div className="max-w-2xl">
             <p className="text-xs font-semibold uppercase tracking-[0.25em] text-copper-300 mb-6">
-              Loddiswell, South Hams, Devon
+              {renderInline(
+                blocks.hero_eyebrow,
+                "Loddiswell, South Hams, Devon"
+              )}
             </p>
             <h1 className="font-serif text-6xl sm:text-7xl lg:text-8xl tracking-wide text-white leading-[1.1]">
-              Heart of the
-              <br />
-              Village
+              {renderHeroTitle(
+                renderInline(blocks.hero_title, "Heart of the / Village")
+              )}
             </h1>
-            <p className="mt-6 text-lg text-sage-200 leading-relaxed max-w-xl">
-              The Playing Field & Village Hall Trust maintains community
-              facilities for the benefit of everyone in Loddiswell Parish.
-            </p>
+            <div className="mt-6 text-lg text-sage-200 leading-relaxed max-w-xl">
+              {renderRichText(
+                blocks.hero_subtitle,
+                <p>
+                  The Playing Field & Village Hall Trust maintains community
+                  facilities for the benefit of everyone in Loddiswell Parish.
+                </p>
+              )}
+            </div>
             <div className="mt-10 flex flex-wrap gap-4">
               <Link
                 href="/booking"
@@ -107,7 +138,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Quick Links */}
       <section className="py-20 sm:py-24 bg-background">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
@@ -137,18 +167,27 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Facilities Overview */}
       <section className="py-20 sm:py-24 bg-card">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="max-w-2xl mb-16">
-            <SectionLabel>Our Facilities</SectionLabel>
+            <SectionLabel>
+              {renderInline(blocks.facilities_eyebrow, "Our Facilities")}
+            </SectionLabel>
             <h2 className="font-serif text-3xl sm:text-4xl tracking-tight text-foreground">
-              Community Spaces for Everyone
+              {renderInline(
+                blocks.facilities_title,
+                "Community Spaces for Everyone"
+              )}
             </h2>
-            <p className="mt-4 text-muted-foreground leading-relaxed">
-              We maintain a range of community facilities in the heart of
-              Loddiswell for residents, groups, and visitors to enjoy.
-            </p>
+            <div className="mt-4 text-muted-foreground leading-relaxed">
+              {renderRichText(
+                blocks.facilities_body,
+                <p>
+                  We maintain a range of community facilities in the heart of
+                  Loddiswell for residents, groups, and visitors to enjoy.
+                </p>
+              )}
+            </div>
           </div>
           <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-4">
             {facilities.map((facility) => (
@@ -173,26 +212,35 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Community Section */}
       <section className="py-20 sm:py-24 bg-background">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 gap-16 lg:grid-cols-2 items-center">
             <div>
-              <SectionLabel>Our Village</SectionLabel>
+              <SectionLabel>
+                {renderInline(blocks.community_eyebrow, "Our Village")}
+              </SectionLabel>
               <h2 className="font-serif text-3xl sm:text-4xl tracking-tight text-foreground">
-                A Thriving Community
+                {renderInline(blocks.community_title, "A Thriving Community")}
               </h2>
-              <p className="mt-6 text-muted-foreground leading-relaxed">
-                Loddiswell is a vibrant village in the South Hams, Devon, with a
-                rich history dating back to Roman times. Our community supports a
-                wide range of clubs and societies including tennis, football,
-                short mat bowls, cubs, art club, WI, and much more.
-              </p>
-              <p className="mt-4 text-muted-foreground leading-relaxed">
-                The Trust is run by a dedicated committee of volunteers who work
-                to ensure our facilities are maintained and available for
-                everyone to enjoy.
-              </p>
+              <div className="mt-6 text-muted-foreground leading-relaxed space-y-4">
+                {renderRichText(
+                  blocks.community_body,
+                  <>
+                    <p>
+                      Loddiswell is a vibrant village in the South Hams, Devon,
+                      with a rich history dating back to Roman times. Our
+                      community supports a wide range of clubs and societies
+                      including tennis, football, short mat bowls, cubs, art
+                      club, WI, and much more.
+                    </p>
+                    <p>
+                      The Trust is run by a dedicated committee of volunteers
+                      who work to ensure our facilities are maintained and
+                      available for everyone to enjoy.
+                    </p>
+                  </>
+                )}
+              </div>
               <div className="mt-8">
                 <Link
                   href="/contact"
@@ -205,9 +253,7 @@ export default function HomePage() {
             </div>
             <div className="rounded-lg bg-sage-100 p-10">
               <p className="text-5xl font-serif text-copper-600">600+</p>
-              <p className="mt-2 text-sage-700 font-medium">
-                Parish Residents
-              </p>
+              <p className="mt-2 text-sage-700 font-medium">Parish Residents</p>
               <div className="mt-8 grid grid-cols-2 gap-4">
                 <div className="rounded-lg bg-card p-5">
                   <p className="text-2xl font-serif text-copper-600">5</p>
@@ -227,19 +273,23 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* CTA */}
       <section className="py-20 sm:py-24 bg-sage-800 text-sage-50">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-copper-300 mb-4">
-            Support Loddiswell
+            {renderInline(blocks.cta_eyebrow, "Support Loddiswell")}
           </p>
           <h2 className="font-serif text-3xl sm:text-4xl tracking-tight">
-            Join the Community Lottery
+            {renderInline(blocks.cta_title, "Join the Community Lottery")}
           </h2>
-          <p className="mt-4 text-sage-200 max-w-xl mx-auto leading-relaxed">
-            Tickets are just &pound;12 per year. Support the maintenance of our
-            community facilities and enter the monthly prize draw.
-          </p>
+          <div className="mt-4 text-sage-200 max-w-xl mx-auto leading-relaxed">
+            {renderRichText(
+              blocks.cta_body,
+              <p>
+                Tickets are just &pound;12 per year. Support the maintenance of
+                our community facilities and enter the monthly prize draw.
+              </p>
+            )}
+          </div>
           <div className="mt-8">
             <Link
               href="/lottery"

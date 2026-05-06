@@ -15,7 +15,7 @@ export default async function AdminLayout({
 
   return (
     <>
-      {/* Override the public site header/footer via a separate layout */}
+      <style>{`header[role="banner"], footer, .newsletter-signup { display: none; } #main-content { padding: 0; }`}</style>
       <div className="flex min-h-screen">
         <AdminSidebar user={session.user} />
         <div className="flex-1 overflow-auto">

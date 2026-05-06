@@ -1,78 +1,35 @@
 import type { Metadata } from "next";
 import { PageHeader } from "@/components/layout/page-header";
+import { getPageContent } from "@/lib/cms/get-page-content";
+import { renderInline, renderRichText } from "@/lib/cms/render";
 
-export const metadata: Metadata = {
-  title: "Terms & Conditions",
-  description: "Terms and conditions for the Loddiswell Playing Field & Village Hall Trust website.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { title, metaDescription } = await getPageContent("terms");
+  return {
+    title: title || "Terms & Conditions",
+    description:
+      metaDescription ||
+      "Terms and conditions for the Loddiswell Playing Field & Village Hall Trust website.",
+  };
+}
 
-export default function TermsPage() {
+export default async function TermsPage() {
+  const { blocks } = await getPageContent("terms");
+
   return (
     <div>
-      <PageHeader label="Legal" title="Terms & Conditions" />
+      <PageHeader
+        label={renderInline(blocks.header_label, "Legal")}
+        title={renderInline(blocks.header_title, "Terms & Conditions")}
+      />
 
       <section className="py-20 sm:py-24 bg-background">
         <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
-          <div className="space-y-10">
-            <div>
-              <h2 className="font-serif text-xl mb-3">1. Introduction</h2>
-              <p className="text-muted-foreground leading-relaxed">
-                These terms and conditions govern your use of the Loddiswell Playing Field & Village Hall Trust website. By using this website, you accept these terms in full.
-              </p>
-            </div>
-
-            <div>
-              <h2 className="font-serif text-xl mb-3">2. Use of Website</h2>
-              <p className="text-muted-foreground leading-relaxed">
-                This website is provided for the benefit of the Loddiswell community. You must not use the website in any way that causes, or may cause, damage to the website or impairment of the availability or accessibility of the website.
-              </p>
-            </div>
-
-            <div>
-              <h2 className="font-serif text-xl mb-3">3. Facility Hire</h2>
-              <p className="text-muted-foreground leading-relaxed">
-                All facility bookings are subject to the Trust&apos;s hire terms and conditions, which are provided at the time of booking. The Trust reserves the right to refuse or cancel bookings at its discretion.
-              </p>
-            </div>
-
-            <div>
-              <h2 className="font-serif text-xl mb-3">4. Community Lottery</h2>
-              <p className="text-muted-foreground leading-relaxed">
-                The Loddiswell Community Lottery is operated by the Loddiswell Playing Fields and Village Hall Trust. Lottery tickets cost &pound;12 each per year. Participants must be 16 years or older. The Trust reserves the right to amend lottery rules with reasonable notice.
-              </p>
-            </div>
-
-            <div>
-              <h2 className="font-serif text-xl mb-3">5. Intellectual Property</h2>
-              <p className="text-muted-foreground leading-relaxed">
-                Unless otherwise stated, the Trust owns the intellectual property rights in the website and material on the website. All content is protected by copyright.
-              </p>
-            </div>
-
-            <div>
-              <h2 className="font-serif text-xl mb-3">6. Limitation of Liability</h2>
-              <p className="text-muted-foreground leading-relaxed">
-                The information on this website is provided free of charge, and you acknowledge that it would be unreasonable to hold us liable in respect of this website and the information on this website. We will not be liable for any loss or damage arising from the use of this website.
-              </p>
-            </div>
-
-            <div>
-              <h2 className="font-serif text-xl mb-3">7. Changes to Terms</h2>
-              <p className="text-muted-foreground leading-relaxed">
-                The Trust may revise these terms from time to time. Revised terms will apply to the use of this website from the date of publication. Please check this page regularly to ensure you are familiar with the current version.
-              </p>
-            </div>
-
-            <div>
-              <h2 className="font-serif text-xl mb-3">8. Contact</h2>
-              <p className="text-muted-foreground leading-relaxed">
-                If you have any questions about these terms, please contact us at{" "}
-                <a href="mailto:hello@loddiswellcommunitytrust.org" className="text-copper-600 hover:text-copper-700">
-                  hello@loddiswellcommunitytrust.org
-                </a>
-                .
-              </p>
-            </div>
+          <div className="space-y-10 text-muted-foreground leading-relaxed">
+            {Array.from({ length: 8 }).map((_, i) => {
+              const key = `section_${i + 1}`;
+              return <div key={key}>{renderRichText(blocks[key])}</div>;
+            })}
           </div>
         </div>
       </section>

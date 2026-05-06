@@ -2,41 +2,54 @@ import type { Metadata } from "next";
 import { Mail, Phone, MapPin } from "lucide-react";
 import { ContactForm } from "@/components/contact-form";
 import { PageHeader } from "@/components/layout/page-header";
+import { getPageContent } from "@/lib/cms/get-page-content";
+import { renderInline } from "@/lib/cms/render";
 
-export const metadata: Metadata = {
-  title: "Contact",
-  description:
-    "Get in touch with the Loddiswell Playing Field & Village Hall Trust. Find us, email us, or call our Bookings Secretary.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { title, metaDescription } = await getPageContent("contact");
+  return {
+    title: title || "Contact",
+    description:
+      metaDescription ||
+      "Get in touch with the Loddiswell Playing Field & Village Hall Trust. Find us, email us, or call our Bookings Secretary.",
+  };
+}
 
-export default function ContactPage() {
+export default async function ContactPage() {
+  const { blocks } = await getPageContent("contact");
+
   return (
     <div>
       <PageHeader
-        label="Get in Touch"
-        title="Contact Us"
-        subtitle="Have a question, want to book a facility, or get involved? We'd love to hear from you."
+        label={renderInline(blocks.header_label, "Get in Touch")}
+        title={renderInline(blocks.header_title, "Contact Us")}
+        subtitle={renderInline(
+          blocks.header_subtitle,
+          "Have a question, want to book a facility, or get involved? We'd love to hear from you."
+        )}
       />
 
       <section className="py-20 sm:py-24 bg-background">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 gap-12 lg:grid-cols-2">
-            {/* Contact Form */}
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-copper-500 mb-3">
-                Write to Us
+                {renderInline(blocks.form_eyebrow, "Write to Us")}
               </p>
-              <h2 className="font-serif text-2xl mb-6">Send Us a Message</h2>
+              <h2 className="font-serif text-2xl mb-6">
+                {renderInline(blocks.form_title, "Send Us a Message")}
+              </h2>
               <ContactForm />
             </div>
 
-            {/* Contact Details */}
             <div className="space-y-8">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-copper-500 mb-3">
-                  Contact Details
+                  {renderInline(blocks.details_eyebrow, "Contact Details")}
                 </p>
-                <h2 className="font-serif text-2xl mb-6">Get in Touch</h2>
+                <h2 className="font-serif text-2xl mb-6">
+                  {renderInline(blocks.details_title, "Get in Touch")}
+                </h2>
                 <div className="space-y-6">
                   <div className="flex items-start gap-4">
                     <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sage-100 text-sage-700 flex-shrink-0">
@@ -66,7 +79,10 @@ export default function ContactPage() {
                         07716 162407
                       </a>
                       <p className="text-xs text-muted-foreground mt-1">
-                        For urgent booking enquiries
+                        {renderInline(
+                          blocks.phone_note,
+                          "For urgent booking enquiries"
+                        )}
                       </p>
                     </div>
                   </div>
@@ -107,7 +123,6 @@ export default function ContactPage() {
                 </div>
               </div>
 
-              {/* Map Embed */}
               <div className="rounded-lg border border-border overflow-hidden">
                 <iframe
                   src="https://www.openstreetmap.org/export/embed.html?bbox=-3.7900%2C50.3100%2C-3.7600%2C50.3300&amp;layer=mapnik&amp;marker=50.3200%2C-3.7750"

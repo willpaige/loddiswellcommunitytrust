@@ -176,6 +176,17 @@ export const auditLog = pgTable("audit_log", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export const newsletterSubscribers = pgTable("newsletter_subscribers", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => createId()),
+  email: text("email").notNull().unique(),
+  status: text("status", { enum: ["active", "unsubscribed"] })
+    .notNull()
+    .default("active"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const lotteryTickets = pgTable("lottery_tickets", {
   id: text("id")
     .primaryKey()

@@ -2,12 +2,18 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Building2, TreePine, Trophy, MapPin, Bike } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
+import { getPageContent } from "@/lib/cms/get-page-content";
+import { renderInline, renderRichText } from "@/lib/cms/render";
 
-export const metadata: Metadata = {
-  title: "Facilities",
-  description:
-    "Explore Loddiswell's community facilities - Village Hall, Pavilion, Tennis Courts, Playing Field, and more. Available for hire and community use.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { title, metaDescription } = await getPageContent("facilities");
+  return {
+    title: title || "Facilities",
+    description:
+      metaDescription ||
+      "Explore Loddiswell's community facilities - Village Hall, Pavilion, Tennis Courts, Playing Field, and more. Available for hire and community use.",
+  };
+}
 
 const facilities = [
   {
@@ -63,27 +69,25 @@ const facilities = [
     description:
       "A planned cycling facility featuring a circuit of small hills and banked corners, designed for bikes, scooters, and skateboards. Suitable for all skill levels and ages. Currently in the fundraising and planning stage.",
     address: "Loddiswell Playing Fields (planned)",
-    features: [
-      "All ages",
-      "Bikes & Scooters",
-      "Skateboards",
-      "Coming Soon",
-    ],
+    features: ["All ages", "Bikes & Scooters", "Skateboards", "Coming Soon"],
     icon: Bike,
   },
 ];
 
-export default function FacilitiesPage() {
+export default async function FacilitiesPage() {
+  const { blocks } = await getPageContent("facilities");
+
   return (
     <div>
-      {/* Page Header */}
       <PageHeader
-        label="What We Offer"
-        title="Our Facilities"
-        subtitle="We maintain a range of community facilities in the heart of Loddiswell for residents, groups, and visitors to enjoy."
+        label={renderInline(blocks.header_label, "What We Offer")}
+        title={renderInline(blocks.header_title, "Our Facilities")}
+        subtitle={renderInline(
+          blocks.header_subtitle,
+          "We maintain a range of community facilities in the heart of Loddiswell for residents, groups, and visitors to enjoy."
+        )}
       />
 
-      {/* Facilities Grid */}
       <section className="py-20 sm:py-24 bg-background">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="space-y-8">
@@ -127,16 +131,20 @@ export default function FacilitiesPage() {
         </div>
       </section>
 
-      {/* Booking CTA */}
       <section className="py-20 sm:py-24 bg-sage-800 text-sage-50">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="font-serif text-3xl sm:text-4xl">
-            Want to Book a Facility?
+            {renderInline(blocks.cta_title, "Want to Book a Facility?")}
           </h2>
-          <p className="mt-4 text-sage-200 max-w-xl mx-auto">
-            Check availability and make a booking for the village hall, pavilion,
-            or tennis courts.
-          </p>
+          <div className="mt-4 text-sage-200 max-w-xl mx-auto">
+            {renderRichText(
+              blocks.cta_body,
+              <p>
+                Check availability and make a booking for the village hall,
+                pavilion, or tennis courts.
+              </p>
+            )}
+          </div>
           <div className="mt-8">
             <Link
               href="/booking"

@@ -15,7 +15,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     Postmark({
       from: process.env.EMAIL_FROM || "noreply@loddiswellcommunitytrust.org",
-      server: process.env.POSTMARK_API_KEY,
+      apiKey: process.env.POSTMARK_API_KEY,
     }),
   ],
   pages: {

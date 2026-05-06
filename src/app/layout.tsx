@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { DM_Serif_Display, DM_Sans } from "next/font/google";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
+import { NewsletterSignup } from "@/components/newsletter-signup";
 import "./globals.css";
 
 const dmSerifDisplay = DM_Serif_Display({
@@ -84,6 +85,7 @@ export default function RootLayout({
         <main id="main-content" className="flex-1">
           {children}
         </main>
+        <NewsletterSignup />
         <Footer />
       </body>
     </html>

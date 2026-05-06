@@ -3,12 +3,18 @@ import Link from "next/link";
 import { ExternalLink, Phone, Mail } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { SectionLabel } from "@/components/ui/section-label";
+import { getPageContent } from "@/lib/cms/get-page-content";
+import { renderInline, renderRichText } from "@/lib/cms/render";
 
-export const metadata: Metadata = {
-  title: "Booking",
-  description:
-    "Book the Loddiswell Village Hall, Pavilion, or Tennis Courts. Check availability and hire rates for all our community facilities.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { title, metaDescription } = await getPageContent("booking");
+  return {
+    title: title || "Booking",
+    description:
+      metaDescription ||
+      "Book the Loddiswell Village Hall, Pavilion, or Tennis Courts. Check availability and hire rates for all our community facilities.",
+  };
+}
 
 const hireFacilities = [
   {
@@ -58,27 +64,38 @@ const hireFacilities = [
   },
 ];
 
-export default function BookingPage() {
+export default async function BookingPage() {
+  const { blocks } = await getPageContent("booking");
+
   return (
     <div>
       <PageHeader
-        label="Hire Our Spaces"
-        title="Book a Facility"
-        subtitle="Check availability and hire rates for the Village Hall, Pavilion, and Tennis Courts. Contact us to make a booking."
+        label={renderInline(blocks.header_label, "Hire Our Spaces")}
+        title={renderInline(blocks.header_title, "Book a Facility")}
+        subtitle={renderInline(
+          blocks.header_subtitle,
+          "Check availability and hire rates for the Village Hall, Pavilion, and Tennis Courts. Contact us to make a booking."
+        )}
       />
 
-      {/* Booking Calendar Placeholder */}
       <section className="py-20 sm:py-24 bg-background">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <SectionLabel>Availability</SectionLabel>
+          <SectionLabel>
+            {renderInline(blocks.availability_eyebrow, "Availability")}
+          </SectionLabel>
           <h2 className="font-serif text-2xl sm:text-3xl mb-6">
-            Availability Calendar
+            {renderInline(blocks.availability_title, "Availability Calendar")}
           </h2>
           <div className="rounded-lg border border-border bg-card p-12 text-center">
-            <p className="text-muted-foreground">
-              The online booking calendar is coming soon. In the meantime,
-              please contact our Bookings Secretary to check availability.
-            </p>
+            <div className="text-muted-foreground">
+              {renderRichText(
+                blocks.availability_body,
+                <p>
+                  The online booking calendar is coming soon. In the meantime,
+                  please contact our Bookings Secretary to check availability.
+                </p>
+              )}
+            </div>
             <div className="mt-6 flex flex-wrap justify-center gap-4">
               <a
                 href="tel:07716162407"
@@ -99,12 +116,13 @@ export default function BookingPage() {
         </div>
       </section>
 
-      {/* Hire Rates & Terms */}
       <section className="py-20 sm:py-24 bg-card">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <SectionLabel>Pricing</SectionLabel>
+          <SectionLabel>
+            {renderInline(blocks.rates_eyebrow, "Pricing")}
+          </SectionLabel>
           <h2 className="font-serif text-2xl sm:text-3xl mb-8">
-            Hire Rates & Terms
+            {renderInline(blocks.rates_title, "Hire Rates & Terms")}
           </h2>
           <div className="space-y-8">
             {hireFacilities.map((facility) => (
@@ -133,7 +151,6 @@ export default function BookingPage() {
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                  {/* Rates Table */}
                   <div>
                     <h4 className="text-xs font-semibold uppercase tracking-[0.2em] text-copper-500 mb-3">
                       Rates
@@ -167,7 +184,6 @@ export default function BookingPage() {
                     </table>
                   </div>
 
-                  {/* Terms */}
                   <div>
                     <h4 className="text-xs font-semibold uppercase tracking-[0.2em] text-copper-500 mb-3">
                       Terms of Hire
@@ -191,17 +207,23 @@ export default function BookingPage() {
         </div>
       </section>
 
-      {/* Contact CTA */}
       <section className="py-20 sm:py-24 bg-sage-800 text-sage-50">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
-          <SectionLabel>Support</SectionLabel>
+          <SectionLabel>
+            {renderInline(blocks.cta_eyebrow, "Support")}
+          </SectionLabel>
           <h2 className="font-serif text-2xl sm:text-3xl">
-            Need Help with Your Booking?
+            {renderInline(blocks.cta_title, "Need Help with Your Booking?")}
           </h2>
-          <p className="mt-3 text-sage-200 max-w-xl mx-auto leading-relaxed">
-            If you have any questions about hiring our facilities, please
-            don&apos;t hesitate to get in touch.
-          </p>
+          <div className="mt-3 text-sage-200 max-w-xl mx-auto leading-relaxed">
+            {renderRichText(
+              blocks.cta_body,
+              <p>
+                If you have any questions about hiring our facilities, please
+                don&apos;t hesitate to get in touch.
+              </p>
+            )}
+          </div>
           <div className="mt-8">
             <Link
               href="/contact"

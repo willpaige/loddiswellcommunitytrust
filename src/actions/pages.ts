@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { logAudit } from "@/lib/audit";
+import { pageSchemas } from "@/lib/cms/page-schemas";
 
 export async function getPages() {
   return db.select().from(pages).orderBy(pages.slug);
@@ -24,12 +25,36 @@ export async function updatePage(slug: string, formData: FormData) {
   const session = await auth();
   if (!session?.user) throw new Error("Unauthorized");
 
+  const schema = pageSchemas[slug];
+  if (!schema) throw new Error(`Unknown page: ${slug}`);
+
+  const title = (formData.get("title") as string)?.trim() || schema.title;
+  const metaDescription =
+    (formData.get("metaDescription") as string)?.trim() || null;
+  const blocksRaw = (formData.get("blocks") as string) || "{}";
+
+  let blocks: Record<string, unknown> = {};
+  try {
+    const parsed = JSON.parse(blocksRaw);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      blocks = parsed as Record<string, unknown>;
+    }
+  } catch {
+    throw new Error("Invalid blocks JSON");
+  }
+
+  const allowedKeys = new Set(schema.blocks.map((b) => b.key));
+  const filtered: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(blocks)) {
+    if (allowedKeys.has(key)) filtered[key] = value;
+  }
+
   await db
     .update(pages)
     .set({
-      title: formData.get("title") as string,
-      content: formData.get("content") as string,
-      metaDescription: (formData.get("metaDescription") as string) || null,
+      title,
+      content: JSON.stringify(filtered),
+      metaDescription,
       updatedAt: new Date(),
       updatedBy: session.user.id,
     })
@@ -39,9 +64,10 @@ export async function updatePage(slug: string, formData: FormData) {
     action: "update",
     entity: "page",
     entityId: slug,
-    description: `Updated page: ${formData.get("title")}`,
+    description: `Updated page: ${title}`,
   });
 
-  revalidatePath(`/${slug}`);
+  const publicPath = slug === "home" ? "/" : `/${slug}`;
+  revalidatePath(publicPath);
   revalidatePath("/admin/pages");
 }

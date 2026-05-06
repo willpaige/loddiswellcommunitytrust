@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { users } from "./schema";
+import { seedPages } from "./seed-pages";
 
 const trustees = [
   { email: "zoe.c.crockford@gmail.com", name: "Zoe", role: "admin" as const },
@@ -25,6 +26,8 @@ async function seed() {
       });
     console.log(`  ✓ ${trustee.name} (${trustee.email})`);
   }
+
+  await seedPages();
 
   console.log("Done.");
 }

@@ -2,34 +2,56 @@ import type { Metadata } from "next";
 import { Ticket, Gift, Heart, HelpCircle } from "lucide-react";
 import { LotteryCheckoutButton } from "@/components/lottery/checkout-button";
 import { PageHeader } from "@/components/layout/page-header";
+import { getPageContent } from "@/lib/cms/get-page-content";
+import { renderInline, renderRichText } from "@/lib/cms/render";
 
-export const metadata: Metadata = {
-  title: "Community Lottery",
-  description:
-    "Join the Loddiswell Community Lottery! Tickets are just £12 per year. Support local facilities and win prizes.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { title, metaDescription } = await getPageContent("lottery");
+  return {
+    title: title || "Community Lottery",
+    description:
+      metaDescription ||
+      "Join the Loddiswell Community Lottery! Tickets are just £12 per year. Support local facilities and win prizes.",
+  };
+}
 
-export default function LotteryPage() {
+export default async function LotteryPage() {
+  const { blocks } = await getPageContent("lottery");
+
+  const faqs = [1, 2, 3, 4].map((n) => ({
+    question: blocks[`faq_q${n}`],
+    answer: blocks[`faq_a${n}`],
+  }));
+
   return (
     <div>
       <PageHeader
-        label="Community Lottery"
-        title="Community Lottery"
-        subtitle="Support the Trust and help maintain our community facilities. Every ticket makes a difference to Loddiswell."
+        label={renderInline(blocks.header_label, "Community Lottery")}
+        title={renderInline(blocks.header_title, "Community Lottery")}
+        subtitle={renderInline(
+          blocks.header_subtitle,
+          "Support the Trust and help maintain our community facilities. Every ticket makes a difference to Loddiswell."
+        )}
       />
 
-      {/* How It Works */}
       <section className="py-20 sm:py-24 bg-background">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-copper-500 mb-3">
-              How It Works
+              {renderInline(blocks.how_it_works_eyebrow, "How It Works")}
             </p>
-            <h2 className="font-serif text-3xl">How It Works</h2>
-            <p className="mt-3 text-muted-foreground max-w-xl mx-auto">
-              It&apos;s simple — buy a ticket, support the village, and you
-              could win a prize!
-            </p>
+            <h2 className="font-serif text-3xl">
+              {renderInline(blocks.how_it_works_title, "How It Works")}
+            </h2>
+            <div className="mt-3 text-muted-foreground max-w-xl mx-auto">
+              {renderRichText(
+                blocks.how_it_works_intro,
+                <p>
+                  It&apos;s simple — buy a ticket, support the village, and you
+                  could win a prize!
+                </p>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-8 sm:grid-cols-3">
@@ -37,55 +59,85 @@ export default function LotteryPage() {
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-copper-100 text-copper-600">
                 <Ticket className="h-8 w-8" aria-hidden="true" />
               </div>
-              <h3 className="mt-4 text-lg font-semibold">Buy a Ticket</h3>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Each ticket is just <strong>£12 for the year</strong> —
-                that&apos;s only £1 a month. Buy as many as you like!
-              </p>
+              <h3 className="mt-4 text-lg font-semibold">
+                {renderInline(blocks.step_buy_title, "Buy a Ticket")}
+              </h3>
+              <div className="mt-2 text-sm text-muted-foreground">
+                {renderRichText(
+                  blocks.step_buy_body,
+                  <p>
+                    Each ticket is just <strong>£12 for the year</strong> —
+                    that&apos;s only £1 a month. Buy as many as you like!
+                  </p>
+                )}
+              </div>
             </div>
 
             <div className="text-center">
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-sage-100 text-sage-600">
                 <Gift className="h-8 w-8" aria-hidden="true" />
               </div>
-              <h3 className="mt-4 text-lg font-semibold">Enter the Draw</h3>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Each ticket goes into the monthly draw for one full year from
-                the date of purchase.
-              </p>
+              <h3 className="mt-4 text-lg font-semibold">
+                {renderInline(blocks.step_draw_title, "Enter the Draw")}
+              </h3>
+              <div className="mt-2 text-sm text-muted-foreground">
+                {renderRichText(
+                  blocks.step_draw_body,
+                  <p>
+                    Each ticket goes into the monthly draw for one full year
+                    from the date of purchase.
+                  </p>
+                )}
+              </div>
             </div>
 
             <div className="text-center">
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-sage-100 text-sage-600">
                 <Heart className="h-8 w-8" aria-hidden="true" />
               </div>
-              <h3 className="mt-4 text-lg font-semibold">Support the Village</h3>
-              <p className="mt-2 text-sm text-muted-foreground">
-                All proceeds go directly to maintaining and improving
-                Loddiswell&apos;s community facilities.
-              </p>
+              <h3 className="mt-4 text-lg font-semibold">
+                {renderInline(blocks.step_support_title, "Support the Village")}
+              </h3>
+              <div className="mt-2 text-sm text-muted-foreground">
+                {renderRichText(
+                  blocks.step_support_body,
+                  <p>
+                    All proceeds go directly to maintaining and improving
+                    Loddiswell&apos;s community facilities.
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Ticket Purchase */}
       <section className="py-20 sm:py-24 bg-card">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mx-auto max-w-2xl text-center">
             <div className="rounded-lg border-2 border-copper-200 bg-sage-50 p-8 sm:p-12">
               <h2 className="font-serif text-3xl text-sage-800">
-                £12 per ticket
+                {renderInline(blocks.purchase_price, "£12 per ticket")}
               </h2>
-              <p className="mt-2 text-sage-600">per year</p>
-              <p className="mt-4 text-muted-foreground">
-                Each ticket is just £12 for the year — that&apos;s £1 a month.
-                Buy 2 or more tickets to make an even bigger difference to the
-                village!
+              <p className="mt-2 text-sage-600">
+                {renderInline(blocks.purchase_period, "per year")}
               </p>
-              <p className="mt-2 text-sm text-muted-foreground">
-                If you can afford more, then please do — every ticket helps.
-              </p>
+              <div className="mt-4 text-muted-foreground">
+                {renderRichText(
+                  blocks.purchase_body,
+                  <>
+                    <p>
+                      Each ticket is just £12 for the year — that&apos;s £1 a
+                      month. Buy 2 or more tickets to make an even bigger
+                      difference to the village!
+                    </p>
+                    <p className="mt-2 text-sm">
+                      If you can afford more, then please do — every ticket
+                      helps.
+                    </p>
+                  </>
+                )}
+              </div>
 
               <div className="mt-8">
                 <LotteryCheckoutButton />
@@ -95,86 +147,36 @@ export default function LotteryPage() {
         </div>
       </section>
 
-      {/* FAQ */}
       <section className="py-20 sm:py-24 bg-muted">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-copper-500 mb-3">
-            FAQ
+            {renderInline(blocks.faq_eyebrow, "FAQ")}
           </p>
-          <h2 className="font-serif text-2xl mb-8">Frequently Asked Questions</h2>
+          <h2 className="font-serif text-2xl mb-8">
+            {renderInline(blocks.faq_title, "Frequently Asked Questions")}
+          </h2>
           <div className="space-y-6 max-w-3xl">
-            <div className="rounded-lg border border-border bg-card p-6">
-              <div className="flex items-start gap-3">
-                <HelpCircle
-                  className="h-5 w-5 text-sage-600 mt-0.5 flex-shrink-0"
-                  aria-hidden="true"
-                />
-                <div>
-                  <h3 className="font-semibold">How much does a ticket cost?</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Each lottery ticket costs £12 per year. You can purchase as
-                    many tickets as you like — each ticket is entered into every
-                    monthly draw for a full year.
-                  </p>
+            {faqs.map((faq, i) => (
+              <div
+                key={i}
+                className="rounded-lg border border-border bg-card p-6"
+              >
+                <div className="flex items-start gap-3">
+                  <HelpCircle
+                    className="h-5 w-5 text-sage-600 mt-0.5 flex-shrink-0"
+                    aria-hidden="true"
+                  />
+                  <div>
+                    <h3 className="font-semibold">
+                      {renderInline(faq.question, "Question")}
+                    </h3>
+                    <div className="mt-1 text-sm text-muted-foreground">
+                      {renderRichText(faq.answer)}
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-
-            <div className="rounded-lg border border-border bg-card p-6">
-              <div className="flex items-start gap-3">
-                <HelpCircle
-                  className="h-5 w-5 text-sage-600 mt-0.5 flex-shrink-0"
-                  aria-hidden="true"
-                />
-                <div>
-                  <h3 className="font-semibold">How often are draws held?</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Draws are held monthly. Winners are announced through the
-                    village newsletter and on this website.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-border bg-card p-6">
-              <div className="flex items-start gap-3">
-                <HelpCircle
-                  className="h-5 w-5 text-sage-600 mt-0.5 flex-shrink-0"
-                  aria-hidden="true"
-                />
-                <div>
-                  <h3 className="font-semibold">
-                    Where does the money go?
-                  </h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    All proceeds (minus prizes) go directly to the Loddiswell
-                    Playing Fields and Village Hall Trust to maintain and improve
-                    our community facilities — the Village Hall, Pavilion,
-                    Playing Fields, Tennis Courts, and Play Park.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-border bg-card p-6">
-              <div className="flex items-start gap-3">
-                <HelpCircle
-                  className="h-5 w-5 text-sage-600 mt-0.5 flex-shrink-0"
-                  aria-hidden="true"
-                />
-                <div>
-                  <h3 className="font-semibold">
-                    Can I buy more than one ticket?
-                  </h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Absolutely! You can buy as many tickets as you like. Each
-                    ticket gives you an additional entry into every monthly draw.
-                    Buying 2 tickets for £24 doubles your chances and makes an
-                    even bigger difference to the village.
-                  </p>
-                </div>
-              </div>
-            </div>
+            ))}
           </div>
         </div>
       </section>
