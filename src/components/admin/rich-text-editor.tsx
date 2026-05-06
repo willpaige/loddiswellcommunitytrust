@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef, useState } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import LinkExtension from "@tiptap/extension-link";
@@ -17,10 +18,12 @@ import {
   Redo,
   Quote,
   Minus,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { uploadAsset } from "@/actions/uploads";
 
 interface RichTextEditorProps {
   content: string;
@@ -57,6 +60,9 @@ function ToolbarButton({
 }
 
 export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
@@ -81,11 +87,29 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
     }
   }
 
-  function addImage() {
-    const url = window.prompt("Enter image URL:");
-    if (url && editor) {
-      editor.chain().focus().setImage({ src: url }).run();
+  function pickImage() {
+    fileInputRef.current?.click();
+  }
+
+  async function onImageFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !editor) return;
+    setUploading(true);
+    const formData = new FormData();
+    formData.set("file", file);
+    formData.set("folder", "rich-text");
+    const result = await uploadAsset(formData);
+    setUploading(false);
+    if ("error" in result) {
+      window.alert(result.error);
+      return;
     }
+    editor
+      .chain()
+      .focus()
+      .setImage({ src: result.url, alt: file.name })
+      .run();
   }
 
   return (
@@ -167,9 +191,24 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
         <ToolbarButton onClick={addLink} title="Add link">
           <LinkIcon className="h-4 w-4" />
         </ToolbarButton>
-        <ToolbarButton onClick={addImage} title="Add image">
-          <ImageIcon className="h-4 w-4" />
+        <ToolbarButton
+          onClick={pickImage}
+          disabled={uploading}
+          title={uploading ? "Uploading…" : "Insert image"}
+        >
+          {uploading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <ImageIcon className="h-4 w-4" />
+          )}
         </ToolbarButton>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="sr-only"
+          onChange={onImageFile}
+        />
 
         <Separator orientation="vertical" className="mx-1 h-5" />
 
