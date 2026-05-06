@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import Image from "next/image";
 import { FileText, Users, History, Download } from "lucide-react";
 import { format } from "date-fns";
 import { PageHeader } from "@/components/layout/page-header";
@@ -8,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { getPageContent } from "@/lib/cms/get-page-content";
 import { renderInline, renderRichText } from "@/lib/cms/render";
 import { getDocuments } from "@/actions/documents";
+import { getPublishedTrustees } from "@/actions/trustees";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { title, metaDescription } = await getPageContent("about");
@@ -18,15 +20,6 @@ export async function generateMetadata(): Promise<Metadata> {
       "Learn about the Loddiswell Playing Field & Village Hall Trust - our history, mission, and the trustees who keep our community facilities running.",
   };
 }
-
-const trustees = [
-  { name: "Trustee 1", role: "Chair" },
-  { name: "Trustee 2", role: "Vice Chair" },
-  { name: "Trustee 3", role: "Treasurer" },
-  { name: "Trustee 4", role: "Secretary" },
-  { name: "Trustee 5", role: "Trustee" },
-  { name: "Trustee 6", role: "Trustee" },
-];
 
 const categoryLabels: Record<string, string> = {
   minutes: "Meeting Minutes",
@@ -44,9 +37,10 @@ function formatBytes(bytes: number | null): string {
 }
 
 export default async function AboutPage() {
-  const [{ blocks }, documents] = await Promise.all([
+  const [{ blocks }, documents, trustees] = await Promise.all([
     getPageContent("about"),
     getDocuments(),
+    getPublishedTrustees(),
   ]);
 
   return (
@@ -110,17 +104,48 @@ export default async function AboutPage() {
               </p>
             )}
           </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {trustees.map((trustee) => (
-              <div
-                key={trustee.name}
-                className="rounded-lg border border-border p-4"
-              >
-                <p className="font-medium text-foreground">{trustee.name}</p>
-                <p className="text-sm text-muted-foreground">{trustee.role}</p>
-              </div>
-            ))}
-          </div>
+          {trustees.length > 0 && (
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {trustees.map((trustee) => (
+                <div
+                  key={trustee.id}
+                  className="flex items-start gap-4 rounded-lg border border-border bg-background p-5"
+                >
+                  {trustee.photoUrl ? (
+                    <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-full">
+                      <Image
+                        src={trustee.photoUrl}
+                        alt={`Photo of ${trustee.name}`}
+                        fill
+                        sizes="64px"
+                        className="object-cover"
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-full bg-sage-100 text-sage-700 font-serif text-lg">
+                      {trustee.name
+                        .split(" ")
+                        .map((p) => p[0])
+                        .join("")
+                        .slice(0, 2)
+                        .toUpperCase()}
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <p className="font-medium text-foreground">
+                      {trustee.name}
+                    </p>
+                    <p className="text-sm text-copper-600">{trustee.role}</p>
+                    {trustee.bio && (
+                      <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+                        {trustee.bio}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
