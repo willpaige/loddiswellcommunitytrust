@@ -11,7 +11,7 @@ export function Footer() {
               Loddiswell
             </p>
             <p className="text-[10px] font-medium uppercase tracking-[0.15em] text-sage-400 mt-1">
-              Playing Field & Village Hall Trust
+              Playing Fields & Village Hall Trust
             </p>
             <p className="mt-6 text-sm text-sage-300 leading-relaxed max-w-sm">
               Maintaining community facilities for the benefit of Loddiswell
@@ -121,10 +121,10 @@ export function Footer() {
               </li>
               <li>
                 <a
-                  href="tel:07716162407"
+                  href="tel:07942335210"
                   className="text-sm text-sage-300 hover:text-white no-underline transition-colors"
                 >
-                  07716 162407
+                  07942 335210
                 </a>
               </li>
             </ul>

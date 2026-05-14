@@ -3,7 +3,6 @@ import Link from "next/link";
 import { Ticket, Gift, Heart, HelpCircle, Trophy } from "lucide-react";
 import { format } from "date-fns";
 import { LotteryCheckoutButton } from "@/components/lottery/checkout-button";
-import { PageHeader } from "@/components/layout/page-header";
 import { getPageContent } from "@/lib/cms/get-page-content";
 import { renderInline, renderRichText } from "@/lib/cms/render";
 import { getPublishedDraws } from "@/actions/lottery-draws";
@@ -38,14 +37,44 @@ export default async function LotteryPage() {
 
   return (
     <div>
-      <PageHeader
-        label={renderInline(blocks.header_label, "Community Lottery")}
-        title={renderInline(blocks.header_title, "Community Lottery")}
-        subtitle={renderInline(
-          blocks.header_subtitle,
-          "Support the Trust and help maintain our community facilities. Every ticket makes a difference to Loddiswell."
-        )}
-      />
+      <section className="bg-sage-800 text-sage-50 pt-36 sm:pt-40 pb-20 sm:pb-24">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-copper-300 mb-4">
+            {renderInline(blocks.header_label, "Community Lottery")}
+          </p>
+          <h1 className="font-serif text-4xl sm:text-5xl tracking-tight">
+            {renderInline(blocks.header_title, "Community Lottery")}
+          </h1>
+          <p className="mt-4 text-lg text-sage-200 max-w-2xl leading-relaxed">
+            {renderInline(
+              blocks.header_subtitle,
+              "Support the Trust and help maintain our community facilities. Every ticket makes a difference to Loddiswell."
+            )}
+          </p>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <a
+              href="#buy-tickets"
+              className="inline-flex items-center rounded-sm bg-copper-500 px-5 py-3 text-sm font-medium tracking-wide text-white no-underline hover:bg-copper-600 transition-colors"
+            >
+              <Ticket className="h-4 w-4 mr-2" aria-hidden="true" />
+              Buy Tickets
+            </a>
+            <Link
+              href="/lottery/manage"
+              className="inline-flex items-center rounded-sm border border-sage-400 px-5 py-3 text-sm font-medium tracking-wide text-sage-100 no-underline hover:bg-sage-700 transition-colors"
+            >
+              Manage Subscription
+            </Link>
+            <a
+              href="#recent-draws"
+              className="inline-flex items-center rounded-sm border border-sage-400 px-5 py-3 text-sm font-medium tracking-wide text-sage-100 no-underline hover:bg-sage-700 transition-colors"
+            >
+              <Trophy className="h-4 w-4 mr-2" aria-hidden="true" />
+              Check Draws
+            </a>
+          </div>
+        </div>
+      </section>
 
       <section className="py-20 sm:py-24 bg-background">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -125,7 +154,7 @@ export default async function LotteryPage() {
         </div>
       </section>
 
-      <section className="py-20 sm:py-24 bg-card">
+      <section id="buy-tickets" className="py-20 sm:py-24 bg-card">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mx-auto max-w-2xl text-center">
             <div className="rounded-lg border-2 border-copper-200 bg-sage-50 p-8 sm:p-12">
@@ -171,7 +200,7 @@ export default async function LotteryPage() {
       </section>
 
       {draws.length > 0 && (
-        <section className="py-20 sm:py-24 bg-background">
+        <section id="recent-draws" className="py-20 sm:py-24 bg-background">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="flex items-center gap-3 mb-2">
               <Trophy className="h-6 w-6 text-copper-500" aria-hidden="true" />
