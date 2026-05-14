@@ -45,14 +45,7 @@ export function Header() {
               showSolid ? "text-foreground" : "text-white"
             }`}
           >
-            Loddiswell
-          </span>
-          <span
-            className={`text-[10px] font-medium uppercase tracking-[0.15em] transition-colors ${
-              showSolid ? "text-muted-foreground" : "text-white/70"
-            }`}
-          >
-            Playing Fields & Village Hall Trust
+            Loddiswell Community Trust
           </span>
         </Link>
 
