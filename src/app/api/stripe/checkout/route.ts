@@ -3,16 +3,19 @@ import { getStripe } from "@/lib/stripe";
 
 export async function POST(req: NextRequest) {
   try {
-    const { quantity } = await req.json();
+    const { quantity, interval } = await req.json();
 
     if (!quantity || quantity < 1 || quantity > 50) {
-      return NextResponse.json(
-        { error: "Invalid quantity" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Invalid quantity" }, { status: 400 });
+    }
+    if (interval !== "month" && interval !== "year") {
+      return NextResponse.json({ error: "Invalid interval" }, { status: 400 });
     }
 
-    const priceId = process.env.STRIPE_LOTTERY_PRICE_ID;
+    const priceId =
+      interval === "month"
+        ? process.env.STRIPE_LOTTERY_PRICE_ID_MONTHLY
+        : process.env.STRIPE_LOTTERY_PRICE_ID_YEARLY;
     if (!priceId) {
       return NextResponse.json(
         { error: "Lottery not configured yet" },
@@ -23,17 +26,15 @@ export async function POST(req: NextRequest) {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
     const session = await getStripe().checkout.sessions.create({
-      mode: "payment",
+      mode: "subscription",
       payment_method_types: ["card"],
-      line_items: [
-        {
-          price: priceId,
-          quantity,
+      line_items: [{ price: priceId, quantity }],
+      subscription_data: {
+        metadata: {
+          type: "lottery_ticket",
+          quantity: quantity.toString(),
+          interval,
         },
-      ],
-      metadata: {
-        type: "lottery_ticket",
-        quantity: quantity.toString(),
       },
       custom_fields: [
         {

@@ -1,5 +1,13 @@
 import Link from "next/link";
-import { Ticket, Users, Plus, Pencil, Trophy } from "lucide-react";
+import {
+  Ticket,
+  Users,
+  Plus,
+  Pencil,
+  Trophy,
+  Shuffle,
+  UserPlus,
+} from "lucide-react";
 import { db } from "@/lib/db";
 import { lotteryTickets } from "@/lib/db/schema";
 import { desc } from "drizzle-orm";
@@ -22,7 +30,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { DeleteButton } from "@/components/admin/delete-button";
+import { CancelSubscriptionButton } from "@/components/admin/cancel-subscription-button";
+import { LotteryImportDialog } from "@/components/admin/lottery-import-dialog";
 import { getDraws, deleteDraw } from "@/actions/lottery-draws";
+import { deleteManualSubscriber } from "@/actions/lottery-admin";
 
 async function getLotteryStats() {
   const tickets = await db
@@ -37,6 +48,25 @@ async function getLotteryStats() {
   return { tickets, active, totalRevenue, totalTickets };
 }
 
+const statusVariant: Record<
+  string,
+  "default" | "secondary" | "destructive" | "outline"
+> = {
+  active: "default",
+  past_due: "destructive",
+  canceled: "secondary",
+  expired: "secondary",
+  refunded: "outline",
+};
+
+const statusLabel: Record<string, string> = {
+  active: "Active",
+  past_due: "Past due",
+  canceled: "Canceled",
+  expired: "Expired",
+  refunded: "Refunded",
+};
+
 export default async function AdminLotteryPage() {
   const [{ tickets, active, totalRevenue, totalTickets }, draws] =
     await Promise.all([getLotteryStats(), getDraws()]);
@@ -46,7 +76,7 @@ export default async function AdminLotteryPage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold">Lottery</h1>
         <p className="mt-1 text-muted-foreground">
-          Publish monthly draw results and view ticket holders.
+          Subscribers, draws, and notifications.
         </p>
       </div>
 
@@ -54,35 +84,39 @@ export default async function AdminLotteryPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 mb-8">
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Active Tickets</CardDescription>
+            <CardDescription>Active tickets</CardDescription>
             <CardTitle className="text-3xl">
               {active.reduce((s, t) => s + t.quantity, 0)}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-xs text-muted-foreground">
-              From {active.length} ticket holder{active.length !== 1 ? "s" : ""}
+              From {active.length} subscriber{active.length === 1 ? "" : "s"}
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Total Tickets Sold</CardDescription>
+            <CardDescription>Total tickets sold</CardDescription>
             <CardTitle className="text-3xl">{totalTickets}</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-xs text-muted-foreground">All time</p>
+            <p className="text-xs text-muted-foreground">
+              All time, including past subscribers
+            </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Total Revenue</CardDescription>
+            <CardDescription>Most recent invoice total</CardDescription>
             <CardTitle className="text-3xl">
               £{(totalRevenue / 100).toFixed(2)}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-xs text-muted-foreground">All time</p>
+            <p className="text-xs text-muted-foreground">
+              Sum of latest invoice per subscriber
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -99,12 +133,20 @@ export default async function AdminLotteryPage() {
               Publish winners and prizes for each monthly draw.
             </CardDescription>
           </div>
-          <Button asChild>
-            <Link href="/admin/lottery/draws/new">
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              Add draw
-            </Link>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" asChild>
+              <Link href="/admin/lottery/draws/random">
+                <Shuffle className="h-4 w-4" aria-hidden="true" />
+                Random draw
+              </Link>
+            </Button>
+            <Button asChild>
+              <Link href="/admin/lottery/draws/new">
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                Add draw
+              </Link>
+            </Button>
+          </div>
         </CardHeader>
         {draws.length === 0 ? (
           <CardContent className="text-sm text-muted-foreground">
@@ -116,6 +158,7 @@ export default async function AdminLotteryPage() {
               <TableRow>
                 <TableHead>Draw date</TableHead>
                 <TableHead className="hidden sm:table-cell">Winners</TableHead>
+                <TableHead className="hidden md:table-cell">Notified</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -130,10 +173,13 @@ export default async function AdminLotteryPage() {
                     {draw.results.length} winner
                     {draw.results.length === 1 ? "" : "s"}
                   </TableCell>
+                  <TableCell className="hidden md:table-cell text-muted-foreground">
+                    {draw.notifiedAt
+                      ? format(draw.notifiedAt, "d MMM yyyy")
+                      : "—"}
+                  </TableCell>
                   <TableCell>
-                    <Badge
-                      variant={draw.published ? "default" : "secondary"}
-                    >
+                    <Badge variant={draw.published ? "default" : "secondary"}>
                       {draw.published ? "Published" : "Draft"}
                     </Badge>
                   </TableCell>
@@ -166,71 +212,150 @@ export default async function AdminLotteryPage() {
         )}
       </Card>
 
-      {/* Ticket holders */}
-      {tickets.length === 0 ? (
-        <Card className="text-center">
-          <CardHeader>
-            <div className="mx-auto">
-              <Ticket
-                className="h-12 w-12 text-muted-foreground"
-                aria-hidden="true"
-              />
-            </div>
-            <CardTitle>No ticket holders yet</CardTitle>
-            <CardDescription>
-              Lottery ticket purchases will appear here once Stripe is configured
-              and tickets are sold.
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      ) : (
-        <Card>
-          <CardHeader>
+      {/* Subscribers */}
+      <Card>
+        <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+          <div>
             <CardTitle className="flex items-center gap-2">
               <Users className="h-5 w-5" aria-hidden="true" />
-              Ticket Holders
+              Subscribers
             </CardTitle>
-          </CardHeader>
+            <CardDescription className="mt-1">
+              Stripe subscriptions and manually-imported subscribers, all in one
+              place.
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <LotteryImportDialog />
+            <Button variant="outline" asChild>
+              <Link href="/admin/lottery/manual/new">
+                <UserPlus className="h-4 w-4" aria-hidden="true" />
+                Add manual
+              </Link>
+            </Button>
+          </div>
+        </CardHeader>
+        {tickets.length === 0 ? (
+          <CardContent className="text-center py-12">
+            <Ticket
+              className="h-12 w-12 text-muted-foreground mx-auto mb-3"
+              aria-hidden="true"
+            />
+            <p className="font-medium">No subscribers yet</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Lottery subscriptions and CSV imports will appear here.
+            </p>
+          </CardContent>
+        ) : (
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead className="hidden sm:table-cell">Email</TableHead>
                 <TableHead>Qty</TableHead>
-                <TableHead className="hidden md:table-cell">Purchased</TableHead>
-                <TableHead className="hidden md:table-cell">Expires</TableHead>
+                <TableHead>Plan</TableHead>
+                <TableHead className="hidden md:table-cell">Renews</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {tickets.map((ticket) => (
-                <TableRow key={ticket.id}>
-                  <TableCell className="font-medium">{ticket.name}</TableCell>
-                  <TableCell className="hidden sm:table-cell text-muted-foreground">
-                    {ticket.email}
-                  </TableCell>
-                  <TableCell>{ticket.quantity}</TableCell>
-                  <TableCell className="hidden md:table-cell text-muted-foreground">
-                    {format(ticket.purchaseDate, "d MMM yyyy")}
-                  </TableCell>
-                  <TableCell className="hidden md:table-cell text-muted-foreground">
-                    {format(ticket.expiryDate, "d MMM yyyy")}
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={
-                        ticket.status === "active" ? "default" : "secondary"
-                      }
-                    >
-                      {ticket.status}
-                    </Badge>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {tickets.map((t) => {
+                const planLabel =
+                  t.source === "manual"
+                    ? "Manual"
+                    : t.billingInterval === "month"
+                      ? "Monthly"
+                      : t.billingInterval === "year"
+                        ? "Yearly"
+                        : "—";
+                const renews =
+                  t.source === "stripe" && t.currentPeriodEnd
+                    ? format(t.currentPeriodEnd, "d MMM yyyy")
+                    : t.expiryDate
+                      ? format(t.expiryDate, "d MMM yyyy")
+                      : "—";
+                return (
+                  <TableRow key={t.id}>
+                    <TableCell className="font-medium">{t.name}</TableCell>
+                    <TableCell className="hidden sm:table-cell text-muted-foreground">
+                      {t.email}
+                    </TableCell>
+                    <TableCell>{t.quantity}</TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          t.source === "manual" ? "outline" : "secondary"
+                        }
+                      >
+                        {planLabel}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell text-muted-foreground">
+                      {renews}
+                      {t.cancelAtPeriodEnd && (
+                        <p className="text-xs text-copper-600">
+                          Cancels {renews}
+                        </p>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={statusVariant[t.status] ?? "outline"}
+                      >
+                        {statusLabel[t.status] ?? t.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        {t.source === "manual" ? (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              asChild
+                              className="h-8 w-8"
+                            >
+                              <Link
+                                href={`/admin/lottery/manual/${t.id}/edit`}
+                                title="Edit subscriber"
+                              >
+                                <Pencil
+                                  className="h-4 w-4"
+                                  aria-hidden="true"
+                                />
+                              </Link>
+                            </Button>
+                            <DeleteButton
+                              id={t.id}
+                              action={deleteManualSubscriber}
+                              label="Delete subscriber"
+                            />
+                          </>
+                        ) : (
+                          t.stripeSubscriptionId &&
+                          t.status === "active" &&
+                          !t.cancelAtPeriodEnd && (
+                            <CancelSubscriptionButton
+                              id={t.id}
+                              subscriberLabel={t.name}
+                              periodEnd={
+                                t.currentPeriodEnd
+                                  ? format(t.currentPeriodEnd, "d MMM yyyy")
+                                  : undefined
+                              }
+                            />
+                          )
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
-        </Card>
-      )}
+        )}
+      </Card>
     </div>
   );
 }

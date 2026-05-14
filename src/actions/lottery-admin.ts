@@ -1,0 +1,495 @@
+"use server";
+
+import Papa from "papaparse";
+import { ServerClient } from "postmark";
+import { addYears, format } from "date-fns";
+import { eq, and, inArray } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { lotteryTickets, lotteryDraws } from "@/lib/db/schema";
+import { auth } from "@/lib/auth";
+import { getStripe } from "@/lib/stripe";
+import { logAudit } from "@/lib/audit";
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+
+function getPostmark() {
+  return new ServerClient(process.env.POSTMARK_API_KEY!);
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// ── Cancel a Stripe subscription (end of period) ──
+
+export async function cancelSubscription(id: string) {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+
+  const rows = await db
+    .select()
+    .from(lotteryTickets)
+    .where(eq(lotteryTickets.id, id))
+    .limit(1);
+  const row = rows[0];
+  if (!row) throw new Error("Subscriber not found");
+  if (!row.stripeSubscriptionId) {
+    throw new Error("This subscriber has no Stripe subscription");
+  }
+
+  await getStripe().subscriptions.update(row.stripeSubscriptionId, {
+    cancel_at_period_end: true,
+  });
+
+  await logAudit({
+    action: "update",
+    entity: "lottery",
+    entityId: row.id,
+    description: `Scheduled cancellation for ${row.email} at period end`,
+  });
+
+  // Webhook will reconcile cancelAtPeriodEnd / canceledAt; no DB write here.
+  revalidatePath("/admin/lottery");
+}
+
+// ── Manual subscriber CRUD ──
+
+function readManualForm(formData: FormData) {
+  const name = ((formData.get("name") as string) || "").trim();
+  const email = ((formData.get("email") as string) || "").trim().toLowerCase();
+  const phone = ((formData.get("phone") as string) || "").trim() || null;
+  const quantityRaw = (formData.get("quantity") as string) || "1";
+  const quantity = Math.max(1, Math.min(50, Number(quantityRaw) || 1));
+  const notes = ((formData.get("notes") as string) || "").trim() || null;
+  const expiryRaw = ((formData.get("expiryDate") as string) || "").trim();
+  const expiryDate = expiryRaw ? new Date(expiryRaw) : addYears(new Date(), 1);
+  return { name, email, phone, quantity, notes, expiryDate };
+}
+
+export async function createManualSubscriber(formData: FormData) {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+
+  const data = readManualForm(formData);
+  if (!data.name || !data.email || !EMAIL_RE.test(data.email)) {
+    throw new Error("Name and a valid email are required");
+  }
+
+  await db.insert(lotteryTickets).values({
+    source: "manual",
+    name: data.name,
+    email: data.email,
+    phone: data.phone,
+    quantity: data.quantity,
+    amount: data.quantity * 1200,
+    purchaseDate: new Date(),
+    expiryDate: data.expiryDate,
+    notes: data.notes,
+    status: "active",
+  });
+
+  await logAudit({
+    action: "create",
+    entity: "lottery",
+    entityId: data.email,
+    description: `Added manual subscriber: ${data.name} (${data.email})`,
+  });
+
+  revalidatePath("/admin/lottery");
+  redirect("/admin/lottery");
+}
+
+export async function updateManualSubscriber(id: string, formData: FormData) {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+
+  const data = readManualForm(formData);
+  if (!data.name || !data.email || !EMAIL_RE.test(data.email)) {
+    throw new Error("Name and a valid email are required");
+  }
+
+  await db
+    .update(lotteryTickets)
+    .set({
+      name: data.name,
+      email: data.email,
+      phone: data.phone,
+      quantity: data.quantity,
+      amount: data.quantity * 1200,
+      expiryDate: data.expiryDate,
+      notes: data.notes,
+    })
+    .where(
+      and(
+        eq(lotteryTickets.id, id),
+        eq(lotteryTickets.source, "manual")
+      )
+    );
+
+  await logAudit({
+    action: "update",
+    entity: "lottery",
+    entityId: id,
+    description: `Updated manual subscriber: ${data.name}`,
+  });
+
+  revalidatePath("/admin/lottery");
+  redirect("/admin/lottery");
+}
+
+export async function deleteManualSubscriber(id: string) {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+
+  await db
+    .delete(lotteryTickets)
+    .where(
+      and(
+        eq(lotteryTickets.id, id),
+        eq(lotteryTickets.source, "manual")
+      )
+    );
+
+  await logAudit({
+    action: "delete",
+    entity: "lottery",
+    entityId: id,
+    description: "Deleted manual subscriber",
+  });
+
+  revalidatePath("/admin/lottery");
+}
+
+// ── CSV import ──
+
+export type ImportResult = {
+  inserted: number;
+  skipped: number;
+  errors: Array<{ row: number; reason: string }>;
+};
+
+type CsvRow = {
+  name?: string;
+  email?: string;
+  phone?: string;
+  quantity?: string;
+  notes?: string;
+  expiryDate?: string;
+};
+
+export async function importLotterySubscribers(
+  formData: FormData
+): Promise<ImportResult> {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return { inserted: 0, skipped: 0, errors: [{ row: 0, reason: "No file" }] };
+  }
+
+  const text = await file.text();
+  const parsed = Papa.parse<CsvRow>(text, {
+    header: true,
+    skipEmptyLines: true,
+    transformHeader: (h) => h.trim(),
+  });
+
+  const errors: ImportResult["errors"] = [];
+  for (const err of parsed.errors) {
+    errors.push({
+      row: (err.row ?? 0) + 1,
+      reason: `Parse error: ${err.message}`,
+    });
+  }
+
+  const rows = parsed.data;
+  type Insert = typeof lotteryTickets.$inferInsert;
+  const validRows: Insert[] = [];
+  const validEmails: string[] = [];
+
+  rows.forEach((row, i) => {
+    const rowNum = i + 2; // +1 for header, +1 for human numbering
+    const name = (row.name || "").trim();
+    const email = (row.email || "").trim().toLowerCase();
+    if (!name) {
+      errors.push({ row: rowNum, reason: "Missing name" });
+      return;
+    }
+    if (!email || !EMAIL_RE.test(email)) {
+      errors.push({ row: rowNum, reason: "Missing or invalid email" });
+      return;
+    }
+    const quantity = Math.max(
+      1,
+      Math.min(50, Number((row.quantity || "1").trim()) || 1)
+    );
+    const phone = (row.phone || "").trim() || null;
+    const notes = (row.notes || "").trim() || null;
+    const expiryRaw = (row.expiryDate || "").trim();
+    let expiryDate: Date;
+    if (expiryRaw) {
+      const d = new Date(expiryRaw);
+      if (isNaN(d.getTime())) {
+        errors.push({
+          row: rowNum,
+          reason: `Invalid expiryDate "${expiryRaw}" (use YYYY-MM-DD)`,
+        });
+        return;
+      }
+      expiryDate = d;
+    } else {
+      expiryDate = addYears(new Date(), 1);
+    }
+    validRows.push({
+      source: "manual",
+      name,
+      email,
+      phone,
+      quantity,
+      amount: quantity * 1200,
+      purchaseDate: new Date(),
+      expiryDate,
+      notes,
+      status: "active",
+    });
+    validEmails.push(email);
+  });
+
+  let inserted = 0;
+  let skipped = 0;
+
+  if (validRows.length > 0) {
+    // Find existing manual rows with matching emails to know which ones we're skipping
+    const existing = await db
+      .select({
+        email: lotteryTickets.email,
+      })
+      .from(lotteryTickets)
+      .where(
+        and(
+          inArray(lotteryTickets.email, validEmails),
+          eq(lotteryTickets.source, "manual")
+        )
+      );
+    const existingSet = new Set(existing.map((r) => r.email));
+    skipped = validRows.filter((r) => existingSet.has(r.email)).length;
+
+    const toInsert = validRows.filter((r) => !existingSet.has(r.email));
+    if (toInsert.length > 0) {
+      await db.insert(lotteryTickets).values(toInsert);
+      inserted = toInsert.length;
+    }
+  }
+
+  await logAudit({
+    action: "upload",
+    entity: "lottery",
+    description: `Imported lottery CSV: ${inserted} inserted, ${skipped} skipped, ${errors.length} errors`,
+    metadata: {
+      filename: (file as File).name,
+      inserted,
+      skipped,
+      errorCount: errors.length,
+    },
+  });
+
+  revalidatePath("/admin/lottery");
+  return { inserted, skipped, errors };
+}
+
+// ── Random draw ──
+
+export type DrawWinner = { name: string; email: string };
+
+export async function drawRandomWinners(
+  prizeCount: number
+): Promise<{
+  winners: DrawWinner[];
+  totalEntries: number;
+  uniqueSubscribers: number;
+}> {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+
+  if (!Number.isFinite(prizeCount) || prizeCount < 1) {
+    throw new Error("Prize count must be at least 1");
+  }
+  prizeCount = Math.min(50, Math.floor(prizeCount));
+
+  const rows = await db
+    .select({
+      name: lotteryTickets.name,
+      email: lotteryTickets.email,
+      quantity: lotteryTickets.quantity,
+    })
+    .from(lotteryTickets)
+    .where(eq(lotteryTickets.status, "active"));
+
+  // Build the weighted entry pool
+  const pool: DrawWinner[] = [];
+  for (const row of rows) {
+    for (let i = 0; i < row.quantity; i++) {
+      pool.push({ name: row.name, email: row.email.toLowerCase() });
+    }
+  }
+
+  // Fisher-Yates shuffle
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+
+  // Walk shuffled list picking unique-by-email winners
+  const winners: DrawWinner[] = [];
+  const seen = new Set<string>();
+  for (const entry of pool) {
+    if (seen.has(entry.email)) continue;
+    seen.add(entry.email);
+    winners.push(entry);
+    if (winners.length >= prizeCount) break;
+  }
+
+  return {
+    winners,
+    totalEntries: pool.length,
+    uniqueSubscribers: rows.length,
+  };
+}
+
+// ── Email blast for draw results ──
+
+const EMAIL_BATCH_LIMIT = 500;
+
+function ordinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+export async function sendDrawNotifications(
+  drawId: string
+): Promise<{ sent: number; alreadySent?: boolean }> {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+
+  const drawRows = await db
+    .select()
+    .from(lotteryDraws)
+    .where(eq(lotteryDraws.id, drawId))
+    .limit(1);
+  const draw = drawRows[0];
+  if (!draw) throw new Error("Draw not found");
+  if (draw.notifiedAt) {
+    return { sent: 0, alreadySent: true };
+  }
+
+  // Active subscribers, de-duped by lowercase email
+  const subs = await db
+    .select({
+      name: lotteryTickets.name,
+      email: lotteryTickets.email,
+    })
+    .from(lotteryTickets)
+    .where(eq(lotteryTickets.status, "active"));
+
+  const recipientsByEmail = new Map<string, string>(); // email → name
+  for (const s of subs) {
+    const e = s.email.toLowerCase().trim();
+    if (!e || !EMAIL_RE.test(e)) continue;
+    if (!recipientsByEmail.has(e)) recipientsByEmail.set(e, s.name);
+  }
+  const recipients = Array.from(recipientsByEmail.entries()).map(
+    ([email, name]) => ({ email, name })
+  );
+
+  if (recipients.length === 0) {
+    return { sent: 0 };
+  }
+
+  const subject = `Loddiswell Community Lottery — ${format(
+    draw.drawDate,
+    "MMMM yyyy"
+  )} draw results`;
+
+  const winnersHtml = draw.results
+    .map(
+      (r) =>
+        `<tr><td style="padding:8px 12px;border-bottom:1px solid #eee;font-weight:600;color:#9a5039;">${ordinal(
+          r.rank
+        )}</td><td style="padding:8px 12px;border-bottom:1px solid #eee;">${escapeHtml(
+          r.winner
+        )}</td><td style="padding:8px 12px;border-bottom:1px solid #eee;color:#555;">${escapeHtml(
+          r.prize
+        )}</td></tr>`
+    )
+    .join("");
+  const winnersText = draw.results
+    .map((r) => `${ordinal(r.rank)}: ${r.winner} — ${r.prize}`)
+    .join("\n");
+
+  const notesHtml = draw.notes
+    ? `<p style="color:#555;font-size:14px;">${escapeHtml(draw.notes)}</p>`
+    : "";
+  const notesText = draw.notes ? `\n${draw.notes}\n` : "";
+
+  const htmlBody = `
+    <p>Hello,</p>
+    <p>Here are the results from the <strong>${format(
+      draw.drawDate,
+      "MMMM yyyy"
+    )}</strong> Loddiswell Community Lottery draw.</p>
+    <table style="border-collapse:collapse;margin:16px 0;">${winnersHtml}</table>
+    ${notesHtml}
+    <p>Thank you for supporting the lottery — every ticket helps maintain our village facilities.</p>
+    <p style="color:#666;font-size:14px;">— The Loddiswell Trust</p>
+  `;
+  const textBody = `Loddiswell Community Lottery — ${format(
+    draw.drawDate,
+    "MMMM yyyy"
+  )} draw results\n\n${winnersText}${notesText}\n\nThank you for supporting the lottery.\n\n— The Loddiswell Trust`;
+
+  // Postmark allows up to 500 messages per batch
+  const from =
+    process.env.EMAIL_FROM || "noreply@loddiswellcommunitytrust.org";
+  const messages = recipients.map((r) => ({
+    From: from,
+    To: r.email,
+    Subject: subject,
+    HtmlBody: htmlBody,
+    TextBody: textBody,
+    MessageStream: "outbound",
+  }));
+
+  const client = getPostmark();
+  let sent = 0;
+  for (let i = 0; i < messages.length; i += EMAIL_BATCH_LIMIT) {
+    const batch = messages.slice(i, i + EMAIL_BATCH_LIMIT);
+    const response = await client.sendEmailBatch(batch);
+    sent += response.filter((r) => r.ErrorCode === 0).length;
+  }
+
+  await db
+    .update(lotteryDraws)
+    .set({ notifiedAt: new Date() })
+    .where(eq(lotteryDraws.id, drawId));
+
+  await logAudit({
+    action: "update",
+    entity: "lottery",
+    entityId: drawId,
+    description: `Sent draw notifications to ${sent} subscribers`,
+  });
+
+  revalidatePath("/admin/lottery");
+  revalidatePath(`/admin/lottery/draws/${drawId}/edit`);
+
+  return { sent };
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}

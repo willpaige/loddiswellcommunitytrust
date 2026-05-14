@@ -3,7 +3,7 @@ import Link from "next/link";
 import { CheckCircle } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Lottery Purchase Complete",
+  title: "Subscription confirmed",
 };
 
 export default function LotterySuccessPage() {
@@ -15,14 +15,23 @@ export default function LotterySuccessPage() {
           aria-hidden="true"
         />
         <h1 className="mt-6 font-serif text-3xl sm:text-4xl tracking-tight">
-          Thank You!
+          Thank you!
         </h1>
         <p className="mt-4 text-muted-foreground leading-relaxed">
-          Your lottery ticket purchase is complete. You&apos;re now entered into
-          the monthly draw for the next 12 months. Good luck!
+          Your lottery subscription is active. You&apos;re entered into every
+          monthly draw, and your subscription will renew automatically. Good
+          luck!
         </p>
         <p className="mt-2 text-sm text-muted-foreground">
-          A confirmation email has been sent to your email address.
+          You&apos;ll receive a receipt from Stripe each billing cycle. To
+          update your payment details or cancel, visit{" "}
+          <Link
+            href="/lottery/manage"
+            className="text-copper-600 hover:text-copper-700 underline"
+          >
+            Manage your subscription
+          </Link>
+          .
         </p>
         <div className="mt-8">
           <Link

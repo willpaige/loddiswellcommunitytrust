@@ -3,9 +3,13 @@
 import { useState } from "react";
 import { Ticket, Loader2, Minus, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+type Interval = "month" | "year";
 
 export function LotteryCheckoutButton() {
   const [quantity, setQuantity] = useState(1);
+  const [interval, setInterval] = useState<Interval>("year");
   const [loading, setLoading] = useState(false);
 
   async function handleCheckout() {
@@ -14,7 +18,7 @@ export function LotteryCheckoutButton() {
       const res = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ quantity }),
+        body: JSON.stringify({ quantity, interval }),
       });
 
       const data = await res.json();
@@ -31,10 +35,55 @@ export function LotteryCheckoutButton() {
     }
   }
 
-  const total = quantity * 12;
+  const perTicketPence = interval === "month" ? 100 : 1200;
+  const totalPence = quantity * perTicketPence;
+  const totalLabel = `£${(totalPence / 100).toFixed(2)}`;
+  const cadenceLabel = interval === "month" ? "per month" : "per year";
 
   return (
     <div className="space-y-6">
+      {/* Cadence toggle */}
+      <div
+        role="tablist"
+        aria-label="Billing cadence"
+        className="grid grid-cols-2 gap-2 p-1 rounded-lg bg-muted/60"
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={interval === "month"}
+          onClick={() => setInterval("month")}
+          className={cn(
+            "rounded-md px-3 py-2 text-sm font-medium transition-colors",
+            interval === "month"
+              ? "bg-card text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          Monthly
+          <span className="block text-xs text-muted-foreground">
+            £1 per ticket
+          </span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={interval === "year"}
+          onClick={() => setInterval("year")}
+          className={cn(
+            "rounded-md px-3 py-2 text-sm font-medium transition-colors",
+            interval === "year"
+              ? "bg-card text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          Yearly
+          <span className="block text-xs text-muted-foreground">
+            £12 per ticket
+          </span>
+        </button>
+      </div>
+
       {/* Quantity selector */}
       <div className="flex items-center justify-center gap-4">
         <Button
@@ -65,9 +114,9 @@ export function LotteryCheckoutButton() {
 
       {/* Total */}
       <p className="text-center text-lg">
-        Total: <strong>£{total}</strong>
+        <strong>{totalLabel}</strong>
         <span className="text-sm text-muted-foreground ml-1">
-          for {quantity} ticket{quantity !== 1 ? "s" : ""} / year
+          {cadenceLabel}
         </span>
       </p>
 
@@ -86,14 +135,13 @@ export function LotteryCheckoutButton() {
         ) : (
           <>
             <Ticket className="h-5 w-5" aria-hidden="true" />
-            Buy {quantity} Ticket{quantity !== 1 ? "s" : ""} — £{total}
+            Subscribe — {totalLabel} {cadenceLabel}
           </>
         )}
       </Button>
 
       <p className="text-center text-xs text-muted-foreground">
-        Secure payment via Stripe. You&apos;ll be redirected to complete
-        payment.
+        Renews automatically. Cancel any time. Secure payment via Stripe.
       </p>
     </div>
   );

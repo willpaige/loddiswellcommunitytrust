@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Ticket, Gift, Heart, HelpCircle, Trophy } from "lucide-react";
 import { format } from "date-fns";
 import { LotteryCheckoutButton } from "@/components/lottery/checkout-button";
@@ -154,6 +155,16 @@ export default async function LotteryPage() {
               <div className="mt-8">
                 <LotteryCheckoutButton />
               </div>
+              <p className="mt-4 text-xs text-muted-foreground">
+                Already a subscriber?{" "}
+                <Link
+                  href="/lottery/manage"
+                  className="text-copper-600 hover:text-copper-700 underline"
+                >
+                  Manage your subscription
+                </Link>
+                .
+              </p>
             </div>
           </div>
         </div>

@@ -200,6 +200,7 @@ export const lotteryDraws = pgTable("lottery_draws", {
     .notNull(),
   notes: text("notes"),
   published: boolean("published").notNull().default(true),
+  notifiedAt: timestamp("notified_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   createdBy: text("created_by").references(() => users.id),
 });
@@ -219,16 +220,26 @@ export const lotteryTickets = pgTable("lottery_tickets", {
   id: text("id")
     .primaryKey()
     .$defaultFn(() => createId()),
+  source: text("source", { enum: ["stripe", "manual"] })
+    .notNull()
+    .default("stripe"),
   name: text("name").notNull(),
   email: text("email").notNull(),
   phone: text("phone"),
   stripePaymentId: text("stripe_payment_id").unique(),
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id").unique(),
+  billingInterval: text("billing_interval", { enum: ["month", "year"] }),
   quantity: integer("quantity").notNull().default(1),
   amount: integer("amount").notNull(), // pence
   purchaseDate: timestamp("purchase_date", { mode: "date" }).notNull().defaultNow(),
   expiryDate: timestamp("expiry_date", { mode: "date" }).notNull(),
+  currentPeriodEnd: timestamp("current_period_end", { mode: "date" }),
+  cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+  canceledAt: timestamp("canceled_at"),
+  notes: text("notes"),
   status: text("status", {
-    enum: ["active", "expired", "refunded"],
+    enum: ["active", "expired", "refunded", "canceled", "past_due"],
   })
     .notNull()
     .default("active"),
