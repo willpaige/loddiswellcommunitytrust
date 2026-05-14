@@ -28,7 +28,7 @@ const pageSeeds: PageSeed[] = [
       hero_title: inlineDoc("Heart of the / Village"),
       hero_subtitle: doc(
         paragraph(
-          "The Playing Field & Village Hall Trust maintains community facilities for the benefit of everyone in Loddiswell Parish."
+          "The Playing Fields & Village Hall Trust maintains community facilities for the benefit of everyone in Loddiswell Parish."
         )
       ),
       facilities_eyebrow: inlineDoc("Our Facilities"),
@@ -63,7 +63,7 @@ const pageSeeds: PageSeed[] = [
     slug: "about",
     title: "About",
     metaDescription:
-      "Learn about the Loddiswell Playing Field & Village Hall Trust - our history, mission, and the trustees who keep our community facilities running.",
+      "Learn about the Loddiswell Playing Fields & Village Hall Trust - our history, mission, and the trustees who keep our community facilities running.",
     blocks: {
       header_label: inlineDoc("Who We Are"),
       header_title: inlineDoc("About the Trust"),
@@ -133,7 +133,7 @@ const pageSeeds: PageSeed[] = [
     slug: "contact",
     title: "Contact",
     metaDescription:
-      "Get in touch with the Loddiswell Playing Field & Village Hall Trust. Find us, email us, or call our Bookings Secretary.",
+      "Get in touch with the Loddiswell Playing Fields & Village Hall Trust. Find us, email us, or call our Bookings Secretary.",
     blocks: {
       header_label: inlineDoc("Get in Touch"),
       header_title: inlineDoc("Contact Us"),
@@ -320,7 +320,7 @@ const pageSeeds: PageSeed[] = [
     slug: "privacy",
     title: "Privacy Policy",
     metaDescription:
-      "Privacy policy for the Loddiswell Playing Field & Village Hall Trust website.",
+      "Privacy policy for the Loddiswell Playing Fields & Village Hall Trust website.",
     blocks: {
       header_label: inlineDoc("Legal"),
       header_title: inlineDoc("Privacy Policy"),
@@ -399,14 +399,14 @@ const pageSeeds: PageSeed[] = [
     slug: "terms",
     title: "Terms & Conditions",
     metaDescription:
-      "Terms and conditions for the Loddiswell Playing Field & Village Hall Trust website.",
+      "Terms and conditions for the Loddiswell Playing Fields & Village Hall Trust website.",
     blocks: {
       header_label: inlineDoc("Legal"),
       header_title: inlineDoc("Terms & Conditions"),
       section_1: doc(
         heading(2, "1. Introduction"),
         paragraph(
-          "These terms and conditions govern your use of the Loddiswell Playing Field & Village Hall Trust website. By using this website, you accept these terms in full."
+          "These terms and conditions govern your use of the Loddiswell Playing Fields & Village Hall Trust website. By using this website, you accept these terms in full."
         )
       ),
       section_2: doc(

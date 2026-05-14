@@ -9,7 +9,7 @@ export async function generateMetadata(): Promise<Metadata> {
     title: title || "Privacy Policy",
     description:
       metaDescription ||
-      "Privacy policy for the Loddiswell Playing Field & Village Hall Trust website.",
+      "Privacy policy for the Loddiswell Playing Fields & Village Hall Trust website.",
   };
 }
 

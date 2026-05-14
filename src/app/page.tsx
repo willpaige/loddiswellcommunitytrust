@@ -114,7 +114,7 @@ export default async function HomePage() {
               {renderRichText(
                 blocks.hero_subtitle,
                 <p>
-                  The Playing Field & Village Hall Trust maintains community
+                  The Playing Fields & Village Hall Trust maintains community
                   facilities for the benefit of everyone in Loddiswell Parish.
                 </p>
               )}

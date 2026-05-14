@@ -21,7 +21,7 @@ const dmSans = DM_Sans({
 
 export const metadata: Metadata = {
   title: {
-    default: "Loddiswell Playing Field & Village Hall Trust",
+    default: "Loddiswell Playing Fields & Village Hall Trust",
     template: "%s | Loddiswell Community Trust",
   },
   description:
@@ -32,19 +32,19 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_GB",
-    siteName: "Loddiswell Playing Field & Village Hall Trust",
+    siteName: "Loddiswell Playing Fields & Village Hall Trust",
   },
 };
 
 const jsonLd = {
   "@context": "https://schema.org",
   "@type": "CommunityOrganization",
-  name: "Loddiswell Playing Field & Village Hall Trust",
+  name: "Loddiswell Playing Fields & Village Hall Trust",
   description:
     "Community trust managing the Village Hall, Pavilion, Playing Fields, Tennis Courts, and Play Park in Loddiswell, South Hams, Devon.",
   url: "https://loddiswellcommunitytrust.org",
   email: "hello@loddiswellcommunitytrust.org",
-  telephone: "07716162407",
+  telephone: "07942335210",
   address: {
     "@type": "PostalAddress",
     streetAddress: "South Brent Road",

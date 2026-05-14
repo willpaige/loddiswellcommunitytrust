@@ -11,7 +11,7 @@ export async function generateMetadata(): Promise<Metadata> {
     title: title || "Contact",
     description:
       metaDescription ||
-      "Get in touch with the Loddiswell Playing Field & Village Hall Trust. Find us, email us, or call our Bookings Secretary.",
+      "Get in touch with the Loddiswell Playing Fields & Village Hall Trust. Find us, email us, or call our Bookings Secretary.",
   };
 }
 

@@ -52,7 +52,7 @@ export function Header() {
               showSolid ? "text-muted-foreground" : "text-white/70"
             }`}
           >
-            Playing Field & Village Hall Trust
+            Playing Fields & Village Hall Trust
           </span>
         </Link>
 

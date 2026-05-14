@@ -133,7 +133,7 @@ export function Footer() {
 
         <div className="mt-12 border-t border-sage-700 pt-8 flex flex-col sm:flex-row justify-between items-center gap-4">
           <p className="text-xs text-sage-400">
-            &copy; {new Date().getFullYear()} Loddiswell Playing Field &
+            &copy; {new Date().getFullYear()} Loddiswell Playing Fields &
             Village Hall Trust. All rights reserved.
           </p>
           <div className="flex gap-6">

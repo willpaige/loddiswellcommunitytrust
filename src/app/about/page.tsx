@@ -17,7 +17,7 @@ export async function generateMetadata(): Promise<Metadata> {
     title: title || "About",
     description:
       metaDescription ||
-      "Learn about the Loddiswell Playing Field & Village Hall Trust - our history, mission, and the trustees who keep our community facilities running.",
+      "Learn about the Loddiswell Playing Fields & Village Hall Trust - our history, mission, and the trustees who keep our community facilities running.",
   };
 }
 
