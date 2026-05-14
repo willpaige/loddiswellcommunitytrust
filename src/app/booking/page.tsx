@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ExternalLink, Phone, Mail } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { SectionLabel } from "@/components/ui/section-label";
 import { getPageContent } from "@/lib/cms/get-page-content";
@@ -86,32 +86,13 @@ export default async function BookingPage() {
           <h2 className="font-serif text-2xl sm:text-3xl mb-6">
             {renderInline(blocks.availability_title, "Availability Calendar")}
           </h2>
-          <div className="rounded-lg border border-border bg-card p-12 text-center">
-            <div className="text-muted-foreground">
-              {renderRichText(
-                blocks.availability_body,
-                <p>
-                  The online booking calendar is coming soon. In the meantime,
-                  please contact our Bookings Secretary to check availability.
-                </p>
-              )}
-            </div>
-            <div className="mt-6 flex flex-wrap justify-center gap-4">
-              <a
-                href="tel:07716162407"
-                className="inline-flex items-center gap-2 rounded-lg bg-sage-600 px-5 py-3 text-sm font-semibold text-white no-underline hover:bg-sage-700 transition-colors"
-              >
-                <Phone className="h-4 w-4" aria-hidden="true" />
-                07716 162407
-              </a>
-              <a
-                href="mailto:hello@loddiswellcommunitytrust.org"
-                className="inline-flex items-center gap-2 rounded-lg border border-border px-5 py-3 text-sm font-semibold text-foreground no-underline hover:bg-muted transition-colors"
-              >
-                <Mail className="h-4 w-4" aria-hidden="true" />
-                Email Us
-              </a>
-            </div>
+          <div className="rounded-lg border border-border overflow-hidden">
+            <iframe
+              src={process.env.NEXT_PUBLIC_HALLMASTER_VENUE_URL ?? "https://v2.hallmaster.co.uk/Scheduler/View/14760?startRoom=0"}
+              title="Facility availability calendar"
+              className="w-full"
+              style={{ height: "800px" }}
+            />
           </div>
         </div>
       </section>
