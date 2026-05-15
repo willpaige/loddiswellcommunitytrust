@@ -12,6 +12,7 @@ import {
   ImageIcon,
   Ticket,
   Users,
+  Settings,
   LogOut,
   ArrowLeft,
   Menu,
@@ -31,6 +32,7 @@ const navItems = [
   { name: "Documents", href: "/admin/documents", icon: FolderOpen },
   { name: "Images", href: "/admin/images", icon: ImageIcon },
   { name: "Lottery", href: "/admin/lottery", icon: Ticket },
+  { name: "Settings", href: "/admin/settings", icon: Settings },
 ];
 
 interface AdminSidebarProps {

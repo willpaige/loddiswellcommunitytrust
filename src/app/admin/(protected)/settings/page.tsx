@@ -66,6 +66,7 @@ export default function SettingsPage() {
 
     try {
       await updateSettings(formData);
+      setLoading(false);
       router.refresh();
     } catch {
       setLoading(false);
