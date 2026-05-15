@@ -12,6 +12,7 @@ import {
 import { SectionLabel } from "@/components/ui/section-label";
 import { getPageContent } from "@/lib/cms/get-page-content";
 import { renderInline, renderRichText } from "@/lib/cms/render";
+import { getFacilities } from "@/actions/facilities";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { metaDescription } = await getPageContent("home");
@@ -86,7 +87,12 @@ function renderHeroTitle(text: string) {
 }
 
 export default async function HomePage() {
-  const { blocks } = await getPageContent("home");
+  const [{ blocks }, allFacilities] = await Promise.all([
+    getPageContent("home"),
+    getFacilities(),
+  ]);
+
+  const facilitiesCount = allFacilities.filter((f) => f.published).length;
 
   return (
     <div>
@@ -252,17 +258,23 @@ export default async function HomePage() {
               </div>
             </div>
             <div className="rounded-lg bg-sage-100 p-10">
-              <p className="text-5xl font-serif text-copper-600">600+</p>
-              <p className="mt-2 text-sage-700 font-medium">Parish Residents</p>
+              <p className="text-5xl font-serif text-copper-600">
+                {renderInline(blocks.community_residents_number, "600+")}
+              </p>
+              <p className="mt-2 text-sage-700 font-medium">
+                {renderInline(blocks.community_residents_label, "Parish Residents")}
+              </p>
               <div className="mt-8 grid grid-cols-2 gap-4">
                 <div className="rounded-lg bg-card p-5">
-                  <p className="text-2xl font-serif text-copper-600">5</p>
+                  <p className="text-2xl font-serif text-copper-600">{facilitiesCount}</p>
                   <p className="text-sm text-muted-foreground">
                     Community Facilities
                   </p>
                 </div>
                 <div className="rounded-lg bg-card p-5">
-                  <p className="text-2xl font-serif text-copper-600">10+</p>
+                  <p className="text-2xl font-serif text-copper-600">
+                    {renderInline(blocks.community_clubs_number, "10+")}
+                  </p>
                   <p className="text-sm text-muted-foreground">
                     Clubs & Societies
                   </p>

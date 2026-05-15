@@ -35,7 +35,7 @@ export default async function BookingPage() {
   ]);
 
   const hireFacilities = allFacilities
-    .filter((f) => f.published)
+    .filter((f) => f.published && f.bookable)
     .map((facility) => ({
       name: facility.name,
       description: facility.description || "",
@@ -136,57 +136,63 @@ export default async function BookingPage() {
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                  <div>
-                    <h4 className="text-xs font-semibold uppercase tracking-[0.2em] text-copper-500 mb-3">
-                      Rates
-                    </h4>
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b border-border">
-                          <th className="text-left py-2 text-sm font-medium text-foreground">
-                            Period
-                          </th>
-                          <th className="text-right py-2 text-sm font-medium text-foreground">
-                            Price
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {facility.rates.map((rate) => (
-                          <tr
-                            key={rate.period}
-                            className="border-b border-border last:border-0"
-                          >
-                            <td className="py-2 text-sm text-muted-foreground">
-                              {rate.period}
-                            </td>
-                            <td className="py-2 text-sm text-right font-medium">
-                              {rate.price}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                {(facility.rates.length > 0 || facility.terms.length > 0) && (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    {facility.rates.length > 0 && (
+                      <div>
+                        <h4 className="text-xs font-semibold uppercase tracking-[0.2em] text-copper-500 mb-3">
+                          Rates
+                        </h4>
+                        <table className="w-full">
+                          <thead>
+                            <tr className="border-b border-border">
+                              <th className="text-left py-2 text-sm font-medium text-foreground">
+                                Period
+                              </th>
+                              <th className="text-right py-2 text-sm font-medium text-foreground">
+                                Price
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {facility.rates.map((rate) => (
+                              <tr
+                                key={rate.period}
+                                className="border-b border-border last:border-0"
+                              >
+                                <td className="py-2 text-sm text-muted-foreground">
+                                  {rate.period}
+                                </td>
+                                <td className="py-2 text-sm text-right font-medium">
+                                  {rate.price}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
 
-                  <div>
-                    <h4 className="text-xs font-semibold uppercase tracking-[0.2em] text-copper-500 mb-3">
-                      Terms of Hire
-                    </h4>
-                    <ul className="space-y-2">
-                      {facility.terms.map((term) => (
-                        <li
-                          key={term}
-                          className="flex items-start gap-2 text-sm text-muted-foreground"
-                        >
-                          <span className="h-1.5 w-1.5 rounded-full bg-copper-500 mt-1.5 flex-shrink-0" />
-                          {term}
-                        </li>
-                      ))}
-                    </ul>
+                    {facility.terms.length > 0 && (
+                      <div>
+                        <h4 className="text-xs font-semibold uppercase tracking-[0.2em] text-copper-500 mb-3">
+                          Terms of Hire
+                        </h4>
+                        <ul className="space-y-2">
+                          {facility.terms.map((term) => (
+                            <li
+                              key={term}
+                              className="flex items-start gap-2 text-sm text-muted-foreground"
+                            >
+                              <span className="h-1.5 w-1.5 rounded-full bg-copper-500 mt-1.5 flex-shrink-0" />
+                              {term}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
-                </div>
+                )}
               </div>
             ))}
           </div>

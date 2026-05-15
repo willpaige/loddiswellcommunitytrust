@@ -112,6 +112,7 @@ export const facilities = pgTable("facilities", {
   bookingTerms: jsonb("booking_terms").$type<string[]>(),
   bookingInfo: text("booking_info"),
   externalBookingUrl: text("external_booking_url"),
+  bookable: boolean("bookable").default(true),
   sortOrder: integer("sort_order").default(0),
   published: boolean("published").default(true),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),

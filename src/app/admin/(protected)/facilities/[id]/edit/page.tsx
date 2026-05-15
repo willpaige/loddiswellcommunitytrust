@@ -33,6 +33,7 @@ export default function EditFacilityPage() {
   const [bookingInfo, setBookingInfo] = useState("");
   const [externalBookingUrl, setExternalBookingUrl] = useState("");
   const [heroImageUrl, setHeroImageUrl] = useState("");
+  const [bookable, setBookable] = useState(true);
   const [published, setPublished] = useState(true);
   const [loading, setLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
@@ -63,6 +64,7 @@ export default function EditFacilityPage() {
         setBookingInfo(facility.bookingInfo || "");
         setExternalBookingUrl(facility.externalBookingUrl || "");
         setHeroImageUrl(facility.heroImageUrl || "");
+        setBookable(facility.bookable ?? true);
         setPublished(facility.published ?? true);
       }
       setPageLoading(false);
@@ -102,6 +104,7 @@ export default function EditFacilityPage() {
     formData.set("bookingInfo", bookingInfo);
     formData.set("externalBookingUrl", externalBookingUrl);
     formData.set("heroImageUrl", heroImageUrl);
+    formData.set("bookable", bookable ? "on" : "off");
     formData.set("published", published ? "on" : "off");
 
     try {
@@ -252,7 +255,17 @@ export default function EditFacilityPage() {
         </Card>
 
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className="pt-6 space-y-3">
+            <div className="flex items-center gap-3">
+              <Checkbox
+                id="bookable"
+                checked={bookable}
+                onCheckedChange={(v) => setBookable(v === true)}
+              />
+              <Label htmlFor="bookable" className="font-normal">
+                Bookable (show on booking page)
+              </Label>
+            </div>
             <div className="flex items-center gap-3">
               <Checkbox
                 id="published"
