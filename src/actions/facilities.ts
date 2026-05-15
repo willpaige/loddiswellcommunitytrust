@@ -26,6 +26,7 @@ export async function updateFacility(id: string, formData: FormData) {
 
   const featuresRaw = formData.get("features") as string;
   const ratesRaw = formData.get("rates") as string;
+  const bookingTermsRaw = formData.get("bookingTerms") as string;
 
   await db
     .update(facilities)
@@ -38,6 +39,7 @@ export async function updateFacility(id: string, formData: FormData) {
         : null,
       features: featuresRaw ? JSON.parse(featuresRaw) : null,
       rates: ratesRaw ? JSON.parse(ratesRaw) : null,
+      bookingTerms: bookingTermsRaw ? JSON.parse(bookingTermsRaw) : null,
       bookingInfo: (formData.get("bookingInfo") as string) || null,
       externalBookingUrl:
         (formData.get("externalBookingUrl") as string) || null,

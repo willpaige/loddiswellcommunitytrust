@@ -1,14 +1,11 @@
-import Link from "next/link";
-
 interface PageHeaderProps {
   label?: string;
   title: string;
   subtitle?: string;
   heroImageUrl?: string;
-  showBookingCta?: boolean;
 }
 
-export function PageHeader({ label, title, subtitle, heroImageUrl, showBookingCta }: PageHeaderProps) {
+export function PageHeader({ label, title, subtitle, heroImageUrl }: PageHeaderProps) {
   return (
     <section className="relative overflow-hidden bg-sage-800 text-sage-50 pt-36 sm:pt-40 pb-20 sm:pb-24">
       {heroImageUrl && (
@@ -37,16 +34,6 @@ export function PageHeader({ label, title, subtitle, heroImageUrl, showBookingCt
           <p className="mt-4 text-lg text-sage-200 max-w-2xl leading-relaxed">
             {subtitle}
           </p>
-        )}
-        {showBookingCta && (
-          <div className="mt-8">
-            <Link
-              href="/booking"
-              className="inline-flex items-center rounded-sm bg-copper-500 px-5 py-3 text-sm font-medium tracking-wide text-white no-underline hover:bg-copper-600 transition-colors"
-            >
-              Book Now
-            </Link>
-          </div>
         )}
       </div>
     </section>

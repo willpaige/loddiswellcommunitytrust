@@ -33,7 +33,6 @@ export default async function FacilitiesPage() {
           "We maintain a range of community facilities in the heart of Loddiswell for residents, groups, and visitors to enjoy."
         )}
         heroImageUrl={heroImageUrl ?? undefined}
-        showBookingCta
       />
 
       <section className="py-20 sm:py-24 bg-background">

@@ -53,7 +53,6 @@ export default async function AboutPage() {
           "The Loddiswell Playing Fields and Village Hall Trust was formed to maintain and manage community facilities for the benefit of Loddiswell Parish inhabitants."
         )}
         heroImageUrl={heroImageUrl ?? undefined}
-        showBookingCta
       />
 
       <section className="py-20 sm:py-24 bg-background">

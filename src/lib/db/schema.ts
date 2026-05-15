@@ -109,6 +109,7 @@ export const facilities = pgTable("facilities", {
   features: jsonb("features").$type<string[]>(),
   heroImageUrl: text("hero_image_url"),
   rates: jsonb("rates").$type<Record<string, string>>(),
+  bookingTerms: jsonb("booking_terms").$type<string[]>(),
   bookingInfo: text("booking_info"),
   externalBookingUrl: text("external_booking_url"),
   sortOrder: integer("sort_order").default(0),

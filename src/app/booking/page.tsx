@@ -22,6 +22,8 @@ const defaultHireFacilities = [
     name: "Pavilion",
     description:
       "Multi-purpose pavilion at the playing fields with changing rooms.",
+    descriptionJson: undefined,
+    features: [],
     rates: [
       { period: "Hourly rate", price: "Contact for rates" },
       { period: "Half day (4 hours)", price: "Contact for rates" },
@@ -36,6 +38,8 @@ const defaultHireFacilities = [
     name: "Tennis Courts",
     description:
       "Community tennis courts available for visitors and club members.",
+    descriptionJson: undefined,
+    features: [],
     rates: [{ period: "Per court per hour", price: "£6.00" }],
     terms: [
       "Collect the key from RS Stores (village Spar shop) — 01548 550258",
@@ -48,6 +52,17 @@ const defaultHireFacilities = [
   },
 ];
 
+function parseDescription(raw: string | null | undefined) {
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") return parsed;
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
 export default async function BookingPage() {
   const [{ blocks, heroImageUrl }, villageHall] = await Promise.all([
     getPageContent("booking"),
@@ -56,11 +71,13 @@ export default async function BookingPage() {
 
   const villageHallFacility = villageHall ? {
     name: villageHall.name,
-    description: villageHall.description || "Spacious hall for up to 100 people with kitchen, bar, and meeting room.",
+    description: "Spacious hall for up to 100 people with kitchen, bar, and meeting room.",
+    descriptionJson: parseDescription(villageHall.description),
+    features: villageHall.features || [],
     rates: villageHall.rates
       ? Object.entries(villageHall.rates).map(([period, price]) => ({ period, price }))
       : [],
-    terms: [
+    terms: villageHall.bookingTerms || [
       "A refundable deposit is required for all bookings",
       "The hirer is responsible for leaving the hall clean and tidy",
       "Bar facilities are available by arrangement",
@@ -121,9 +138,13 @@ export default async function BookingPage() {
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
                   <div>
                     <h3 className="font-serif text-xl">{facility.name}</h3>
-                    <p className="mt-1 text-muted-foreground">
-                      {facility.description}
-                    </p>
+                    <div className="mt-1 text-muted-foreground">
+                      {facility.descriptionJson ? (
+                        renderRichText(facility.descriptionJson)
+                      ) : (
+                        <p>{facility.description}</p>
+                      )}
+                    </div>
                   </div>
                   {facility.externalBookingUrl && (
                     <a
@@ -137,6 +158,25 @@ export default async function BookingPage() {
                     </a>
                   )}
                 </div>
+
+                {facility.features && facility.features.length > 0 && (
+                  <div className="mb-6">
+                    <h4 className="text-xs font-semibold uppercase tracking-[0.2em] text-copper-500 mb-3">
+                      Features
+                    </h4>
+                    <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {facility.features.map((feature) => (
+                        <li
+                          key={feature}
+                          className="flex items-center gap-2 text-sm text-muted-foreground"
+                        >
+                          <span className="h-2 w-2 rounded-full bg-copper-500 flex-shrink-0" />
+                          {feature}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                   <div>

@@ -86,12 +86,6 @@ export default async function LotteryPage() {
               <Trophy className="h-4 w-4 mr-2" aria-hidden="true" />
               Check Draws
             </a>
-            <Link
-              href="/booking"
-              className="inline-flex items-center rounded-sm border border-sage-400 px-5 py-3 text-sm font-medium tracking-wide text-sage-100 no-underline hover:bg-sage-700 transition-colors"
-            >
-              Book Now
-            </Link>
           </div>
         </div>
         </div>

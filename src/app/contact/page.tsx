@@ -28,7 +28,6 @@ export default async function ContactPage() {
           "Have a question, want to book a facility, or get involved? We'd love to hear from you."
         )}
         heroImageUrl={heroImageUrl ?? undefined}
-        showBookingCta
       />
 
       <section className="py-20 sm:py-24 bg-background">

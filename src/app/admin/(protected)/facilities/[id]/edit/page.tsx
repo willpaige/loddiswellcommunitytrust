@@ -29,6 +29,7 @@ export default function EditFacilityPage() {
   const [capacity, setCapacity] = useState("");
   const [features, setFeatures] = useState("");
   const [rates, setRates] = useState<KeyValuePair[]>([]);
+  const [bookingTerms, setBookingTerms] = useState("");
   const [bookingInfo, setBookingInfo] = useState("");
   const [externalBookingUrl, setExternalBookingUrl] = useState("");
   const [heroImageUrl, setHeroImageUrl] = useState("");
@@ -55,6 +56,9 @@ export default function EditFacilityPage() {
                 ([key, value]) => ({ key, value })
               )
             : []
+        );
+        setBookingTerms(
+          facility.bookingTerms ? (facility.bookingTerms as string[]).join("\n") : ""
         );
         setBookingInfo(facility.bookingInfo || "");
         setExternalBookingUrl(facility.externalBookingUrl || "");
@@ -90,6 +94,10 @@ export default function EditFacilityPage() {
       Object.keys(ratesObject).length > 0
         ? JSON.stringify(ratesObject)
         : "null"
+    );
+    formData.set(
+      "bookingTerms",
+      bookingTerms.trim() ? JSON.stringify(bookingTerms.split("\n").filter(Boolean)) : "null"
     );
     formData.set("bookingInfo", bookingInfo);
     formData.set("externalBookingUrl", externalBookingUrl);
@@ -215,6 +223,20 @@ export default function EditFacilityPage() {
                 onChange={(e) => setExternalBookingUrl(e.target.value)}
                 placeholder="https://..."
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="bookingTerms">Terms of Hire (one per line)</Label>
+              <Textarea
+                id="bookingTerms"
+                value={bookingTerms}
+                onChange={(e) => setBookingTerms(e.target.value)}
+                rows={4}
+                placeholder="A refundable deposit is required&#10;The hirer is responsible for leaving the facility clean&#10;Music must cease by 11:30pm"
+              />
+              <p className="text-xs text-muted-foreground">
+                These terms will be displayed on the booking page.
+              </p>
             </div>
 
             <div className="space-y-2">

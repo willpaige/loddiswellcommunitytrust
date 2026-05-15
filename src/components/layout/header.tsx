@@ -50,7 +50,7 @@ export function Header() {
         </Link>
 
         {/* Desktop navigation */}
-        <div className="hidden lg:flex lg:gap-8">
+        <div className="hidden lg:flex lg:gap-8 lg:items-center">
           {navigation.map((item) => (
             <Link
               key={item.name}
@@ -64,6 +64,12 @@ export function Header() {
               {item.name}
             </Link>
           ))}
+          <Link
+            href="/booking"
+            className="inline-flex items-center rounded-sm bg-copper-500 px-4 py-2 text-xs font-medium tracking-wide text-white no-underline hover:bg-copper-600 transition-colors"
+          >
+            Book Now
+          </Link>
         </div>
 
         {/* Mobile menu button */}
