@@ -25,7 +25,7 @@ function rankLabel(rank: number): string {
 }
 
 export default async function LotteryPage() {
-  const [{ blocks }, draws] = await Promise.all([
+  const [{ blocks, heroImageUrl }, draws] = await Promise.all([
     getPageContent("lottery"),
     getPublishedDraws(12),
   ]);
@@ -37,7 +37,21 @@ export default async function LotteryPage() {
 
   return (
     <div>
-      <section className="bg-sage-800 text-sage-50 pt-36 sm:pt-40 pb-20 sm:pb-24">
+      <section className="relative overflow-hidden bg-sage-800 text-sage-50 pt-36 sm:pt-40 pb-20 sm:pb-24">
+        {heroImageUrl && (
+          <>
+            <div
+              className="absolute inset-0 bg-cover bg-center"
+              style={{ backgroundImage: `url('${heroImageUrl}')` }}
+              aria-hidden="true"
+            />
+            <div
+              className="absolute inset-0 bg-sage-900/70"
+              aria-hidden="true"
+            />
+          </>
+        )}
+        <div className="relative">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-copper-300 mb-4">
             {renderInline(blocks.header_label, "Community Lottery")}
@@ -72,7 +86,14 @@ export default async function LotteryPage() {
               <Trophy className="h-4 w-4 mr-2" aria-hidden="true" />
               Check Draws
             </a>
+            <Link
+              href="/booking"
+              className="inline-flex items-center rounded-sm border border-sage-400 px-5 py-3 text-sm font-medium tracking-wide text-sage-100 no-underline hover:bg-sage-700 transition-colors"
+            >
+              Book Now
+            </Link>
           </div>
+        </div>
         </div>
       </section>
 

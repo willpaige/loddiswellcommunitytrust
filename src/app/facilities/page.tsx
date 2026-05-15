@@ -17,7 +17,7 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function FacilitiesPage() {
-  const [{ blocks }, allFacilities] = await Promise.all([
+  const [{ blocks, heroImageUrl }, allFacilities] = await Promise.all([
     getPageContent("facilities"),
     getFacilities(),
   ]);
@@ -32,6 +32,8 @@ export default async function FacilitiesPage() {
           blocks.header_subtitle,
           "We maintain a range of community facilities in the heart of Loddiswell for residents, groups, and visitors to enjoy."
         )}
+        heroImageUrl={heroImageUrl ?? undefined}
+        showBookingCta
       />
 
       <section className="py-20 sm:py-24 bg-background">

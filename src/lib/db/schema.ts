@@ -75,6 +75,7 @@ export const pages = pgTable("pages", {
   title: text("title").notNull(),
   content: text("content").notNull().default("{}"),
   metaDescription: text("meta_description"),
+  heroImageUrl: text("hero_image_url"),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
   updatedBy: text("updated_by").references(() => users.id),
 });

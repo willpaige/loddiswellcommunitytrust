@@ -45,8 +45,16 @@ export async function updatePage(slug: string, formData: FormData) {
 
   const allowedKeys = new Set(schema.blocks.map((b) => b.key));
   const filtered: Record<string, unknown> = {};
+  let heroImageUrl: string | null = null;
+
   for (const [key, value] of Object.entries(blocks)) {
-    if (allowedKeys.has(key)) filtered[key] = value;
+    if (allowedKeys.has(key)) {
+      if (key === "hero_image" && typeof value === "string") {
+        heroImageUrl = value || null;
+      } else {
+        filtered[key] = value;
+      }
+    }
   }
 
   await db
@@ -55,6 +63,7 @@ export async function updatePage(slug: string, formData: FormData) {
       title,
       content: JSON.stringify(filtered),
       metaDescription,
+      heroImageUrl,
       updatedAt: new Date(),
       updatedBy: session.user.id,
     })

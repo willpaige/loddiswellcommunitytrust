@@ -37,7 +37,7 @@ function formatBytes(bytes: number | null): string {
 }
 
 export default async function AboutPage() {
-  const [{ blocks }, documents, trustees] = await Promise.all([
+  const [{ blocks, heroImageUrl }, documents, trustees] = await Promise.all([
     getPageContent("about"),
     getDocuments(),
     getPublishedTrustees(),
@@ -52,6 +52,8 @@ export default async function AboutPage() {
           blocks.header_subtitle,
           "The Loddiswell Playing Fields and Village Hall Trust was formed to maintain and manage community facilities for the benefit of Loddiswell Parish inhabitants."
         )}
+        heroImageUrl={heroImageUrl ?? undefined}
+        showBookingCta
       />
 
       <section className="py-20 sm:py-24 bg-background">

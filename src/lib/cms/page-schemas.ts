@@ -1,4 +1,4 @@
-export type BlockType = "inline" | "richtext";
+export type BlockType = "inline" | "richtext" | "image";
 
 export type BlockSchema = {
   key: string;
@@ -37,6 +37,7 @@ export const pageSchemas: Record<string, PageSchema> = {
     slug: "about",
     title: "About",
     blocks: [
+      { key: "hero_image", label: "Hero image", type: "image", group: "Page header", help: "Optional background image for the header. Falls back to green background if not set." },
       { key: "header_label", label: "Page header eyebrow", type: "inline", group: "Page header" },
       { key: "header_title", label: "Page header title", type: "inline", group: "Page header" },
       { key: "header_subtitle", label: "Page header subtitle", type: "richtext", group: "Page header" },
@@ -58,6 +59,7 @@ export const pageSchemas: Record<string, PageSchema> = {
     slug: "contact",
     title: "Contact",
     blocks: [
+      { key: "hero_image", label: "Hero image", type: "image", group: "Page header", help: "Optional background image for the header. Falls back to green background if not set." },
       { key: "header_label", label: "Page header eyebrow", type: "inline", group: "Page header" },
       { key: "header_title", label: "Page header title", type: "inline", group: "Page header" },
       { key: "header_subtitle", label: "Page header subtitle", type: "richtext", group: "Page header" },
@@ -72,6 +74,7 @@ export const pageSchemas: Record<string, PageSchema> = {
     slug: "booking",
     title: "Booking",
     blocks: [
+      { key: "hero_image", label: "Hero image", type: "image", group: "Page header", help: "Optional background image for the header. Falls back to green background if not set." },
       { key: "header_label", label: "Page header eyebrow", type: "inline", group: "Page header" },
       { key: "header_title", label: "Page header title", type: "inline", group: "Page header" },
       { key: "header_subtitle", label: "Page header subtitle", type: "richtext", group: "Page header" },
@@ -89,6 +92,7 @@ export const pageSchemas: Record<string, PageSchema> = {
     slug: "events",
     title: "Events",
     blocks: [
+      { key: "hero_image", label: "Hero image", type: "image", group: "Page header", help: "Optional background image for the header. Falls back to green background if not set." },
       { key: "header_label", label: "Page header eyebrow", type: "inline", group: "Page header" },
       { key: "header_title", label: "Page header title", type: "inline", group: "Page header" },
       { key: "header_subtitle", label: "Page header subtitle", type: "richtext", group: "Page header" },
@@ -104,6 +108,7 @@ export const pageSchemas: Record<string, PageSchema> = {
     slug: "facilities",
     title: "Facilities",
     blocks: [
+      { key: "hero_image", label: "Hero image", type: "image", group: "Page header", help: "Optional background image for the header. Falls back to green background if not set." },
       { key: "header_label", label: "Page header eyebrow", type: "inline", group: "Page header" },
       { key: "header_title", label: "Page header title", type: "inline", group: "Page header" },
       { key: "header_subtitle", label: "Page header subtitle", type: "richtext", group: "Page header" },
@@ -115,6 +120,7 @@ export const pageSchemas: Record<string, PageSchema> = {
     slug: "lottery",
     title: "Community Lottery",
     blocks: [
+      { key: "hero_image", label: "Hero image", type: "image", group: "Page header", help: "Optional background image for the header. Falls back to green background if not set." },
       { key: "header_label", label: "Page header eyebrow", type: "inline", group: "Page header" },
       { key: "header_title", label: "Page header title", type: "inline", group: "Page header" },
       { key: "header_subtitle", label: "Page header subtitle", type: "richtext", group: "Page header" },

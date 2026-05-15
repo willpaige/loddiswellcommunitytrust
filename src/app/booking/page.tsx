@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { SectionLabel } from "@/components/ui/section-label";
 import { getPageContent } from "@/lib/cms/get-page-content";
 import { renderInline, renderRichText } from "@/lib/cms/render";
+import { getFacility } from "@/actions/facilities";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { title, metaDescription } = await getPageContent("booking");
@@ -16,24 +17,7 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-const hireFacilities = [
-  {
-    name: "Village Hall",
-    description:
-      "Spacious hall for up to 100 people with kitchen, bar, and meeting room.",
-    rates: [
-      { period: "Hourly rate", price: "Contact for rates" },
-      { period: "Half day (4 hours)", price: "Contact for rates" },
-      { period: "Full day", price: "Contact for rates" },
-      { period: "Evening hire", price: "Contact for rates" },
-    ],
-    terms: [
-      "A refundable deposit is required for all bookings",
-      "The hirer is responsible for leaving the hall clean and tidy",
-      "Bar facilities are available by arrangement",
-      "Music must cease by 11:30pm",
-    ],
-  },
+const defaultHireFacilities = [
   {
     name: "Pavilion",
     description:
@@ -65,7 +49,28 @@ const hireFacilities = [
 ];
 
 export default async function BookingPage() {
-  const { blocks } = await getPageContent("booking");
+  const [{ blocks, heroImageUrl }, villageHall] = await Promise.all([
+    getPageContent("booking"),
+    getFacility("village-hall"),
+  ]);
+
+  const villageHallFacility = villageHall ? {
+    name: villageHall.name,
+    description: villageHall.description || "Spacious hall for up to 100 people with kitchen, bar, and meeting room.",
+    rates: villageHall.rates
+      ? Object.entries(villageHall.rates).map(([period, price]) => ({ period, price }))
+      : [],
+    terms: [
+      "A refundable deposit is required for all bookings",
+      "The hirer is responsible for leaving the hall clean and tidy",
+      "Bar facilities are available by arrangement",
+      "Music must cease by 11:30pm",
+    ],
+  } : null;
+
+  const hireFacilities = villageHallFacility
+    ? [villageHallFacility, ...defaultHireFacilities]
+    : defaultHireFacilities;
 
   return (
     <div>
@@ -76,6 +81,7 @@ export default async function BookingPage() {
           blocks.header_subtitle,
           "Check availability and hire rates for the Village Hall, Pavilion, and Tennis Courts. Contact us to make a booking."
         )}
+        heroImageUrl={heroImageUrl ?? undefined}
       />
 
       <section className="py-20 sm:py-24 bg-background">

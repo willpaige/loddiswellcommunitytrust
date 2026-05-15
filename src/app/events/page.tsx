@@ -64,7 +64,7 @@ function formatEventTime(
 }
 
 export default async function EventsPage() {
-  const [{ blocks }, upcoming] = await Promise.all([
+  const [{ blocks, heroImageUrl }, upcoming] = await Promise.all([
     getPageContent("events"),
     getUpcomingEvents(),
   ]);
@@ -78,6 +78,8 @@ export default async function EventsPage() {
           blocks.header_subtitle,
           "See what's happening in Loddiswell. From community gatherings and sports events to club meetings and celebrations."
         )}
+        heroImageUrl={heroImageUrl ?? undefined}
+        showBookingCta
       />
 
       <section className="py-20 sm:py-24 bg-background">

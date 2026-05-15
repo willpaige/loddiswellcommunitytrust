@@ -31,6 +31,7 @@ export default async function EditPagePage({
       initialTitle={row?.title ?? schema.title}
       initialMetaDescription={row?.metaDescription ?? ""}
       initialBlocks={blocks}
+      initialHeroImageUrl={row?.heroImageUrl ?? ""}
     />
   );
 }

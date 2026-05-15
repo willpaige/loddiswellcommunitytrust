@@ -7,6 +7,7 @@ import type { TiptapJSON } from "./render";
 export type PageContent = {
   title: string;
   metaDescription: string | null;
+  heroImageUrl: string | null;
   blocks: Record<string, TiptapJSON>;
   updatedAt: Date | null;
 };
@@ -19,7 +20,7 @@ export const getPageContent = cache(async (slug: string): Promise<PageContent> =
     .limit(1);
   const row = rows[0];
   if (!row) {
-    return { title: "", metaDescription: null, blocks: {}, updatedAt: null };
+    return { title: "", metaDescription: null, heroImageUrl: null, blocks: {}, updatedAt: null };
   }
   let blocks: Record<string, TiptapJSON> = {};
   try {
@@ -33,6 +34,7 @@ export const getPageContent = cache(async (slug: string): Promise<PageContent> =
   return {
     title: row.title,
     metaDescription: row.metaDescription ?? null,
+    heroImageUrl: row.heroImageUrl ?? null,
     blocks,
     updatedAt: row.updatedAt,
   };

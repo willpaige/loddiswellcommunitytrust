@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { RichTextEditor } from "@/components/admin/rich-text-editor";
+import { ImageUploader } from "@/components/admin/image-uploader";
 import {
   groupBlocks,
   type BlockSchema,
@@ -23,6 +24,7 @@ type Props = {
   initialTitle: string;
   initialMetaDescription: string;
   initialBlocks: Record<string, unknown>;
+  initialHeroImageUrl?: string;
 };
 
 type TiptapDoc = {
@@ -62,6 +64,8 @@ function buildInitialValues(
     const stored = blocks[block.key];
     if (block.type === "inline") {
       out[block.key] = extractText(stored);
+    } else if (block.type === "image") {
+      out[block.key] = typeof stored === "string" ? stored : "";
     } else {
       out[block.key] = stored ? JSON.stringify(stored) : JSON.stringify(EMPTY_DOC);
     }
@@ -74,12 +78,19 @@ export function PageEditor({
   initialTitle,
   initialMetaDescription,
   initialBlocks,
+  initialHeroImageUrl = "",
 }: Props) {
   const router = useRouter();
   const [title, setTitle] = useState(initialTitle);
   const [metaDescription, setMetaDescription] = useState(initialMetaDescription);
-  const [values, setValues] = useState(() =>
-    buildInitialValues(schema, initialBlocks)
+  const [values, setValues] = useState(() => {
+    const vals = buildInitialValues(schema, initialBlocks);
+    // Add hero_image value if it exists in schema
+    if (schema.blocks.some(b => b.key === "hero_image")) {
+      vals.hero_image = initialHeroImageUrl;
+    }
+    return vals;
+  }
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -95,11 +106,13 @@ export function PageEditor({
     setSaving(true);
     setError(null);
 
-    const blocks: Record<string, TiptapDoc> = {};
+    const blocks: Record<string, unknown> = {};
     for (const block of schema.blocks) {
       const v = values[block.key] ?? "";
       if (block.type === "inline") {
         blocks[block.key] = inlineDocFromText(v.trim());
+      } else if (block.type === "image") {
+        blocks[block.key] = v;
       } else {
         try {
           const parsed = JSON.parse(v);
@@ -246,6 +259,11 @@ function BlockField({
           id={`block-${block.key}`}
           value={value}
           onChange={(e) => onChange(e.target.value)}
+        />
+      ) : block.type === "image" ? (
+        <ImageUploader
+          currentImageUrl={value}
+          onImageUpload={onChange}
         />
       ) : (
         <RichTextEditor content={value} onChange={onChange} />

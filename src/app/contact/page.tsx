@@ -16,7 +16,7 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function ContactPage() {
-  const { blocks } = await getPageContent("contact");
+  const { blocks, heroImageUrl } = await getPageContent("contact");
 
   return (
     <div>
@@ -27,6 +27,8 @@ export default async function ContactPage() {
           blocks.header_subtitle,
           "Have a question, want to book a facility, or get involved? We'd love to hear from you."
         )}
+        heroImageUrl={heroImageUrl ?? undefined}
+        showBookingCta
       />
 
       <section className="py-20 sm:py-24 bg-background">
