@@ -66,6 +66,7 @@ export default async function BookingPage() {
       "Bar facilities are available by arrangement",
       "Music must cease by 11:30pm",
     ],
+    externalBookingUrl: villageHall.externalBookingUrl || null,
   } : null;
 
   const hireFacilities = villageHallFacility
