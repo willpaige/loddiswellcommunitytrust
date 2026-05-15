@@ -7,6 +7,7 @@ import {
   ImageIcon,
   Ticket,
   Plus,
+  Settings,
 } from "lucide-react";
 import {
   Card,
@@ -57,6 +58,12 @@ const quickActions = [
     href: "/admin/lottery",
     icon: Ticket,
     description: "View lottery ticket holders",
+  },
+  {
+    name: "Settings",
+    href: "/admin/settings",
+    icon: Settings,
+    description: "Configure site settings and contact info",
   },
 ];
 

@@ -248,3 +248,20 @@ export const lotteryTickets = pgTable("lottery_tickets", {
     .default("active"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
+
+export const siteSettings = pgTable("site_settings", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => createId()),
+  mapLatitude: text("map_latitude").notNull().default("50.325178"),
+  mapLongitude: text("map_longitude").notNull().default("-3.80193"),
+  mapZoom: text("map_zoom").notNull().default("351"),
+  emailAddress: text("email_address").notNull().default("hello@loddiswellcommunitytrust.org"),
+  postalAddress: text("postal_address"),
+  villageHallAddress: text("village_hall_address"),
+  pavilionAddress: text("pavilion_address"),
+  bookingsPhoneNumber: text("bookings_phone_number"),
+  phoneNumber: text("phone_number"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  updatedBy: text("updated_by").references(() => users.id),
+});

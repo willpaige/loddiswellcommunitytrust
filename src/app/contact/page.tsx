@@ -4,6 +4,7 @@ import { ContactForm } from "@/components/contact-form";
 import { PageHeader } from "@/components/layout/page-header";
 import { getPageContent } from "@/lib/cms/get-page-content";
 import { renderInline } from "@/lib/cms/render";
+import { getSettings } from "@/actions/settings";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { title, metaDescription } = await getPageContent("contact");
@@ -16,7 +17,10 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function ContactPage() {
-  const { blocks, heroImageUrl } = await getPageContent("contact");
+  const [{ blocks, heroImageUrl }, settings] = await Promise.all([
+    getPageContent("contact"),
+    getSettings(),
+  ]);
 
   return (
     <div>
@@ -59,10 +63,10 @@ export default async function ContactPage() {
                     <div>
                       <h3 className="font-medium">Email</h3>
                       <a
-                        href="mailto:hello@loddiswellcommunitytrust.org"
+                        href={`mailto:${settings?.emailAddress || "hello@loddiswellcommunitytrust.org"}`}
                         className="text-sm text-muted-foreground hover:text-copper-500"
                       >
-                        hello@loddiswellcommunitytrust.org
+                        {settings?.emailAddress || "hello@loddiswellcommunitytrust.org"}
                       </a>
                     </div>
                   </div>
@@ -73,12 +77,14 @@ export default async function ContactPage() {
                     </div>
                     <div>
                       <h3 className="font-medium">Bookings Secretary</h3>
-                      <a
-                        href="tel:07716162407"
-                        className="text-sm text-muted-foreground hover:text-copper-500"
-                      >
-                        07716 162407
-                      </a>
+                      {settings?.bookingsPhoneNumber && (
+                        <a
+                          href={`tel:${settings.bookingsPhoneNumber.replace(/\s/g, "")}`}
+                          className="text-sm text-muted-foreground hover:text-copper-500"
+                        >
+                          {settings.bookingsPhoneNumber}
+                        </a>
+                      )}
                       <p className="text-xs text-muted-foreground mt-1">
                         {renderInline(
                           blocks.phone_note,
@@ -88,45 +94,39 @@ export default async function ContactPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-start gap-4">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sage-100 text-sage-700 flex-shrink-0">
-                      <MapPin className="h-5 w-5" aria-hidden="true" />
+                  {settings?.villageHallAddress && (
+                    <div className="flex items-start gap-4">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sage-100 text-sage-700 flex-shrink-0">
+                        <MapPin className="h-5 w-5" aria-hidden="true" />
+                      </div>
+                      <div>
+                        <h3 className="font-medium">Village Hall</h3>
+                        <p className="text-sm text-muted-foreground whitespace-pre-line">
+                          {settings.villageHallAddress}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="font-medium">Village Hall</h3>
-                      <p className="text-sm text-muted-foreground">
-                        South Brent Road
-                        <br />
-                        Loddiswell
-                        <br />
-                        Nr Kingsbridge
-                        <br />
-                        Devon, TQ7 4RH
-                      </p>
-                    </div>
-                  </div>
+                  )}
 
-                  <div className="flex items-start gap-4">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sage-100 text-sage-700 flex-shrink-0">
-                      <MapPin className="h-5 w-5" aria-hidden="true" />
+                  {settings?.pavilionAddress && (
+                    <div className="flex items-start gap-4">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sage-100 text-sage-700 flex-shrink-0">
+                        <MapPin className="h-5 w-5" aria-hidden="true" />
+                      </div>
+                      <div>
+                        <h3 className="font-medium">Playing Fields & Pavilion</h3>
+                        <p className="text-sm text-muted-foreground whitespace-pre-line">
+                          {settings.pavilionAddress}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="font-medium">Playing Fields & Pavilion</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Loddiswell Playing Fields
-                        <br />
-                        Loddiswell
-                        <br />
-                        Devon, TQ7 4QH
-                      </p>
-                    </div>
-                  </div>
+                  )}
                 </div>
               </div>
 
               <div className="rounded-lg border border-border overflow-hidden">
                 <iframe
-                  src="https://www.openstreetmap.org/export/embed.html?bbox=-3.7900%2C50.3100%2C-3.7600%2C50.3300&amp;layer=mapnik&amp;marker=50.3200%2C-3.7750"
+                  src={`https://www.openstreetmap.org/export/embed.html?bbox=${parseFloat(settings?.mapLongitude || "-3.80193") - 0.01}%2C${parseFloat(settings?.mapLatitude || "50.325178") - 0.01}%2C${parseFloat(settings?.mapLongitude || "-3.80193") + 0.01}%2C${parseFloat(settings?.mapLatitude || "50.325178") + 0.01}&layer=mapnik&marker=${settings?.mapLatitude || "50.325178"}%2C${settings?.mapLongitude || "-3.80193"}`}
                   title="Map showing Loddiswell village location"
                   className="w-full h-64 border-0"
                   loading="lazy"

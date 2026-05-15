@@ -1,6 +1,9 @@
 import Link from "next/link";
+import { getSettings } from "@/actions/settings";
 
-export function Footer() {
+export async function Footer() {
+  const settings = await getSettings();
+
   return (
     <footer className="bg-sage-900 text-sage-100" role="contentinfo">
       <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
@@ -107,26 +110,31 @@ export function Footer() {
               Contact
             </h3>
             <ul className="mt-4 space-y-3">
-              <li className="text-sm text-sage-300">
-                Village Hall, South Brent Road
-              </li>
-              <li className="text-sm text-sage-300">Loddiswell, TQ7 4RH</li>
-              <li>
-                <a
-                  href="mailto:hello@loddiswellcommunitytrust.org"
-                  className="text-sm text-sage-300 hover:text-white no-underline transition-colors"
-                >
-                  hello@loddiswellcommunitytrust.org
-                </a>
-              </li>
-              <li>
-                <a
-                  href="tel:07942335210"
-                  className="text-sm text-sage-300 hover:text-white no-underline transition-colors"
-                >
-                  07942 335210
-                </a>
-              </li>
+              {settings?.postalAddress && (
+                <li className="text-sm text-sage-300 whitespace-pre-line">
+                  {settings.postalAddress}
+                </li>
+              )}
+              {settings?.emailAddress && (
+                <li>
+                  <a
+                    href={`mailto:${settings.emailAddress}`}
+                    className="text-sm text-sage-300 hover:text-white no-underline transition-colors"
+                  >
+                    {settings.emailAddress}
+                  </a>
+                </li>
+              )}
+              {settings?.phoneNumber && (
+                <li>
+                  <a
+                    href={`tel:${settings.phoneNumber.replace(/\s/g, "")}`}
+                    className="text-sm text-sage-300 hover:text-white no-underline transition-colors"
+                  >
+                    {settings.phoneNumber}
+                  </a>
+                </li>
+              )}
             </ul>
           </div>
         </div>
