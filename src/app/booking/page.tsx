@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { SectionLabel } from "@/components/ui/section-label";
 import { getPageContent } from "@/lib/cms/get-page-content";
 import { renderInline, renderRichText } from "@/lib/cms/render";
-import { getFacility } from "@/actions/facilities";
+import { getFacilities } from "@/actions/facilities";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { title, metaDescription } = await getPageContent("booking");
@@ -16,41 +16,6 @@ export async function generateMetadata(): Promise<Metadata> {
       "Book the Loddiswell Village Hall, Pavilion, or Tennis Courts. Check availability and hire rates for all our community facilities.",
   };
 }
-
-const defaultHireFacilities = [
-  {
-    name: "Pavilion",
-    description:
-      "Multi-purpose pavilion at the playing fields with changing rooms.",
-    descriptionJson: undefined,
-    features: [],
-    rates: [
-      { period: "Hourly rate", price: "Contact for rates" },
-      { period: "Half day (4 hours)", price: "Contact for rates" },
-      { period: "Full day", price: "Contact for rates" },
-    ],
-    terms: [
-      "A refundable deposit is required for all bookings",
-      "The hirer is responsible for leaving the pavilion clean and tidy",
-    ],
-  },
-  {
-    name: "Tennis Courts",
-    description:
-      "Community tennis courts available for visitors and club members.",
-    descriptionJson: undefined,
-    features: [],
-    rates: [{ period: "Per court per hour", price: "£6.00" }],
-    terms: [
-      "Collect the key from RS Stores (village Spar shop) — 01548 550258",
-      "A key deposit is charged and refunded on return",
-      "The key must be returned after each use",
-      "Courts should be left in a clean condition",
-    ],
-    externalBookingUrl:
-      "https://clubspark.lta.org.uk/LoddiswellTennisClub/Booking/BookByDate",
-  },
-];
 
 function parseDescription(raw: string | null | undefined) {
   if (!raw) return undefined;
@@ -64,31 +29,24 @@ function parseDescription(raw: string | null | undefined) {
 }
 
 export default async function BookingPage() {
-  const [{ blocks, heroImageUrl }, villageHall] = await Promise.all([
+  const [{ blocks, heroImageUrl }, allFacilities] = await Promise.all([
     getPageContent("booking"),
-    getFacility("village-hall"),
+    getFacilities(),
   ]);
 
-  const villageHallFacility = villageHall ? {
-    name: villageHall.name,
-    description: "Spacious hall for up to 100 people with kitchen, bar, and meeting room.",
-    descriptionJson: parseDescription(villageHall.description),
-    features: villageHall.features || [],
-    rates: villageHall.rates
-      ? Object.entries(villageHall.rates).map(([period, price]) => ({ period, price }))
-      : [],
-    terms: villageHall.bookingTerms || [
-      "A refundable deposit is required for all bookings",
-      "The hirer is responsible for leaving the hall clean and tidy",
-      "Bar facilities are available by arrangement",
-      "Music must cease by 11:30pm",
-    ],
-    externalBookingUrl: villageHall.externalBookingUrl || null,
-  } : null;
-
-  const hireFacilities = villageHallFacility
-    ? [villageHallFacility, ...defaultHireFacilities]
-    : defaultHireFacilities;
+  const hireFacilities = allFacilities
+    .filter((f) => f.published)
+    .map((facility) => ({
+      name: facility.name,
+      description: facility.description || "",
+      descriptionJson: parseDescription(facility.description),
+      features: facility.features || [],
+      rates: facility.rates
+        ? Object.entries(facility.rates).map(([period, price]) => ({ period, price }))
+        : [],
+      terms: facility.bookingTerms || [],
+      externalBookingUrl: facility.externalBookingUrl || null,
+    }));
 
   return (
     <div>
