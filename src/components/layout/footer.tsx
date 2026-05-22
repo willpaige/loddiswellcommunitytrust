@@ -18,7 +18,8 @@ export async function Footer() {
             </p>
             <p className="mt-6 text-sm text-sage-300 leading-relaxed max-w-sm">
               Maintaining community facilities for the benefit of Loddiswell
-              Parish since 1965. A registered charity serving the South Hams, Devon.
+              Parish since 1965. The Trust is a registered Charity and
+              Charitable Incorporated Organisation, registered number 1203104.
             </p>
           </div>
 
