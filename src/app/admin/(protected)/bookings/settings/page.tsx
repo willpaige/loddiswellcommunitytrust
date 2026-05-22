@@ -1,0 +1,175 @@
+import { Ban, Pencil } from "lucide-react";
+import {
+  createBookingBlock,
+  getAdminBookingSetup,
+  updateFacilityBookableHours,
+} from "@/actions/bookings";
+import { bookingHourOptions } from "@/lib/bookings";
+import { BookingPricesTable } from "@/components/admin/booking-prices-table";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+
+export const dynamic = "force-dynamic";
+
+export default async function AdminBookingSettingsPage() {
+  const setup = await getAdminBookingSetup();
+  const uniqueOfferings = setup.offerings.filter(
+    (offering, index, all) =>
+      all.findIndex((item) => item.offeringId === offering.offeringId) === index
+  );
+  const facilities = uniqueOfferings.filter(
+    (offering, index, all) =>
+      all.findIndex((item) => item.facilityId === offering.facilityId) === index
+  );
+
+  return (
+    <div>
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold">Booking Settings</h1>
+        <p className="mt-1 text-muted-foreground">
+          Manage bookable times, block-outs, and prices.
+        </p>
+      </div>
+
+      <div className="grid gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Bookable times</CardTitle>
+            <CardDescription>
+              Set the public booking window for each venue. Bookings must start and end inside these hours.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-3">
+            {facilities.map((facility) => (
+              <form key={facility.facilityId} action={updateFacilityBookableHours} className="rounded-md border p-4">
+                <input type="hidden" name="facilityId" value={facility.facilityId} />
+                <h2 className="font-medium">{facility.facilityName}</h2>
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label htmlFor={`${facility.facilityId}-start`}>From</Label>
+                    <select
+                      id={`${facility.facilityId}-start`}
+                      name="bookableStartTime"
+                      className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                      defaultValue={facility.facilityBookableStartTime}
+                    >
+                      {bookingHourOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={`${facility.facilityId}-end`}>Until</Label>
+                    <select
+                      id={`${facility.facilityId}-end`}
+                      name="bookableEndTime"
+                      className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                      defaultValue={facility.facilityBookableEndTime}
+                    >
+                      {bookingHourOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <Button type="submit" variant="outline" className="mt-4 w-full">
+                  Save times
+                </Button>
+              </form>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Ban className="h-5 w-5" aria-hidden="true" />
+              Block out time
+            </CardTitle>
+            <CardDescription>Make a venue unavailable for maintenance, closures, or Trust events.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form action={createBookingBlock} className="grid gap-4 lg:grid-cols-6">
+              <div className="space-y-2">
+                <Label htmlFor="blockFacility">Venue</Label>
+                <select id="blockFacility" name="facilityId" className="h-10 w-full rounded-md border bg-background px-3 text-sm">
+                  {facilities.map((facility) => (
+                    <option key={facility.facilityId} value={facility.facilityId}>
+                      {facility.facilityName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="blockTitle">Title</Label>
+                <Input id="blockTitle" name="title" required />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="blockStartDate">Start date</Label>
+                <Input id="blockStartDate" name="startDate" type="date" required />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="blockStartTime">Start time</Label>
+                <select
+                  id="blockStartTime"
+                  name="startTime"
+                  className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                  defaultValue="09:00"
+                  required
+                >
+                  {bookingHourOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="blockEndDate">End date</Label>
+                <Input id="blockEndDate" name="endDate" type="date" required />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="blockEndTime">End time</Label>
+                <select
+                  id="blockEndTime"
+                  name="endTime"
+                  className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                  defaultValue="10:00"
+                  required
+                >
+                  {bookingHourOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-end">
+                <Button type="submit">Block</Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Pencil className="h-5 w-5" aria-hidden="true" />
+              Prices
+            </CardTitle>
+            <CardDescription>Prices are stored in pounds and used by Stripe Checkout.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <BookingPricesTable rows={setup.offerings} />
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}

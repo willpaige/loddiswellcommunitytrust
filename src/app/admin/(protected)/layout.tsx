@@ -13,6 +13,11 @@ export default async function AdminLayout({
     redirect("/admin/login");
   }
 
+  const role = (session.user as unknown as { role?: string }).role;
+  if (role !== "admin" && role !== "editor") {
+    redirect("/account/bookings");
+  }
+
   return (
     <>
       <style>{`header[role="banner"], footer, .newsletter-signup { display: none; } #main-content { padding: 0; }`}</style>

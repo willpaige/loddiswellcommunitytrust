@@ -13,6 +13,7 @@ import {
   Ticket,
   Users,
   Settings,
+  BookOpenCheck,
   LogOut,
   ArrowLeft,
   Menu,
@@ -26,6 +27,16 @@ import { Separator } from "@/components/ui/separator";
 const navItems = [
   { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
   { name: "Events", href: "/admin/events", icon: CalendarDays },
+  {
+    name: "Bookings",
+    href: "/admin/bookings",
+    icon: BookOpenCheck,
+    children: [
+      { name: "Bookings", href: "/admin/bookings" },
+      { name: "Availability", href: "/admin/bookings/availability" },
+      { name: "Settings", href: "/admin/bookings/settings" },
+    ],
+  },
   { name: "Pages", href: "/admin/pages", icon: FileText },
   { name: "Facilities", href: "/admin/facilities", icon: Building2 },
   { name: "Trustees", href: "/admin/trustees", icon: Users },
@@ -61,22 +72,50 @@ export function AdminSidebar({ user }: AdminSidebarProps) {
       <Separator />
 
       <nav className="flex-1 p-3 space-y-1" aria-label="Admin navigation">
-        {navItems.map((item) => (
-          <Link
-            key={item.name}
-            href={item.href}
-            onClick={() => setMobileOpen(false)}
-            className={cn(
-              "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium no-underline transition-colors",
-              isActive(item.href)
-                ? "bg-secondary text-primary font-semibold"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground"
-            )}
-          >
-            <item.icon className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
-            {item.name}
-          </Link>
-        ))}
+        {navItems.map((item) => {
+          const active = isActive(item.href);
+          return (
+            <div key={item.name}>
+              <Link
+                href={item.href}
+                onClick={() => setMobileOpen(false)}
+                className={cn(
+                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium no-underline transition-colors",
+                  active
+                    ? "bg-secondary text-primary font-semibold"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                )}
+              >
+                <item.icon className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
+                {item.name}
+              </Link>
+              {"children" in item && item.children && active && (
+                <div className="ml-7 mt-1 space-y-1 border-l border-border pl-2">
+                  {item.children.map((child) => {
+                    const childActive =
+                      pathname === child.href ||
+                      (child.href !== "/admin/bookings" && pathname.startsWith(child.href));
+                    return (
+                      <Link
+                        key={child.href}
+                        href={child.href}
+                        onClick={() => setMobileOpen(false)}
+                        className={cn(
+                          "block rounded-md px-3 py-1.5 text-sm no-underline transition-colors",
+                          childActive
+                            ? "bg-muted text-foreground font-medium"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                        )}
+                      >
+                        {child.name}
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </nav>
 
       <Separator />

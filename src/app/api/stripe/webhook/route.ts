@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { db } from "@/lib/db";
-import { lotteryTickets } from "@/lib/db/schema";
+import { bookingOccurrences, bookings, lotteryTickets } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { addYears } from "date-fns";
 import Stripe from "stripe";
@@ -141,6 +141,34 @@ export async function POST(req: NextRequest) {
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
+        if (session.metadata?.type === "booking" && session.metadata.bookingId) {
+          await db
+            .update(bookings)
+            .set({
+              status: "confirmed",
+              stripeCheckoutSessionId: session.id,
+              stripePaymentIntentId:
+                typeof session.payment_intent === "string"
+                  ? session.payment_intent
+                  : session.payment_intent?.id ?? null,
+              stripeSubscriptionId:
+                typeof session.subscription === "string"
+                  ? session.subscription
+                  : session.subscription?.id ?? null,
+              stripeCustomerId:
+                typeof session.customer === "string"
+                  ? session.customer
+                  : session.customer?.id ?? null,
+              updatedAt: new Date(),
+            })
+            .where(eq(bookings.id, session.metadata.bookingId));
+          await db
+            .update(bookingOccurrences)
+            .set({ status: "confirmed" })
+            .where(eq(bookingOccurrences.bookingId, session.metadata.bookingId));
+          break;
+        }
+
         if (session.mode !== "subscription" || !session.subscription) {
           // Either a legacy one-off (now unused) or unrelated mode — ignore.
           break;
@@ -167,6 +195,22 @@ export async function POST(req: NextRequest) {
       case "customer.subscription.updated":
       case "customer.subscription.deleted": {
         const sub = event.data.object as Stripe.Subscription;
+        if (sub.metadata?.type === "booking" && sub.metadata.bookingId) {
+          await db
+            .update(bookings)
+            .set({
+              status: "cancelled",
+              cancelledAt: new Date(),
+              updatedAt: new Date(),
+            })
+            .where(eq(bookings.id, sub.metadata.bookingId));
+          await db
+            .update(bookingOccurrences)
+            .set({ status: "cancelled" })
+            .where(eq(bookingOccurrences.bookingId, sub.metadata.bookingId));
+          break;
+        }
+
         await upsertFromSubscription(sub);
         if (event.type === "customer.subscription.deleted") {
           await db

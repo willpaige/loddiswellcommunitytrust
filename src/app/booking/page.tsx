@@ -1,231 +1,135 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ExternalLink } from "lucide-react";
+import { CalendarCheck, Clock, CreditCard } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { SectionLabel } from "@/components/ui/section-label";
+import { BookingForm } from "@/components/booking/booking-form";
+import { BookingReview } from "@/components/booking/booking-review";
 import { getPageContent } from "@/lib/cms/get-page-content";
-import { renderInline, renderRichText } from "@/lib/cms/render";
-import { getFacilities } from "@/actions/facilities";
+import { renderInline } from "@/lib/cms/render";
+import { getPublicBookingData } from "@/actions/bookings";
+import { auth } from "@/lib/auth";
+
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { title, metaDescription } = await getPageContent("booking");
   return {
-    title: title || "Booking",
+    title: title || "Book a Facility",
     description:
       metaDescription ||
-      "Book the Loddiswell Village Hall, Pavilion, or Tennis Courts. Check availability and hire rates for all our community facilities.",
+      "Book the Loddiswell Village Hall, Pavilion, or Tennis Courts online.",
   };
 }
 
-function parseDescription(raw: string | null | undefined) {
-  if (!raw) return undefined;
-  try {
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === "object") return parsed;
-  } catch {
-    return undefined;
-  }
-  return undefined;
-}
-
-export default async function BookingPage() {
-  const [{ blocks, heroImageUrl }, allFacilities] = await Promise.all([
+export default async function BookingPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  const [{ blocks, heroImageUrl }, bookingData, session] = await Promise.all([
     getPageContent("booking"),
-    getFacilities(),
+    getPublicBookingData(),
+    auth(),
   ]);
-
-  const hireFacilities = allFacilities
-    .filter((f) => f.published && f.bookable)
-    .map((facility) => ({
-      name: facility.name,
-      description: facility.description || "",
-      descriptionJson: parseDescription(facility.description),
-      features: facility.features || [],
-      rates: facility.rates
-        ? Object.entries(facility.rates).map(([period, price]) => ({ period, price }))
-        : [],
-      terms: facility.bookingTerms || [],
-      externalBookingUrl: facility.externalBookingUrl || null,
-    }));
+  const pending = pendingBookingFromParams(params);
+  const showReview = Boolean(session?.user?.email && pending);
 
   return (
     <div>
       <PageHeader
-        label={renderInline(blocks.header_label, "Hire Our Spaces")}
+        label={renderInline(blocks.header_label, "Bookings")}
         title={renderInline(blocks.header_title, "Book a Facility")}
         subtitle={renderInline(
           blocks.header_subtitle,
-          "Check availability and hire rates for the Village Hall, Pavilion, and Tennis Courts. Contact us to make a booking."
+          "Choose a venue, confirm availability, and pay securely online."
         )}
         heroImageUrl={heroImageUrl ?? undefined}
       />
 
-      <section className="py-20 sm:py-24 bg-background">
+      <section className="bg-background py-16 sm:py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <SectionLabel>
-            {renderInline(blocks.availability_eyebrow, "Availability")}
-          </SectionLabel>
-          <h2 className="font-serif text-2xl sm:text-3xl mb-6">
-            {renderInline(blocks.availability_title, "Availability Calendar")}
-          </h2>
-          <div className="rounded-lg border border-border overflow-hidden">
-            <iframe
-              src={process.env.NEXT_PUBLIC_HALLMASTER_VENUE_URL ?? "https://v2.hallmaster.co.uk/Scheduler/View/14760?startRoom=0"}
-              title="Facility availability calendar"
-              className="w-full"
-              style={{ height: "800px" }}
-            />
-          </div>
-        </div>
-      </section>
-
-      <section className="py-20 sm:py-24 bg-card">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <SectionLabel>
-            {renderInline(blocks.rates_eyebrow, "Pricing")}
-          </SectionLabel>
-          <h2 className="font-serif text-2xl sm:text-3xl mb-8">
-            {renderInline(blocks.rates_title, "Hire Rates & Terms")}
-          </h2>
-          <div className="space-y-8">
-            {hireFacilities.map((facility) => (
-              <div
-                key={facility.name}
-                className="rounded-lg border border-border bg-background p-8"
-              >
-                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
-                  <div>
-                    <h3 className="font-serif text-xl">{facility.name}</h3>
-                    <div className="mt-1 text-muted-foreground">
-                      {facility.descriptionJson ? (
-                        renderRichText(facility.descriptionJson)
-                      ) : (
-                        <p>{facility.description}</p>
-                      )}
-                    </div>
-                  </div>
-                  {facility.externalBookingUrl && (
-                    <a
-                      href={facility.externalBookingUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 rounded-lg bg-copper-500 px-4 py-2 text-sm font-semibold text-white no-underline hover:bg-copper-600 transition-colors flex-shrink-0"
-                    >
-                      Book Online
-                      <ExternalLink className="h-4 w-4" aria-hidden="true" />
-                    </a>
-                  )}
-                </div>
-
-                {facility.features && facility.features.length > 0 && (
-                  <div className="mb-6">
-                    <h4 className="text-xs font-semibold uppercase tracking-[0.2em] text-copper-500 mb-3">
-                      Features
-                    </h4>
-                    <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {facility.features.map((feature) => (
-                        <li
-                          key={feature}
-                          className="flex items-center gap-2 text-sm text-muted-foreground"
-                        >
-                          <span className="h-2 w-2 rounded-full bg-copper-500 flex-shrink-0" />
-                          {feature}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {(facility.rates.length > 0 || facility.terms.length > 0) && (
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    {facility.rates.length > 0 && (
-                      <div>
-                        <h4 className="text-xs font-semibold uppercase tracking-[0.2em] text-copper-500 mb-3">
-                          Rates
-                        </h4>
-                        <table className="w-full">
-                          <thead>
-                            <tr className="border-b border-border">
-                              <th className="text-left py-2 text-sm font-medium text-foreground">
-                                Period
-                              </th>
-                              <th className="text-right py-2 text-sm font-medium text-foreground">
-                                Price
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {facility.rates.map((rate) => (
-                              <tr
-                                key={rate.period}
-                                className="border-b border-border last:border-0"
-                              >
-                                <td className="py-2 text-sm text-muted-foreground">
-                                  {rate.period}
-                                </td>
-                                <td className="py-2 text-sm text-right font-medium">
-                                  {rate.price}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-
-                    {facility.terms.length > 0 && (
-                      <div>
-                        <h4 className="text-xs font-semibold uppercase tracking-[0.2em] text-copper-500 mb-3">
-                          Terms of Hire
-                        </h4>
-                        <ul className="space-y-2">
-                          {facility.terms.map((term) => (
-                            <li
-                              key={term}
-                              className="flex items-start gap-2 text-sm text-muted-foreground"
-                            >
-                              <span className="h-1.5 w-1.5 rounded-full bg-copper-500 mt-1.5 flex-shrink-0" />
-                              {term}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                )}
+          <SectionLabel>Instant confirmation</SectionLabel>
+          <div className="mb-8 grid gap-4 sm:grid-cols-3">
+            <div className="flex items-start gap-3">
+              <CalendarCheck className="mt-1 h-5 w-5 text-copper-500" aria-hidden="true" />
+              <div>
+                <h2 className="font-medium">Pick a slot</h2>
+                <p className="text-sm text-muted-foreground">
+                  Village Hall, Pavilion, and Tennis Courts are available from one form.
+                </p>
               </div>
-            ))}
+            </div>
+            <div className="flex items-start gap-3">
+              <CreditCard className="mt-1 h-5 w-5 text-copper-500" aria-hidden="true" />
+              <div>
+                <h2 className="font-medium">Pay by card</h2>
+                <p className="text-sm text-muted-foreground">
+                  Stripe handles one-off and monthly recurring payments.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <Clock className="mt-1 h-5 w-5 text-copper-500" aria-hidden="true" />
+              <div>
+                <h2 className="font-medium">Manage online</h2>
+                <p className="text-sm text-muted-foreground">
+                  View bookings and cancel eligible bookings from your account.
+                </p>
+              </div>
+            </div>
           </div>
-        </div>
-      </section>
 
-      <section className="py-20 sm:py-24 bg-sage-800 text-sage-50">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
-          <SectionLabel>
-            {renderInline(blocks.cta_eyebrow, "Support")}
-          </SectionLabel>
-          <h2 className="font-serif text-2xl sm:text-3xl">
-            {renderInline(blocks.cta_title, "Need Help with Your Booking?")}
-          </h2>
-          <div className="mt-3 text-sage-200 max-w-xl mx-auto leading-relaxed">
-            {renderRichText(
-              blocks.cta_body,
-              <p>
-                If you have any questions about hiring our facilities, please
-                don&apos;t hesitate to get in touch.
+          {bookingData.offerings.length > 0 ? (
+            showReview && pending ? (
+              <BookingReview offerings={bookingData.offerings} pending={pending} />
+            ) : (
+              <BookingForm offerings={bookingData.offerings} />
+            )
+          ) : (
+            <div className="rounded-lg border p-8 text-center">
+              <h2 className="font-serif text-2xl">Online booking is being configured</h2>
+              <p className="mt-2 text-muted-foreground">
+                Please contact the Trust while booking options are being added.
               </p>
-            )}
-          </div>
-          <div className="mt-8">
-            <Link
-              href="/contact"
-              className="inline-flex items-center rounded-lg bg-copper-500 px-5 py-3 text-sm font-semibold text-white no-underline hover:bg-copper-600 transition-colors"
-            >
-              Contact Us
-            </Link>
-          </div>
+              <Link className="mt-4 inline-flex text-primary underline" href="/contact">
+                Contact us
+              </Link>
+            </div>
+          )}
         </div>
       </section>
     </div>
   );
+}
+
+function firstParam(
+  params: Record<string, string | string[] | undefined>,
+  key: string
+) {
+  const value = params[key];
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function pendingBookingFromParams(
+  params: Record<string, string | string[] | undefined>
+) {
+  const offeringId = firstParam(params, "offeringId");
+  const date = firstParam(params, "date");
+  const customerGroup = firstParam(params, "customerGroup");
+  const customerName = firstParam(params, "customerName");
+
+  if (!offeringId || !date || !customerGroup || !customerName) return null;
+
+  return {
+    offeringId,
+    date,
+    time: firstParam(params, "time") || undefined,
+    customerGroup,
+    recurrence: firstParam(params, "recurrence") || "none",
+    customerName,
+    customerPhone: firstParam(params, "customerPhone") || undefined,
+    notes: firstParam(params, "notes") || undefined,
+  };
 }

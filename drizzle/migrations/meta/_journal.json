@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1779453839197,
+      "tag": "0000_fresh_silver_fox",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1779455000000,
+      "tag": "0001_bookable_facility_hours",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1779456000000,
+      "tag": "0002_booking_offering_capacity",
+      "breakpoints": true
+    }
+  ]
+}
