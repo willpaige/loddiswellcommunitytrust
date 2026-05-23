@@ -1,15 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Check } from "lucide-react";
-import { createBookingCheckout } from "@/actions/bookings";
-import { bookingHourOptions, customerGroups, money } from "@/lib/bookings";
+import { createBookingCheckout, getAvailableBookingSlots } from "@/actions/bookings";
+import { customerGroups, money } from "@/lib/bookings";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { AvailableDatePicker } from "@/components/booking/available-date-picker";
+import { AvailableTimePicker } from "@/components/booking/available-time-picker";
 
 type OfferingRow = {
   facilityId: string;
@@ -28,7 +30,21 @@ type OfferingRow = {
   amount: number;
 };
 
-export function BookingForm({ offerings }: { offerings: OfferingRow[] }) {
+type AvailableSlot = {
+  date: string;
+  times: string[];
+  endTimesByStart?: Record<string, string[]>;
+};
+
+export function BookingForm({
+  offerings,
+  repeatDiscount,
+  initialDate,
+}: {
+  offerings: OfferingRow[];
+  repeatDiscount: { threshold: number; percent: number };
+  initialDate?: string;
+}) {
   const facilities = useMemo(() => {
     const map = new Map<
       string,
@@ -60,6 +76,14 @@ export function BookingForm({ offerings }: { offerings: OfferingRow[] }) {
   const [offeringId, setOfferingId] = useState(firstOfferingId);
   const [customerGroup, setCustomerGroup] = useState<(typeof customerGroups)[number]["value"]>("parent_private");
   const [recurring, setRecurring] = useState(false);
+  const [repeatPaymentMode, setRepeatPaymentMode] = useState<"subscription" | "upfront">("subscription");
+  const [repeatCount, setRepeatCount] = useState(repeatDiscount.threshold);
+  const [promoteOnSite, setPromoteOnSite] = useState(false);
+  const [slots, setSlots] = useState<AvailableSlot[]>([]);
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
+  const [endTime, setEndTime] = useState("");
+  const [loadingSlots, setLoadingSlots] = useState(false);
 
   const selectedOffering =
     facilityOfferings.find((offering) => offering.offeringId === offeringId) ||
@@ -70,24 +94,61 @@ export function BookingForm({ offerings }: { offerings: OfferingRow[] }) {
       offering.customerGroup === customerGroup
   );
   const selectedFacility = facilities.find((facility) => facility.id === facilityId);
-  const filteredHourOptions = bookingHourOptions.filter((option) => {
-    if (!selectedOffering || !selectedFacility) return true;
-    const optionHour = Number(option.value.slice(0, 2));
-    const startHour = Number(selectedFacility.bookableStartTime.slice(0, 2));
-    const endHour = Number(selectedFacility.bookableEndTime.slice(0, 2));
-    const durationHours = selectedOffering.durationMinutes / 60;
-    return optionHour >= startHour && optionHour + durationHours <= endHour;
-  });
+  const selectedDateSlot = slots.find((slot) => slot.date === date);
+  const availableTimes = selectedDateSlot?.times ?? [];
+  const availableEndTimes = selectedDateSlot?.endTimesByStart?.[time] ?? [];
+  const hasAvailability = slots.length > 0;
+  const selectedHours =
+    time && endTime ? Math.max(1, Number(endTime.slice(0, 2)) - Number(time.slice(0, 2))) : 1;
+  const displayAmount = selectedPrice
+    ? selectedPrice.amount * (selectedOffering?.startTime ? 1 : selectedHours)
+    : 0;
+  const repeatDiscountApplies =
+    recurring &&
+    repeatPaymentMode === "upfront" &&
+    repeatDiscount.percent > 0 &&
+    repeatCount >= repeatDiscount.threshold;
+  const recurringSubtotal = displayAmount * 4;
+  const upfrontSubtotal = displayAmount * repeatCount;
+  const recurringDiscountAmount = repeatDiscountApplies
+    ? Math.round(upfrontSubtotal * repeatDiscount.percent / 100)
+    : 0;
+  const totalAmount = recurring
+    ? repeatPaymentMode === "upfront"
+      ? upfrontSubtotal - recurringDiscountAmount
+      : recurringSubtotal
+    : displayAmount;
+
+  useEffect(() => {
+    if (!offeringId) return;
+    let cancelled = false;
+    setLoadingSlots(true);
+    getAvailableBookingSlots(offeringId)
+      .then((nextSlots) => {
+        if (cancelled) return;
+        const initialSlot = initialDate
+          ? nextSlots.find((slot) => slot.date === initialDate)
+          : undefined;
+        const firstSlot = initialSlot ?? nextSlots[0];
+        const firstTime = firstSlot?.times[0] ?? "";
+        setSlots(nextSlots);
+        setDate(firstSlot?.date ?? "");
+        setTime(firstTime);
+        setEndTime(firstSlot?.endTimesByStart?.[firstTime]?.[0] ?? "");
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingSlots(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [offeringId, initialDate]);
 
   function handleFacilityChange(value: string) {
     setFacilityId(value);
     const next = offerings.find((offering) => offering.facilityId === value);
     setOfferingId(next?.offeringId || "");
   }
-
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const minDate = tomorrow.toISOString().slice(0, 10);
 
   return (
     <form action={createBookingCheckout} className="grid gap-6 lg:grid-cols-[1fr_22rem]">
@@ -169,31 +230,51 @@ export function BookingForm({ offerings }: { offerings: OfferingRow[] }) {
           </div>
 
           <div className="grid gap-4 sm:grid-cols-3">
-            <div className="space-y-2">
-              <Label htmlFor="date">Date</Label>
-              <Input id="date" name="date" type="date" min={minDate} required />
+            <div className="space-y-2 sm:col-span-2">
+              <Label>Date</Label>
+              <input type="hidden" name="date" value={date} required />
+              <AvailableDatePicker
+                slots={slots}
+                value={date}
+                disabled={loadingSlots || !hasAvailability}
+                onChange={(nextDate) => {
+                  const nextSlot = slots.find((slot) => slot.date === nextDate);
+                  const nextTime = nextSlot?.times[0] ?? "";
+                  setDate(nextDate);
+                  setTime(nextTime);
+                  setEndTime(nextSlot?.endTimesByStart?.[nextTime]?.[0] ?? "");
+                }}
+              />
             </div>
             {!selectedOffering?.startTime && (
               <div className="space-y-2">
-                <Label htmlFor="time">Start time</Label>
-                <select
-                  key={`${facilityId}-${selectedOffering?.offeringId || "none"}`}
-                  id="time"
+                <Label>Start time</Label>
+                <AvailableTimePicker
                   name="time"
-                  required
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                  defaultValue={
-                    filteredHourOptions.some((option) => option.value === "09:00")
-                      ? "09:00"
-                      : filteredHourOptions[0]?.value
-                  }
-                >
-                  {filteredHourOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                  value={time}
+                  availableTimes={availableTimes}
+                  startTime={selectedFacility?.bookableStartTime ?? "08:00"}
+                  endTime={selectedFacility?.bookableEndTime ?? "23:00"}
+                  disabled={loadingSlots || availableTimes.length === 0}
+                  onChange={(nextTime) => {
+                    setTime(nextTime);
+                    setEndTime(selectedDateSlot?.endTimesByStart?.[nextTime]?.[0] ?? "");
+                  }}
+                />
+              </div>
+            )}
+            {!selectedOffering?.startTime && (
+              <div className="space-y-2">
+                <Label>End time</Label>
+                <AvailableTimePicker
+                  name="endTime"
+                  value={endTime}
+                  availableTimes={availableEndTimes}
+                  startTime={time || selectedFacility?.bookableStartTime || "08:00"}
+                  endTime={selectedFacility?.bookableEndTime ?? "23:00"}
+                  disabled={loadingSlots || availableEndTimes.length === 0}
+                  onChange={setEndTime}
+                />
               </div>
             )}
             <div className="space-y-2">
@@ -202,9 +283,11 @@ export function BookingForm({ offerings }: { offerings: OfferingRow[] }) {
                 id="customerGroup"
                 name="customerGroup"
                 value={customerGroup}
-                onChange={(event) =>
-                  setCustomerGroup(event.target.value as (typeof customerGroups)[number]["value"])
-                }
+                onChange={(event) => {
+                  const nextGroup = event.target.value as (typeof customerGroups)[number]["value"];
+                  setCustomerGroup(nextGroup);
+                  if (nextGroup !== "team_community") setPromoteOnSite(false);
+                }}
                 className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               >
                 {customerGroups.map((group) => (
@@ -216,17 +299,121 @@ export function BookingForm({ offerings }: { offerings: OfferingRow[] }) {
             </div>
           </div>
 
+          {customerGroup === "team_community" && (
+            <div className="space-y-3 rounded-md border p-4">
+              <div className="flex items-start gap-3">
+                <Checkbox
+                  id="promoteOnSite"
+                  name="promoteOnSite"
+                  checked={promoteOnSite}
+                  onCheckedChange={(checked) => setPromoteOnSite(checked === true)}
+                />
+                <div>
+                  <Label htmlFor="promoteOnSite" className="font-normal">
+                    Promote this booking on the website
+                  </Label>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Once confirmed, this will add an event entry to the Events page and public
+                    calendar.
+                  </p>
+                </div>
+              </div>
+              {promoteOnSite && (
+                <div className="space-y-2">
+                  <Label htmlFor="promotionUrl">More info link</Label>
+                  <Input
+                    id="promotionUrl"
+                    name="promotionUrl"
+                    type="url"
+                    required={promoteOnSite}
+                    placeholder="https://..."
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="flex items-center gap-3 rounded-md border p-3">
             <Checkbox
               id="recurring"
               checked={recurring}
-              onCheckedChange={(checked) => setRecurring(checked === true)}
+              onCheckedChange={(checked) => {
+                const nextRecurring = checked === true;
+                setRecurring(nextRecurring);
+                if (!nextRecurring) setRepeatPaymentMode("subscription");
+              }}
             />
             <Label htmlFor="recurring" className="font-normal">
-              Repeat weekly and pay monthly
+              Repeat weekly
             </Label>
             <input type="hidden" name="recurrence" value={recurring ? "weekly" : "none"} />
           </div>
+          {recurring && (
+            <div className="space-y-4 rounded-md border p-4">
+              <input type="hidden" name="repeatPaymentMode" value={repeatPaymentMode} />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setRepeatPaymentMode("subscription")}
+                  className={[
+                    "rounded-md border p-3 text-left transition",
+                    repeatPaymentMode === "subscription"
+                      ? "border-copper-500 bg-copper-50"
+                      : "hover:border-copper-300",
+                  ].join(" ")}
+                >
+                  <span className="block font-medium">Pay monthly</span>
+                  <span className="mt-1 block text-sm text-muted-foreground">
+                    Ongoing monthly subscription for regular bookings.
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRepeatPaymentMode("upfront")}
+                  className={[
+                    "rounded-md border p-3 text-left transition",
+                    repeatPaymentMode === "upfront"
+                      ? "border-copper-500 bg-copper-50"
+                      : "hover:border-copper-300",
+                  ].join(" ")}
+                >
+                  <span className="block font-medium">Pay upfront</span>
+                  <span className="mt-1 block text-sm text-muted-foreground">
+                    Book {repeatDiscount.threshold}+ sessions now for {repeatDiscount.percent}% off.
+                  </span>
+                </button>
+              </div>
+
+              {repeatPaymentMode === "upfront" && (
+                <div className="grid gap-3 sm:grid-cols-[12rem_1fr]">
+                  <div className="space-y-2">
+                    <Label htmlFor="repeatCount">Weekly sessions</Label>
+                    <Input
+                      id="repeatCount"
+                      name="repeatCount"
+                      type="number"
+                      min="2"
+                      max="52"
+                      step="1"
+                      value={repeatCount}
+                      onChange={(event) =>
+                        setRepeatCount(
+                          Math.max(2, Math.min(52, Math.round(Number(event.target.value) || 2)))
+                        )
+                      }
+                    />
+                  </div>
+                  {repeatDiscount.percent > 0 && (
+                    <p className="self-end rounded-md bg-copper-50 px-3 py-2 text-sm text-copper-900">
+                      {repeatCount >= repeatDiscount.threshold
+                        ? `${repeatDiscount.percent}% discount applied automatically.`
+                        : `Book ${repeatDiscount.threshold}+ repeat sessions to get ${repeatDiscount.percent}% off.`}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
@@ -257,7 +444,9 @@ export function BookingForm({ offerings }: { offerings: OfferingRow[] }) {
             <p className="text-sm text-muted-foreground">
               {selectedOffering?.startTime
                 ? `${selectedOffering.startTime} to ${selectedOffering.endTime}`
-                : `${selectedOffering?.durationMinutes || 60} minutes`}
+                : time && endTime
+                  ? `${time} to ${endTime}`
+                  : `${selectedOffering?.durationMinutes || 60} minutes`}
             </p>
             {selectedFacility && (
               <p className="mt-1 text-xs text-muted-foreground">
@@ -268,15 +457,39 @@ export function BookingForm({ offerings }: { offerings: OfferingRow[] }) {
           </div>
           <div className="rounded-md bg-muted p-4">
             <p className="text-sm text-muted-foreground">
-              {recurring ? "Monthly subscription" : "Card payment today"}
+              {recurring
+                ? repeatPaymentMode === "upfront"
+                  ? "Card payment today"
+                  : "Monthly subscription"
+                : "Card payment today"}
             </p>
+            {recurringDiscountAmount > 0 && (
+              <p className="mt-2 text-sm text-muted-foreground">
+                Subtotal {money(upfrontSubtotal)} · repeat discount -{money(recurringDiscountAmount)}
+              </p>
+            )}
+            {recurring && repeatPaymentMode === "subscription" && (
+              <p className="mt-2 text-sm text-muted-foreground">
+                Billed monthly for weekly bookings.
+              </p>
+            )}
+            {recurring && repeatPaymentMode === "upfront" && (
+              <p className="mt-2 text-sm text-muted-foreground">
+                {repeatCount} weekly sessions paid upfront.
+              </p>
+            )}
             <p className="mt-1 text-2xl font-semibold">
-              {selectedPrice ? money(recurring ? selectedPrice.amount * 4 : selectedPrice.amount) : "—"}
+              {selectedPrice ? money(totalAmount) : "—"}
             </p>
           </div>
-          <Button type="submit" className="w-full">
-            Continue to payment
+          <Button type="submit" className="w-full" disabled={loadingSlots || !hasAvailability}>
+            {loadingSlots ? "Checking availability..." : "Continue to payment"}
           </Button>
+          {!loadingSlots && !hasAvailability && (
+            <p className="text-sm text-destructive">
+              No available dates for this booking type.
+            </p>
+          )}
           <p className="text-xs text-muted-foreground">
             Online cancellations are available up to 48 hours before the booking.
           </p>

@@ -92,6 +92,7 @@ export const events = pgTable("events", {
   endDate: timestamp("end_date", { mode: "date" }),
   allDay: boolean("all_day").default(false),
   imageUrl: text("image_url"),
+  externalUrl: text("external_url"),
   published: boolean("published").default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -282,7 +283,7 @@ export const bookingPrices = pgTable("booking_prices", {
     .notNull()
     .references(() => bookingOfferings.id, { onDelete: "cascade" }),
   customerGroup: text("customer_group", {
-    enum: ["resident", "parent_private", "team_community", "business"],
+    enum: ["parent_private", "team_community", "business"],
   }).notNull(),
   amount: integer("amount").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -301,7 +302,7 @@ export const bookings = pgTable(
       .references(() => facilities.id, { onDelete: "restrict" }),
     offeringId: text("offering_id").references(() => bookingOfferings.id, { onDelete: "set null" }),
     customerGroup: text("customer_group", {
-      enum: ["resident", "parent_private", "team_community", "business"],
+      enum: ["parent_private", "team_community", "business"],
     }).notNull(),
     customerName: text("customer_name").notNull(),
     customerEmail: text("customer_email").notNull(),
@@ -317,6 +318,11 @@ export const bookings = pgTable(
     startDate: timestamp("start_date", { mode: "date" }).notNull(),
     endDate: timestamp("end_date", { mode: "date" }).notNull(),
     recurrence: text("recurrence", { enum: ["none", "weekly"] }).notNull().default("none"),
+    promoteOnSite: boolean("promote_on_site").notNull().default(false),
+    promotionUrl: text("promotion_url"),
+    promotionEventId: text("promotion_event_id").references(() => events.id, {
+      onDelete: "set null",
+    }),
     stripeCheckoutSessionId: text("stripe_checkout_session_id").unique(),
     stripePaymentIntentId: text("stripe_payment_intent_id"),
     stripeSubscriptionId: text("stripe_subscription_id").unique(),
@@ -366,6 +372,7 @@ export const bookingBlocks = pgTable(
       .notNull()
       .references(() => facilities.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
+    eventId: text("event_id").references(() => events.id, { onDelete: "cascade" }),
     startDate: timestamp("start_date", { mode: "date" }).notNull(),
     endDate: timestamp("end_date", { mode: "date" }).notNull(),
     notes: text("notes"),
@@ -388,6 +395,8 @@ export const siteSettings = pgTable("site_settings", {
   pavilionAddress: text("pavilion_address"),
   bookingsPhoneNumber: text("bookings_phone_number"),
   phoneNumber: text("phone_number"),
+  repeatBookingDiscountThreshold: integer("repeat_booking_discount_threshold").notNull().default(8),
+  repeatBookingDiscountPercent: integer("repeat_booking_discount_percent").notNull().default(15),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
   updatedBy: text("updated_by").references(() => users.id),
 });

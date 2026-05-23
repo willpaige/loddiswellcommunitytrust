@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import { EventForm } from "@/components/admin/event-form";
-import { getEvent, updateEvent } from "@/actions/events";
+import { getEvent, getEventFacilityOptions, updateEvent } from "@/actions/events";
 import { Button } from "@/components/ui/button";
 
 type Props = {
@@ -11,7 +11,10 @@ type Props = {
 
 export default async function EditEventPage({ params }: Props) {
   const { id } = await params;
-  const event = await getEvent(id);
+  const [event, facilities] = await Promise.all([
+    getEvent(id),
+    getEventFacilityOptions(),
+  ]);
 
   if (!event) {
     notFound();
@@ -31,7 +34,7 @@ export default async function EditEventPage({ params }: Props) {
         </Link>
       </Button>
       <h1 className="text-3xl font-bold mb-8">Edit Event</h1>
-      <EventForm action={handleUpdate} initialData={event} />
+      <EventForm action={handleUpdate} initialData={event} facilities={facilities} />
     </div>
   );
 }

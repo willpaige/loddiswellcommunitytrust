@@ -22,6 +22,27 @@
       "when": 1779456000000,
       "tag": "0002_booking_offering_capacity",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1779457000000,
+      "tag": "0003_event_booking_blocks",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1779458000000,
+      "tag": "0004_booking_promotion_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1779459000000,
+      "tag": "0005_repeat_booking_discount_settings",
+      "breakpoints": true
     }
   ]
 }

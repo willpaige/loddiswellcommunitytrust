@@ -13,6 +13,7 @@ import { Separator } from "@/components/ui/separator";
 
 interface EventFormProps {
   action: (formData: FormData) => Promise<void>;
+  facilities?: Array<{ id: string; name: string }>;
   initialData?: {
     title: string;
     description: string;
@@ -21,11 +22,13 @@ interface EventFormProps {
     endDate: Date | null;
     allDay: boolean | null;
     imageUrl: string | null;
+    externalUrl?: string | null;
     published: boolean | null;
+    blockFacilityId?: string | null;
   };
 }
 
-export function EventForm({ action, initialData }: EventFormProps) {
+export function EventForm({ action, facilities = [], initialData }: EventFormProps) {
   const [description, setDescription] = useState(
     initialData?.description || "{}"
   );
@@ -108,6 +111,17 @@ export function EventForm({ action, initialData }: EventFormProps) {
           </div>
 
           <div className="space-y-2">
+            <Label htmlFor="externalUrl">More info link</Label>
+            <Input
+              id="externalUrl"
+              name="externalUrl"
+              type="url"
+              defaultValue={initialData?.externalUrl || ""}
+              placeholder="https://..."
+            />
+          </div>
+
+          <div className="space-y-2">
             <Label>Image</Label>
             <ImageUploadInput
               value={imageUrl || null}
@@ -115,6 +129,41 @@ export function EventForm({ action, initialData }: EventFormProps) {
               folder="events"
               helpText="Optional. Shown alongside the event on the public Events page."
             />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Booking availability</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-3">
+            <Checkbox
+              id="blockBookings"
+              name="blockBookings"
+              defaultChecked={Boolean(initialData?.blockFacilityId)}
+            />
+            <Label htmlFor="blockBookings" className="font-normal">
+              Prevent bookings for a venue during this event
+            </Label>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="blockFacilityId">Venue to block</Label>
+            <select
+              id="blockFacilityId"
+              name="blockFacilityId"
+              defaultValue={initialData?.blockFacilityId ?? ""}
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+            >
+              <option value="">Choose a venue</option>
+              {facilities.map((facility) => (
+                <option key={facility.id} value={facility.id}>
+                  {facility.name}
+                </option>
+              ))}
+            </select>
           </div>
         </CardContent>
       </Card>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { db } from "@/lib/db";
 import { bookingOccurrences, bookings, lotteryTickets } from "@/lib/db/schema";
+import { createPromotionEventForBooking } from "@/actions/bookings";
 import { eq } from "drizzle-orm";
 import { addYears } from "date-fns";
 import Stripe from "stripe";
@@ -166,6 +167,7 @@ export async function POST(req: NextRequest) {
             .update(bookingOccurrences)
             .set({ status: "confirmed" })
             .where(eq(bookingOccurrences.bookingId, session.metadata.bookingId));
+          await createPromotionEventForBooking(session.metadata.bookingId);
           break;
         }
 

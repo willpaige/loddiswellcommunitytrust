@@ -7,8 +7,14 @@ export default async function AccountLoginPage({
 }) {
   const params = await searchParams;
   return (
-    <main className="flex min-h-screen items-center bg-sage-800 px-4 py-16">
-      <div className="mx-auto w-full max-w-sm">
+    <main className="relative flex min-h-screen items-center overflow-hidden bg-sage-800 px-4 py-16">
+      <div
+        className="absolute inset-0 bg-cover bg-center"
+        style={{ backgroundImage: "url('/hero-bg.jpg')" }}
+        aria-hidden="true"
+      />
+      <div className="absolute inset-0 bg-sage-900/75" aria-hidden="true" />
+      <div className="relative mx-auto w-full max-w-sm">
         <p className="mb-6 text-center font-serif text-3xl tracking-tight text-white">
           Loddiswell Community Trust
         </p>

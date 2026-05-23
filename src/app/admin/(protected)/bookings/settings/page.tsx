@@ -2,6 +2,7 @@ import { Ban, Pencil } from "lucide-react";
 import {
   createBookingBlock,
   getAdminBookingSetup,
+  updateRepeatBookingDiscount,
   updateFacilityBookableHours,
 } from "@/actions/bookings";
 import { bookingHourOptions } from "@/lib/bookings";
@@ -34,6 +35,49 @@ export default async function AdminBookingSettingsPage() {
       </div>
 
       <div className="grid gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Repeat booking discount</CardTitle>
+            <CardDescription>
+              Advertised on weekly repeat bookings and applied automatically at checkout.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form action={updateRepeatBookingDiscount} className="grid gap-4 sm:grid-cols-3">
+              <div className="space-y-2">
+                <Label htmlFor="repeatThreshold">Bookings required</Label>
+                <Input
+                  id="repeatThreshold"
+                  name="threshold"
+                  type="number"
+                  min="1"
+                  step="1"
+                  defaultValue={setup.repeatDiscount.threshold}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="repeatPercent">Discount percent</Label>
+                <Input
+                  id="repeatPercent"
+                  name="percent"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="1"
+                  defaultValue={setup.repeatDiscount.percent}
+                  required
+                />
+              </div>
+              <div className="flex items-end">
+                <Button type="submit" variant="outline">
+                  Save discount
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle>Bookable times</CardTitle>

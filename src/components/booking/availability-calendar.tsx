@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   eachDayOfInterval,
   endOfMonth,
@@ -22,24 +23,33 @@ export type AvailabilityCalendarItem = {
   startDate: Date;
   endDate: Date;
   status: string;
-  type: "booking" | "block";
+  type: "booking" | "block" | "event";
 };
 
 type ManualBookingOffering = {
   offeringId: string;
   offeringName: string;
   facilityName: string;
+  facilityBookableStartTime?: string;
+  facilityBookableEndTime?: string;
 };
 
 export function AvailabilityCalendar({
   items,
   manualBookingOfferings = [],
   month = new Date(),
+  title,
+  description,
+  publicBookingHref,
 }: {
   items: AvailabilityCalendarItem[];
   manualBookingOfferings?: ManualBookingOffering[];
   month?: Date;
+  title?: string;
+  description?: string;
+  publicBookingHref?: string;
 }) {
+  const router = useRouter();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
   const [manualBookingOpen, setManualBookingOpen] = useState(false);
   const monthStart = startOfMonth(month);
@@ -57,9 +67,9 @@ export function AvailabilityCalendar({
         showTrigger={false}
       />
       <CardHeader>
-        <CardTitle>{format(monthStart, "MMMM yyyy")}</CardTitle>
+        <CardTitle>{title || format(monthStart, "MMMM yyyy")}</CardTitle>
         <CardDescription>
-          Confirmed bookings and blocked-out venue times.
+          {description || "Confirmed bookings and blocked-out venue times."}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -79,18 +89,27 @@ export function AvailabilityCalendar({
                 key={day.toISOString()}
                 type="button"
                 onClick={() => {
-                  if (manualBookingOfferings.length === 0) return;
-                  setSelectedDate(day);
-                  setManualBookingOpen(true);
+                  if (manualBookingOfferings.length > 0) {
+                    setSelectedDate(day);
+                    setManualBookingOpen(true);
+                    return;
+                  }
+                  if (publicBookingHref) {
+                    router.push(`${publicBookingHref}?date=${format(day, "yyyy-MM-dd")}`);
+                  }
                 }}
                 className="group min-h-32 border-b border-r p-2 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label={`Add booking on ${format(day, "d MMMM yyyy")}`}
+                aria-label={
+                  manualBookingOfferings.length > 0 || publicBookingHref
+                    ? `Add booking on ${format(day, "d MMMM yyyy")}`
+                    : format(day, "d MMMM yyyy")
+                }
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className={outsideMonth ? "text-muted-foreground/50" : ""}>
                     {format(day, "d")}
                   </span>
-                  {manualBookingOfferings.length > 0 && (
+                  {(manualBookingOfferings.length > 0 || publicBookingHref) && (
                     <span className="flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground opacity-0 transition-opacity hover:bg-background group-hover:opacity-100">
                       <Plus className="h-3.5 w-3.5" aria-hidden="true" />
                     </span>
@@ -108,7 +127,11 @@ export function AvailabilityCalendar({
                           variant={item.type === "block" ? "outline" : "secondary"}
                           className="px-1.5"
                         >
-                          {item.type === "block" ? "Block" : item.status}
+                          {item.type === "block"
+                            ? "Block"
+                            : item.type === "event"
+                              ? "Event"
+                              : item.status}
                         </Badge>
                       </div>
                       <div className="mt-1 truncate text-muted-foreground">

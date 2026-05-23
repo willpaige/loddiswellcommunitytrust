@@ -35,6 +35,33 @@ export default async function BookingPage({
   ]);
   const pending = pendingBookingFromParams(params);
   const showReview = Boolean(session?.user?.email && pending);
+  const initialDate = firstParam(params, "date");
+
+  if (showReview && pending) {
+    return (
+      <>
+        <style>{`header[role="banner"], footer, .newsletter-signup { display: none; } #main-content { padding: 0; }`}</style>
+        <main className="relative flex min-h-screen items-center overflow-hidden bg-sage-800 px-4 py-16">
+          <div
+            className="absolute inset-0 bg-cover bg-center"
+            style={{ backgroundImage: "url('/hero-bg.jpg')" }}
+            aria-hidden="true"
+          />
+          <div className="absolute inset-0 bg-sage-900/75" aria-hidden="true" />
+          <div className="relative mx-auto w-full max-w-2xl">
+            <p className="mb-6 text-center font-serif text-3xl tracking-tight text-white">
+              Loddiswell Community Trust
+            </p>
+            <BookingReview
+              offerings={bookingData.offerings}
+              pending={pending}
+              repeatDiscount={bookingData.repeatDiscount}
+            />
+          </div>
+        </main>
+      </>
+    );
+  }
 
   return (
     <div>
@@ -50,42 +77,54 @@ export default async function BookingPage({
 
       <section className="bg-background py-16 sm:py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <SectionLabel>Instant confirmation</SectionLabel>
-          <div className="mb-8 grid gap-4 sm:grid-cols-3">
-            <div className="flex items-start gap-3">
-              <CalendarCheck className="mt-1 h-5 w-5 text-copper-500" aria-hidden="true" />
-              <div>
-                <h2 className="font-medium">Pick a slot</h2>
-                <p className="text-sm text-muted-foreground">
-                  Village Hall, Pavilion, and Tennis Courts are available from one form.
-                </p>
+          {!showReview && (
+            <>
+              <SectionLabel>Instant confirmation</SectionLabel>
+              <div className="mb-8 grid gap-4 sm:grid-cols-3">
+                <div className="flex items-start gap-3">
+                  <CalendarCheck className="mt-1 h-5 w-5 text-copper-500" aria-hidden="true" />
+                  <div>
+                    <h2 className="font-medium">Pick a slot</h2>
+                    <p className="text-sm text-muted-foreground">
+                      Village Hall, Pavilion, and Tennis Courts are available from one form.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <CreditCard className="mt-1 h-5 w-5 text-copper-500" aria-hidden="true" />
+                  <div>
+                    <h2 className="font-medium">Pay by card</h2>
+                    <p className="text-sm text-muted-foreground">
+                      Stripe handles one-off and monthly recurring payments.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <Clock className="mt-1 h-5 w-5 text-copper-500" aria-hidden="true" />
+                  <div>
+                    <h2 className="font-medium">Manage online</h2>
+                    <p className="text-sm text-muted-foreground">
+                      View bookings and cancel eligible bookings from your account.
+                    </p>
+                  </div>
+                </div>
               </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <CreditCard className="mt-1 h-5 w-5 text-copper-500" aria-hidden="true" />
-              <div>
-                <h2 className="font-medium">Pay by card</h2>
-                <p className="text-sm text-muted-foreground">
-                  Stripe handles one-off and monthly recurring payments.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <Clock className="mt-1 h-5 w-5 text-copper-500" aria-hidden="true" />
-              <div>
-                <h2 className="font-medium">Manage online</h2>
-                <p className="text-sm text-muted-foreground">
-                  View bookings and cancel eligible bookings from your account.
-                </p>
-              </div>
-            </div>
-          </div>
+            </>
+          )}
 
           {bookingData.offerings.length > 0 ? (
             showReview && pending ? (
-              <BookingReview offerings={bookingData.offerings} pending={pending} />
+              <BookingReview
+                offerings={bookingData.offerings}
+                pending={pending}
+                repeatDiscount={bookingData.repeatDiscount}
+              />
             ) : (
-              <BookingForm offerings={bookingData.offerings} />
+              <BookingForm
+                offerings={bookingData.offerings}
+                repeatDiscount={bookingData.repeatDiscount}
+                initialDate={initialDate}
+              />
             )
           ) : (
             <div className="rounded-lg border p-8 text-center">
@@ -126,10 +165,15 @@ function pendingBookingFromParams(
     offeringId,
     date,
     time: firstParam(params, "time") || undefined,
+    endTime: firstParam(params, "endTime") || undefined,
     customerGroup,
     recurrence: firstParam(params, "recurrence") || "none",
+    repeatPaymentMode: firstParam(params, "repeatPaymentMode") || "subscription",
+    repeatCount: firstParam(params, "repeatCount") || undefined,
     customerName,
     customerPhone: firstParam(params, "customerPhone") || undefined,
     notes: firstParam(params, "notes") || undefined,
+    promoteOnSite: firstParam(params, "promoteOnSite") || undefined,
+    promotionUrl: firstParam(params, "promotionUrl") || undefined,
   };
 }

@@ -1,9 +1,12 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { CalendarPlus } from "lucide-react";
 import { format } from "date-fns";
-import { createManualBooking } from "@/actions/bookings";
-import { bookingHourOptions, customerGroups } from "@/lib/bookings";
+import { createManualBooking, getAvailableBookingSlots } from "@/actions/bookings";
+import { customerGroups } from "@/lib/bookings";
+import { AvailableDatePicker } from "@/components/booking/available-date-picker";
+import { AvailableTimePicker } from "@/components/booking/available-time-picker";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -20,6 +23,14 @@ type ManualBookingOffering = {
   offeringId: string;
   offeringName: string;
   facilityName: string;
+  facilityBookableStartTime?: string;
+  facilityBookableEndTime?: string;
+};
+
+type AvailableSlot = {
+  date: string;
+  times: string[];
+  endTimesByStart?: Record<string, string[]>;
 };
 
 export function ManualBookingDialog({
@@ -36,6 +47,43 @@ export function ManualBookingDialog({
   showTrigger?: boolean;
 }) {
   const formattedDefaultDate = defaultDate ? format(defaultDate, "yyyy-MM-dd") : "";
+  const [offeringId, setOfferingId] = useState(offerings[0]?.offeringId ?? "");
+  const [slots, setSlots] = useState<AvailableSlot[]>([]);
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
+  const [endTime, setEndTime] = useState("");
+  const [loadingSlots, setLoadingSlots] = useState(false);
+  const selectedDateSlot = slots.find((slot) => slot.date === date);
+  const availableTimes = selectedDateSlot?.times ?? [];
+  const availableEndTimes = selectedDateSlot?.endTimesByStart?.[time] ?? [];
+  const selectedOffering = offerings.find((offering) => offering.offeringId === offeringId);
+  const bookableStartTime = selectedOffering?.facilityBookableStartTime ?? "08:00";
+  const bookableEndTime = selectedOffering?.facilityBookableEndTime ?? "23:00";
+
+  useEffect(() => {
+    if (!offeringId) return;
+    let cancelled = false;
+    setLoadingSlots(true);
+    getAvailableBookingSlots(offeringId)
+      .then((nextSlots) => {
+        if (cancelled) return;
+        setSlots(nextSlots);
+        const matchingDefault = nextSlots.find(
+          (slot) => slot.date === formattedDefaultDate
+        );
+        const firstSlot = matchingDefault ?? nextSlots[0];
+        const firstTime = firstSlot?.times[0] ?? "";
+        setDate(firstSlot?.date ?? "");
+        setTime(firstTime);
+        setEndTime(firstSlot?.endTimesByStart?.[firstTime]?.[0] ?? "");
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingSlots(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [offeringId, formattedDefaultDate]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -65,6 +113,8 @@ export function ManualBookingDialog({
             <select
               id="manualOffering"
               name="offeringId"
+              value={offeringId}
+              onChange={(event) => setOfferingId(event.target.value)}
               className="h-10 w-full rounded-md border bg-background px-3 text-sm"
             >
               {offerings.map((offering) => (
@@ -75,31 +125,50 @@ export function ManualBookingDialog({
             </select>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="manualDate">Date</Label>
-            <Input
-              id="manualDate"
-              name="date"
-              type="date"
-              defaultValue={formattedDefaultDate}
-              required
+          <div className="space-y-2 sm:col-span-2">
+            <Label>Date</Label>
+            <input type="hidden" name="date" value={date} required />
+            <AvailableDatePicker
+              slots={slots}
+              value={date}
+              disabled={loadingSlots || slots.length === 0}
+              onChange={(nextDate) => {
+                const nextSlot = slots.find((slot) => slot.date === nextDate);
+                const nextTime = nextSlot?.times[0] ?? "";
+                setDate(nextDate);
+                setTime(nextTime);
+                setEndTime(nextSlot?.endTimesByStart?.[nextTime]?.[0] ?? "");
+              }}
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="manualTime">Start time</Label>
-            <select
-              id="manualTime"
+            <Label>Start time</Label>
+            <AvailableTimePicker
               name="time"
-              className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-              defaultValue="09:00"
-            >
-              {bookingHourOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+              value={time}
+              availableTimes={availableTimes}
+              startTime={bookableStartTime}
+              endTime={bookableEndTime}
+              disabled={loadingSlots || availableTimes.length === 0}
+              onChange={(nextTime) => {
+                setTime(nextTime);
+                setEndTime(selectedDateSlot?.endTimesByStart?.[nextTime]?.[0] ?? "");
+              }}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>End time</Label>
+            <AvailableTimePicker
+              name="endTime"
+              value={endTime}
+              availableTimes={availableEndTimes}
+              startTime={time || bookableStartTime}
+              endTime={bookableEndTime}
+              disabled={loadingSlots || availableEndTimes.length === 0}
+              onChange={setEndTime}
+            />
           </div>
 
           <div className="space-y-2">
@@ -140,8 +209,15 @@ export function ManualBookingDialog({
           </div>
 
           <div className="flex justify-end sm:col-span-2">
-            <Button type="submit">Create booking</Button>
+            <Button type="submit" disabled={loadingSlots || slots.length === 0}>
+              {loadingSlots ? "Checking availability..." : "Create booking"}
+            </Button>
           </div>
+          {!loadingSlots && slots.length === 0 && (
+            <p className="text-sm text-destructive sm:col-span-2">
+              No available dates for this booking type.
+            </p>
+          )}
         </form>
       </DialogContent>
     </Dialog>

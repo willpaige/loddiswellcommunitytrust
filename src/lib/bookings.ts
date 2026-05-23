@@ -1,6 +1,5 @@
 export const customerGroups = [
-  { value: "resident", label: "Village resident" },
-  { value: "parent_private", label: "Parent / private booking" },
+  { value: "parent_private", label: "Private" },
   { value: "team_community", label: "Team / community group" },
   { value: "business", label: "Business" },
 ] as const;
