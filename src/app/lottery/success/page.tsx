@@ -6,7 +6,16 @@ export const metadata: Metadata = {
   title: "Subscription confirmed",
 };
 
-export default function LotterySuccessPage() {
+export default async function LotterySuccessPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ source?: string }>;
+}) {
+  const params = await searchParams;
+  const signedUpFromShow = params.source === "show";
+  const ctaHref = signedUpFromShow ? "/lottery/show" : "/";
+  const ctaLabel = signedUpFromShow ? "Back to Show Signup" : "Back to Home";
+
   return (
     <div>
       <section className="bg-sage-800 pt-36 sm:pt-40 pb-20 sm:pb-24">
@@ -41,10 +50,10 @@ export default function LotterySuccessPage() {
           </p>
           <div className="mt-8">
             <Link
-              href="/"
+              href={ctaHref}
               className="inline-flex items-center rounded-sm bg-sage-600 px-5 py-3 text-sm font-medium tracking-wide text-white no-underline hover:bg-sage-700 transition-colors"
             >
-              Back to Home
+              {ctaLabel}
             </Link>
           </div>
         </div>

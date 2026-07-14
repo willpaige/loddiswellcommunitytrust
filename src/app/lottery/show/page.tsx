@@ -84,7 +84,7 @@ export default function LotteryShowSignupPage() {
               </p>
             </div>
 
-            <LotteryCheckoutButton defaultInterval="month" />
+            <LotteryCheckoutButton defaultInterval="month" source="show" />
 
             <div className="mt-6 flex items-start gap-3 border-t border-border pt-5 text-xs leading-relaxed text-muted-foreground">
               <ShieldCheck
@@ -93,7 +93,8 @@ export default function LotteryShowSignupPage() {
               />
               <p>
                 Use your own email address at checkout. If this is a shared
-                show computer, close the payment window when you are finished.
+                show computer, check that your details are correct before
+                paying.
               </p>
             </div>
           </div>

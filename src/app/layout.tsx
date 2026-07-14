@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { DM_Serif_Display, DM_Sans } from "next/font/google";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
+import { SiteChrome } from "@/components/layout/site-chrome";
 import { NewsletterSignup } from "@/components/newsletter-signup";
 import "./globals.css";
 
@@ -81,12 +82,16 @@ export default function RootLayout({
         <a href="#main-content" className="skip-link">
           Skip to main content
         </a>
-        <Header />
+        <SiteChrome>
+          <Header />
+        </SiteChrome>
         <main id="main-content" className="flex-1">
           {children}
         </main>
-        <NewsletterSignup />
-        <Footer />
+        <SiteChrome>
+          <NewsletterSignup />
+          <Footer />
+        </SiteChrome>
       </body>
     </html>
   );

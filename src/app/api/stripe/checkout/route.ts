@@ -3,13 +3,16 @@ import { getStripe } from "@/lib/stripe";
 
 export async function POST(req: NextRequest) {
   try {
-    const { quantity, interval } = await req.json();
+    const { quantity, interval, source } = await req.json();
 
     if (!quantity || quantity < 1 || quantity > 50) {
       return NextResponse.json({ error: "Invalid quantity" }, { status: 400 });
     }
     if (interval !== "month" && interval !== "year") {
       return NextResponse.json({ error: "Invalid interval" }, { status: 400 });
+    }
+    if (source !== undefined && source !== "show") {
+      return NextResponse.json({ error: "Invalid source" }, { status: 400 });
     }
 
     const priceId =
@@ -49,7 +52,9 @@ export async function POST(req: NextRequest) {
           optional: true,
         },
       ],
-      success_url: `${appUrl}/lottery/success?session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${appUrl}/lottery/success?session_id={CHECKOUT_SESSION_ID}${
+        source === "show" ? "&source=show" : ""
+      }`,
       cancel_url: `${appUrl}/lottery/cancel`,
     });
 
