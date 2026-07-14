@@ -74,7 +74,7 @@ export default async function LotteryPage() {
               Buy Tickets
             </a>
             <Link
-              href="/lottery/manage"
+              href="/account/lottery"
               className="inline-flex items-center rounded-sm border border-sage-400 px-5 py-3 text-sm font-medium tracking-wide text-sage-100 no-underline hover:bg-sage-700 transition-colors"
             >
               Manage Subscription
@@ -202,7 +202,7 @@ export default async function LotteryPage() {
               <p className="mt-4 text-xs text-muted-foreground">
                 Already a subscriber?{" "}
                 <Link
-                  href="/lottery/manage"
+                  href="/account/lottery"
                   className="text-copper-600 hover:text-copper-700 underline"
                 >
                   Manage your subscription
@@ -250,6 +250,11 @@ export default async function LotteryPage() {
                           </span>
                           <span className="font-medium text-foreground flex-1 truncate">
                             {r.winner || "—"}
+                            {r.ticketNumber ? (
+                              <span className="ml-2 text-sm font-normal text-muted-foreground">
+                                #{r.ticketNumber}
+                              </span>
+                            ) : null}
                           </span>
                           {r.prize && (
                             <span className="text-sm text-muted-foreground">

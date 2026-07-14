@@ -35,6 +35,7 @@ export function EventForm({ action, facilities = [], initialData }: EventFormPro
   const [imageUrl, setImageUrl] = useState<string>(
     initialData?.imageUrl || ""
   );
+  const [recurringEvent, setRecurringEvent] = useState(false);
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(formData: FormData) {
@@ -54,6 +55,11 @@ export function EventForm({ action, facilities = [], initialData }: EventFormPro
   function formatDateForInput(date: Date | null | undefined) {
     if (!date) return "";
     return new Date(date).toISOString().slice(0, 16);
+  }
+
+  function defaultMonthForInput() {
+    const date = initialData?.startDate ? new Date(initialData.startDate) : new Date();
+    return date.toISOString().slice(0, 7);
   }
 
   return (
@@ -85,7 +91,7 @@ export function EventForm({ action, facilities = [], initialData }: EventFormPro
                 type="datetime-local"
                 id="startDate"
                 name="startDate"
-                required
+                required={!recurringEvent}
                 defaultValue={formatDateForInput(initialData?.startDate)}
               />
             </div>
@@ -132,6 +138,110 @@ export function EventForm({ action, facilities = [], initialData }: EventFormPro
           </div>
         </CardContent>
       </Card>
+
+      {!initialData && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Recurrence</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-3">
+              <Checkbox
+                id="recurringEvent"
+                name="recurringEvent"
+                checked={recurringEvent}
+                onCheckedChange={(checked) => setRecurringEvent(checked === true)}
+              />
+              <Label htmlFor="recurringEvent" className="font-normal">
+                Create this as a recurring monthly event
+              </Label>
+            </div>
+
+            {recurringEvent && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="weekOfMonth">Week of month</Label>
+                  <select
+                    id="weekOfMonth"
+                    name="weekOfMonth"
+                    defaultValue="2"
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="1">First</option>
+                    <option value="2">Second</option>
+                    <option value="3">Third</option>
+                    <option value="4">Fourth</option>
+                    <option value="5">Fifth</option>
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="weekday">Day</Label>
+                  <select
+                    id="weekday"
+                    name="weekday"
+                    defaultValue="4"
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="1">Monday</option>
+                    <option value="2">Tuesday</option>
+                    <option value="3">Wednesday</option>
+                    <option value="4">Thursday</option>
+                    <option value="5">Friday</option>
+                    <option value="6">Saturday</option>
+                    <option value="0">Sunday</option>
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="seriesStartTime">Start time</Label>
+                  <Input id="seriesStartTime" name="seriesStartTime" type="time" defaultValue="14:00" />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="seriesEndTime">End time</Label>
+                  <Input id="seriesEndTime" name="seriesEndTime" type="time" defaultValue="16:00" />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="seriesStartMonth">Start month</Label>
+                  <Input id="seriesStartMonth" name="seriesStartMonth" type="month" defaultValue={defaultMonthForInput()} />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="monthsAhead">Generate months ahead</Label>
+                  <Input id="monthsAhead" name="monthsAhead" type="number" min="1" max="36" defaultValue="18" />
+                </div>
+
+                <div className="space-y-2 sm:col-span-2">
+                  <Label>Exclude months</Label>
+                  <div className="grid gap-2 sm:grid-cols-4">
+                    {[
+                      ["1", "Jan"],
+                      ["2", "Feb"],
+                      ["3", "Mar"],
+                      ["4", "Apr"],
+                      ["5", "May"],
+                      ["6", "Jun"],
+                      ["7", "Jul"],
+                      ["8", "Aug"],
+                      ["9", "Sep"],
+                      ["10", "Oct"],
+                      ["11", "Nov"],
+                      ["12", "Dec"],
+                    ].map(([value, label]) => (
+                      <label key={value} className="flex items-center gap-2 text-sm">
+                        <input type="checkbox" name="excludeMonths" value={value} />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

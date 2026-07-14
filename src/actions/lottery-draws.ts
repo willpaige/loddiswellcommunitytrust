@@ -8,7 +8,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { logAudit } from "@/lib/audit";
 
-export type DrawResult = { rank: number; winner: string; prize: string };
+export type DrawResult = { rank: number; winner: string; prize: string; ticketNumber?: number };
 
 export async function getDraws() {
   return db.select().from(lotteryDraws).orderBy(desc(lotteryDraws.drawDate));
@@ -42,6 +42,9 @@ function parseResults(raw: string | null | undefined): DrawResult[] {
         rank: Number(item?.rank ?? i + 1) || i + 1,
         winner: typeof item?.winner === "string" ? item.winner.trim() : "",
         prize: typeof item?.prize === "string" ? item.prize.trim() : "",
+        ticketNumber: Number.isFinite(Number(item?.ticketNumber))
+          ? Number(item.ticketNumber)
+          : undefined,
       }))
       .filter((r) => r.winner || r.prize);
   } catch {

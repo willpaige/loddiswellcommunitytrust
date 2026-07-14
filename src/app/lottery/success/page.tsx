@@ -32,7 +32,7 @@ export default function LotterySuccessPage() {
             You&apos;ll receive a receipt from Stripe each billing cycle. To
             update your payment details or cancel, visit{" "}
             <Link
-              href="/lottery/manage"
+              href="/account/lottery"
               className="text-copper-600 hover:text-copper-700 underline"
             >
               Manage your subscription

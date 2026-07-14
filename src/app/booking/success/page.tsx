@@ -17,8 +17,9 @@ export default async function BookingSuccessPage({
   }
 
   return (
-    <main className="bg-background py-16">
-      <div className="mx-auto grid max-w-5xl gap-6 px-4 sm:px-6 lg:grid-cols-[1fr_22rem] lg:px-8">
+    <main className="bg-background">
+      <section className="bg-sage-800 pb-20 pt-36 sm:pt-44">
+        <div className="mx-auto grid max-w-5xl gap-6 px-4 sm:px-6 lg:grid-cols-[1fr_22rem] lg:px-8">
         <Card>
           <CardHeader>
             <CheckCircle2 className="h-12 w-12 text-primary" aria-hidden="true" />
@@ -51,7 +52,8 @@ export default async function BookingSuccessPage({
             </Button>
           </CardContent>
         </Card>
-      </div>
+        </div>
+      </section>
     </main>
   );
 }

@@ -1,19 +1,21 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { Menu, X } from "lucide-react";
+import { FiUser } from "react-icons/fi";
 
 const navigation = [
   { name: "About", href: "/about" },
   { name: "Facilities", href: "/facilities" },
-  { name: "Booking", href: "/booking" },
   { name: "Events", href: "/events" },
   { name: "Lottery", href: "/lottery" },
   { name: "Contact", href: "/contact" },
 ];
 
 export function Header() {
+  const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
@@ -25,6 +27,10 @@ export function Header() {
   }, []);
 
   const showSolid = scrolled || mobileMenuOpen;
+
+  function isActive(href: string) {
+    return pathname === href || pathname.startsWith(`${href}/`);
+  }
 
   return (
     <header
@@ -50,62 +56,121 @@ export function Header() {
         </Link>
 
         {/* Desktop navigation */}
-        <div className="hidden lg:flex lg:gap-8 lg:items-center">
-          {navigation.map((item) => (
+        <div className="hidden lg:flex lg:items-center lg:gap-8">
+          <div className="flex items-center gap-8">
+            {navigation.map((item) => {
+              const active = isActive(item.href);
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  aria-current={active ? "page" : undefined}
+                  className={`relative text-xs font-medium uppercase tracking-[0.1em] no-underline transition-colors after:absolute after:-bottom-2 after:left-0 after:h-px after:bg-copper-400 after:transition-all ${
+                    active ? "after:w-full" : "after:w-0 hover:after:w-full"
+                  } ${
+                    showSolid
+                      ? active
+                        ? "text-copper-600 hover:text-copper-600"
+                        : "text-foreground hover:text-copper-500"
+                      : active
+                        ? "text-white hover:text-white"
+                        : "text-white/90 hover:text-white"
+                  }`}
+                >
+                  {item.name}
+                </Link>
+              );
+            })}
+          </div>
+          <div className="flex items-center gap-3">
             <Link
-              key={item.name}
-              href={item.href}
-              className={`text-xs font-medium uppercase tracking-[0.1em] no-underline transition-colors ${
+              href="/account"
+              className={`group inline-flex h-8 w-8 items-center justify-center rounded-full border no-underline transition-colors ${
                 showSolid
-                  ? "text-foreground hover:text-copper-500"
-                  : "text-white/90 hover:text-white"
+                  ? "border-foreground/30 text-foreground hover:border-copper-500 hover:text-copper-500"
+                  : "border-white/75 text-white/90 hover:border-white hover:text-white"
               }`}
+              aria-label="Account"
             >
-              {item.name}
+              <FiUser className="h-4 w-4 transition-transform duration-200 group-hover:scale-110" aria-hidden="true" />
             </Link>
-          ))}
-          <Link
-            href="/booking"
-            className="inline-flex items-center rounded-sm bg-copper-500 px-4 py-2 text-xs font-medium tracking-wide text-white no-underline hover:bg-copper-600 transition-colors"
-          >
-            Book Now
-          </Link>
+            <Link
+              href="/booking"
+              className="inline-flex items-center rounded-sm bg-copper-500 px-4 py-2 text-xs font-medium tracking-wide text-white no-underline hover:bg-copper-600 transition-colors"
+            >
+              Book Now
+            </Link>
+          </div>
         </div>
 
-        {/* Mobile menu button */}
-        <button
-          type="button"
-          className={`lg:hidden rounded-sm p-2 transition-colors ${
-            showSolid
-              ? "text-foreground hover:bg-muted"
-              : "text-white hover:bg-white/10"
-          }`}
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          aria-expanded={mobileMenuOpen}
-          aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
-        >
-          {mobileMenuOpen ? (
-            <X className="h-5 w-5" aria-hidden="true" />
-          ) : (
-            <Menu className="h-5 w-5" aria-hidden="true" />
-          )}
-        </button>
+        <div className="flex items-center gap-1 lg:hidden">
+          <Link
+            href="/account"
+            className={`inline-flex h-8 w-8 items-center justify-center rounded-full border no-underline transition-colors ${
+              showSolid
+                ? "border-foreground/30 text-foreground hover:border-copper-500 hover:text-copper-500"
+                : "border-white/75 text-white hover:border-white"
+            }`}
+            aria-label="Account"
+          >
+            <FiUser className="h-4 w-4" aria-hidden="true" />
+          </Link>
+          <button
+            type="button"
+            className={`rounded-sm p-2 transition-colors ${
+              showSolid
+                ? "text-foreground hover:bg-muted"
+                : "text-white hover:bg-white/10"
+            }`}
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-expanded={mobileMenuOpen}
+            aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+          >
+            {mobileMenuOpen ? (
+              <X className="h-5 w-5" aria-hidden="true" />
+            ) : (
+              <Menu className="h-5 w-5" aria-hidden="true" />
+            )}
+          </button>
+        </div>
       </nav>
 
       {/* Mobile navigation */}
       {mobileMenuOpen && (
         <div className="lg:hidden border-t border-border bg-background/95 backdrop-blur-sm">
           <div className="space-y-1 px-4 py-4">
-            {navigation.map((item) => (
-              <Link
-                key={item.name}
-                href={item.href}
-                className="block px-3 py-3 text-xs font-medium uppercase tracking-[0.1em] text-foreground no-underline hover:text-copper-500 transition-colors"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                {item.name}
-              </Link>
-            ))}
+            {navigation.map((item) => {
+              const active = isActive(item.href);
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  aria-current={active ? "page" : undefined}
+                  className={`block rounded-sm px-3 py-3 text-xs font-medium uppercase tracking-[0.1em] no-underline transition-colors ${
+                    active
+                      ? "bg-copper-50 text-copper-700"
+                      : "text-foreground hover:bg-muted hover:text-copper-500"
+                  }`}
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  {item.name}
+                </Link>
+              );
+            })}
+            <Link
+              href="/account"
+              className="block px-3 py-3 text-xs font-medium uppercase tracking-[0.1em] text-foreground no-underline hover:text-copper-500 transition-colors"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Account
+            </Link>
+            <Link
+              href="/booking"
+              className="mt-2 inline-flex w-full items-center justify-center rounded-sm bg-copper-500 px-4 py-3 text-xs font-medium uppercase tracking-[0.1em] text-white no-underline hover:bg-copper-600 transition-colors"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Book Now
+            </Link>
           </div>
         </div>
       )}

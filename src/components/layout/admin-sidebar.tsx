@@ -13,6 +13,7 @@ import {
   Ticket,
   Users,
   Settings,
+  Mail,
   BookOpenCheck,
   LogOut,
   ArrowLeft,
@@ -34,15 +35,27 @@ const navItems = [
     children: [
       { name: "Bookings", href: "/admin/bookings" },
       { name: "Availability", href: "/admin/bookings/availability" },
+      { name: "Requirements", href: "/admin/bookings/requirements" },
       { name: "Settings", href: "/admin/bookings/settings" },
     ],
   },
   { name: "Pages", href: "/admin/pages", icon: FileText },
   { name: "Facilities", href: "/admin/facilities", icon: Building2 },
   { name: "Trustees", href: "/admin/trustees", icon: Users },
+  { name: "Customers", href: "/admin/customers", icon: Users },
   { name: "Documents", href: "/admin/documents", icon: FolderOpen },
   { name: "Images", href: "/admin/images", icon: ImageIcon },
   { name: "Lottery", href: "/admin/lottery", icon: Ticket },
+  {
+    name: "Emails",
+    href: "/admin/emails",
+    icon: Mail,
+    children: [
+      { name: "Bookings", href: "/admin/emails?category=bookings" },
+      { name: "Lottery", href: "/admin/emails?category=lottery" },
+      { name: "System", href: "/admin/emails?category=system" },
+    ],
+  },
   { name: "Settings", href: "/admin/settings", icon: Settings },
 ];
 

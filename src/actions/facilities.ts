@@ -43,6 +43,8 @@ export async function updateFacility(id: string, formData: FormData) {
       bookingInfo: (formData.get("bookingInfo") as string) || null,
       externalBookingUrl:
         (formData.get("externalBookingUrl") as string) || null,
+      accessInstructions:
+        (formData.get("accessInstructions") as string) || null,
       heroImageUrl: (formData.get("heroImageUrl") as string) || null,
       bookable: formData.get("bookable") !== "off",
       published: formData.get("published") !== "off",

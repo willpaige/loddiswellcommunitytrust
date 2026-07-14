@@ -1,20 +1,22 @@
 "use server";
 
 import Papa from "papaparse";
-import { ServerClient } from "postmark";
 import { addYears, format } from "date-fns";
 import { eq, and, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { lotteryTickets, lotteryDraws } from "@/lib/db/schema";
+import { lotteryTicketNumbers, lotteryTickets, lotteryDraws } from "@/lib/db/schema";
 import { auth } from "@/lib/auth";
 import { getStripe } from "@/lib/stripe";
 import { logAudit } from "@/lib/audit";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-
-function getPostmark() {
-  return new ServerClient(process.env.POSTMARK_API_KEY!);
-}
+import {
+  ensureAllLotteryTicketNumbers,
+  ensureLotteryTicketNumbers,
+  ticketNumbersText,
+} from "@/actions/lottery-ticket-numbers";
+import { sendTemplateEmail } from "@/lib/email/send";
+import { upsertCustomerRecord } from "@/actions/customer-records";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -72,8 +74,13 @@ export async function createManualSubscriber(formData: FormData) {
   if (!data.name || !data.email || !EMAIL_RE.test(data.email)) {
     throw new Error("Name and a valid email are required");
   }
+  await upsertCustomerRecord({
+    email: data.email,
+    name: data.name,
+    phone: data.phone,
+  });
 
-  await db.insert(lotteryTickets).values({
+  const [ticket] = await db.insert(lotteryTickets).values({
     source: "manual",
     name: data.name,
     email: data.email,
@@ -84,6 +91,19 @@ export async function createManualSubscriber(formData: FormData) {
     expiryDate: data.expiryDate,
     notes: data.notes,
     status: "active",
+  }).returning();
+  await ensureLotteryTicketNumbers(ticket.id);
+  await sendTemplateEmail({
+    key: "lottery_welcome",
+    to: data.email,
+    variables: {
+      name: data.name,
+      quantity: data.quantity,
+      ticketNumbers: await ticketNumbersText(ticket.id),
+      manageUrl: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/account/lottery`,
+    },
+    relatedEntityType: "lottery",
+    relatedEntityId: `${ticket.id}:welcome`,
   });
 
   await logAudit({
@@ -105,6 +125,11 @@ export async function updateManualSubscriber(id: string, formData: FormData) {
   if (!data.name || !data.email || !EMAIL_RE.test(data.email)) {
     throw new Error("Name and a valid email are required");
   }
+  await upsertCustomerRecord({
+    email: data.email,
+    name: data.name,
+    phone: data.phone,
+  });
 
   await db
     .update(lotteryTickets)
@@ -123,6 +148,7 @@ export async function updateManualSubscriber(id: string, formData: FormData) {
         eq(lotteryTickets.source, "manual")
       )
     );
+  await ensureLotteryTicketNumbers(id);
 
   await logAudit({
     action: "update",
@@ -275,8 +301,28 @@ export async function importLotterySubscribers(
 
     const toInsert = validRows.filter((r) => !existingSet.has(r.email));
     if (toInsert.length > 0) {
-      await db.insert(lotteryTickets).values(toInsert);
-      inserted = toInsert.length;
+      const rows = await db.insert(lotteryTickets).values(toInsert).returning();
+      for (const row of rows) {
+        await upsertCustomerRecord({
+          email: row.email,
+          name: row.name,
+          phone: row.phone,
+        });
+        await ensureLotteryTicketNumbers(row.id);
+        await sendTemplateEmail({
+          key: "lottery_welcome",
+          to: row.email,
+          variables: {
+            name: row.name,
+            quantity: row.quantity,
+            ticketNumbers: await ticketNumbersText(row.id),
+            manageUrl: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/account/lottery`,
+          },
+          relatedEntityType: "lottery",
+          relatedEntityId: `${row.id}:welcome`,
+        });
+      }
+      inserted = rows.length;
     }
   }
 
@@ -298,7 +344,7 @@ export async function importLotterySubscribers(
 
 // ── Random draw ──
 
-export type DrawWinner = { name: string; email: string };
+export type DrawWinner = { name: string; email: string; ticketNumber: number };
 
 export async function drawRandomWinners(
   prizeCount: number
@@ -314,23 +360,23 @@ export async function drawRandomWinners(
     throw new Error("Prize count must be at least 1");
   }
   prizeCount = Math.min(50, Math.floor(prizeCount));
+  await ensureAllLotteryTicketNumbers();
 
   const rows = await db
     .select({
-      name: lotteryTickets.name,
-      email: lotteryTickets.email,
-      quantity: lotteryTickets.quantity,
+      name: lotteryTicketNumbers.name,
+      email: lotteryTicketNumbers.email,
+      ticketNumber: lotteryTicketNumbers.ticketNumber,
     })
-    .from(lotteryTickets)
-    .where(eq(lotteryTickets.status, "active"));
+    .from(lotteryTicketNumbers)
+    .innerJoin(lotteryTickets, eq(lotteryTicketNumbers.ticketId, lotteryTickets.id))
+    .where(and(eq(lotteryTickets.status, "active"), eq(lotteryTicketNumbers.active, true)));
 
-  // Build the weighted entry pool
-  const pool: DrawWinner[] = [];
-  for (const row of rows) {
-    for (let i = 0; i < row.quantity; i++) {
-      pool.push({ name: row.name, email: row.email.toLowerCase() });
-    }
-  }
+  const pool: DrawWinner[] = rows.map((row) => ({
+    name: row.name,
+    email: row.email.toLowerCase(),
+    ticketNumber: row.ticketNumber,
+  }));
 
   // Fisher-Yates shuffle
   for (let i = pool.length - 1; i > 0; i--) {
@@ -351,13 +397,9 @@ export async function drawRandomWinners(
   return {
     winners,
     totalEntries: pool.length,
-    uniqueSubscribers: rows.length,
+    uniqueSubscribers: new Set(rows.map((row) => row.email.toLowerCase())).size,
   };
 }
-
-// ── Email blast for draw results ──
-
-const EMAIL_BATCH_LIMIT = 500;
 
 function ordinal(n: number): string {
   const s = ["th", "st", "nd", "rd"];
@@ -405,66 +447,26 @@ export async function sendDrawNotifications(
     return { sent: 0 };
   }
 
-  const subject = `Loddiswell Community Lottery — ${format(
-    draw.drawDate,
-    "MMMM yyyy"
-  )} draw results`;
-
-  const winnersHtml = draw.results
-    .map(
-      (r) =>
-        `<tr><td style="padding:8px 12px;border-bottom:1px solid #eee;font-weight:600;color:#9a5039;">${ordinal(
-          r.rank
-        )}</td><td style="padding:8px 12px;border-bottom:1px solid #eee;">${escapeHtml(
-          r.winner
-        )}</td><td style="padding:8px 12px;border-bottom:1px solid #eee;color:#555;">${escapeHtml(
-          r.prize
-        )}</td></tr>`
-    )
-    .join("");
   const winnersText = draw.results
-    .map((r) => `${ordinal(r.rank)}: ${r.winner} — ${r.prize}`)
+    .map((r) => {
+      const ticket = r.ticketNumber ? ` ticket ${r.ticketNumber}` : "";
+      return `${ordinal(r.rank)}: ${r.winner}${ticket} — ${r.prize}`;
+    })
     .join("\n");
-
-  const notesHtml = draw.notes
-    ? `<p style="color:#555;font-size:14px;">${escapeHtml(draw.notes)}</p>`
-    : "";
-  const notesText = draw.notes ? `\n${draw.notes}\n` : "";
-
-  const htmlBody = `
-    <p>Hello,</p>
-    <p>Here are the results from the <strong>${format(
-      draw.drawDate,
-      "MMMM yyyy"
-    )}</strong> Loddiswell Community Lottery draw.</p>
-    <table style="border-collapse:collapse;margin:16px 0;">${winnersHtml}</table>
-    ${notesHtml}
-    <p>Thank you for supporting the lottery — every ticket helps maintain our village facilities.</p>
-    <p style="color:#666;font-size:14px;">— The Loddiswell Trust</p>
-  `;
-  const textBody = `Loddiswell Community Lottery — ${format(
-    draw.drawDate,
-    "MMMM yyyy"
-  )} draw results\n\n${winnersText}${notesText}\n\nThank you for supporting the lottery.\n\n— The Loddiswell Trust`;
-
-  // Postmark allows up to 500 messages per batch
-  const from =
-    process.env.EMAIL_FROM || "noreply@loddiswellcommunitytrust.org";
-  const messages = recipients.map((r) => ({
-    From: from,
-    To: r.email,
-    Subject: subject,
-    HtmlBody: htmlBody,
-    TextBody: textBody,
-    MessageStream: "outbound",
-  }));
-
-  const client = getPostmark();
   let sent = 0;
-  for (let i = 0; i < messages.length; i += EMAIL_BATCH_LIMIT) {
-    const batch = messages.slice(i, i + EMAIL_BATCH_LIMIT);
-    const response = await client.sendEmailBatch(batch);
-    sent += response.filter((r) => r.ErrorCode === 0).length;
+  for (const recipient of recipients) {
+    const result = await sendTemplateEmail({
+      key: "lottery_draw_results",
+      to: recipient.email,
+      variables: {
+        drawDate: format(draw.drawDate, "MMMM yyyy"),
+        winners: winnersText,
+        notes: draw.notes || "",
+      },
+      relatedEntityType: "lottery_draw",
+      relatedEntityId: `${drawId}:${recipient.email}`,
+    });
+    if (result.sent) sent += 1;
   }
 
   await db
@@ -483,13 +485,4 @@ export async function sendDrawNotifications(
   revalidatePath(`/admin/lottery/draws/${drawId}/edit`);
 
   return { sent };
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }

@@ -15,7 +15,7 @@ export default async function AdminLayout({
 
   const role = (session.user as unknown as { role?: string }).role;
   if (role !== "admin" && role !== "editor") {
-    redirect("/account/bookings");
+    redirect("/account");
   }
 
   return (

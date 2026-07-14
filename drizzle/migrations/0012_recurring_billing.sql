@@ -1,0 +1,2 @@
+ALTER TABLE "bookings" ADD COLUMN IF NOT EXISTS "billing_interval" text;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "booking_occurrences_booking_start_idx" ON "booking_occurrences" USING btree ("booking_id","start_date");

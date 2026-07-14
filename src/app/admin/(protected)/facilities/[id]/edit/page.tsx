@@ -31,6 +31,7 @@ export default function EditFacilityPage() {
   const [rates, setRates] = useState<KeyValuePair[]>([]);
   const [bookingTerms, setBookingTerms] = useState("");
   const [bookingInfo, setBookingInfo] = useState("");
+  const [accessInstructions, setAccessInstructions] = useState("");
   const [externalBookingUrl, setExternalBookingUrl] = useState("");
   const [heroImageUrl, setHeroImageUrl] = useState("");
   const [bookable, setBookable] = useState(true);
@@ -62,6 +63,7 @@ export default function EditFacilityPage() {
           facility.bookingTerms ? (facility.bookingTerms as string[]).join("\n") : ""
         );
         setBookingInfo(facility.bookingInfo || "");
+        setAccessInstructions(facility.accessInstructions || "");
         setExternalBookingUrl(facility.externalBookingUrl || "");
         setHeroImageUrl(facility.heroImageUrl || "");
         setBookable(facility.bookable ?? true);
@@ -102,6 +104,7 @@ export default function EditFacilityPage() {
       bookingTerms.trim() ? JSON.stringify(bookingTerms.split("\n").filter(Boolean)) : "null"
     );
     formData.set("bookingInfo", bookingInfo);
+    formData.set("accessInstructions", accessInstructions);
     formData.set("externalBookingUrl", externalBookingUrl);
     formData.set("heroImageUrl", heroImageUrl);
     formData.set("bookable", bookable ? "on" : "off");
@@ -215,6 +218,20 @@ export default function EditFacilityPage() {
                 onChange={(e) => setBookingInfo(e.target.value)}
                 rows={3}
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="accessInstructions">Access Instructions</Label>
+              <Textarea
+                id="accessInstructions"
+                value={accessInstructions}
+                onChange={(e) => setAccessInstructions(e.target.value)}
+                rows={4}
+                placeholder="Where to park, key safe details, entry route, lights/heating, and lock-up instructions."
+              />
+              <p className="text-xs text-muted-foreground">
+                Included in reminder emails for this venue.
+              </p>
             </div>
 
             <div className="space-y-2">

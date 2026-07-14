@@ -43,6 +43,69 @@
       "when": 1779459000000,
       "tag": "0005_repeat_booking_discount_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1779460000000,
+      "tag": "0006_booking_cancellation_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1779461000000,
+      "tag": "0007_email_communications",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1779462000000,
+      "tag": "0008_customers_and_booking_repeat_count",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1779463000000,
+      "tag": "0009_booking_organisation_name",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1779464000000,
+      "tag": "0010_event_series",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1780384794539,
+      "tag": "0011_booking_invoices",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1780391540933,
+      "tag": "0012_recurring_billing",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1780394525293,
+      "tag": "0013_customer_discount",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1780399345388,
+      "tag": "0014_post_booking_requirements",
+      "breakpoints": true
     }
   ]
 }

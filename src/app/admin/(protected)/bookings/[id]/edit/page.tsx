@@ -1,0 +1,108 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
+import { getAdminBooking, getAdminBookingSetup } from "@/actions/bookings";
+import { getAdminBookingRequirements } from "@/actions/booking-requirements";
+import { BookingEditForm } from "@/components/admin/booking-edit-form";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+export const dynamic = "force-dynamic";
+
+export default async function AdminEditBookingPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const [booking, setup, requirements] = await Promise.all([
+    getAdminBooking(id),
+    getAdminBookingSetup(),
+    getAdminBookingRequirements(id),
+  ]);
+  if (!booking) notFound();
+
+  const uniqueOfferings = setup.offerings.filter(
+    (offering, index, all) =>
+      all.findIndex((item) => item.offeringId === offering.offeringId) === index
+  );
+
+  return (
+    <div>
+      <Button variant="link" asChild className="mb-6 px-0 text-muted-foreground">
+        <Link href="/admin/bookings">
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          Back to bookings
+        </Link>
+      </Button>
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold">Edit booking</h1>
+        <p className="mt-1 text-muted-foreground">
+          Change the date, time, repeat count, and customer details.
+        </p>
+      </div>
+      <BookingEditForm
+        booking={{
+          ...booking,
+          offeringId: booking.offeringId,
+          customerGroup: booking.customerGroup,
+        }}
+        offerings={uniqueOfferings}
+      />
+
+      {requirements?.hasRequirements && (
+        <Card className="mt-6 max-w-4xl">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-3">
+              Required information
+              <Badge variant={requirements.complete ? "default" : "destructive"}>
+                {requirements.complete ? "Complete" : "Outstanding"}
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {requirements.questions.map((question) => (
+              <div key={question.questionId} className="border-b pb-3 last:border-b-0 last:pb-0">
+                <p className="text-sm font-medium">{question.label}</p>
+                <p className="text-sm text-muted-foreground">
+                  {question.type === "yes_no"
+                    ? question.answerBool === true
+                      ? "Yes"
+                      : question.answerBool === false
+                        ? "No"
+                        : "Not answered"
+                    : question.answerText || "Not answered"}
+                </p>
+                {question.needsDocument && (
+                  <div className="mt-2">
+                    {question.documents.length > 0 ? (
+                      <ul className="space-y-1">
+                        {question.documents.map((doc) => (
+                          <li key={doc.id}>
+                            <a
+                              href={doc.fileUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-sm text-primary underline"
+                            >
+                              {question.documentLabel || "Document"}: {doc.fileName}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-sm text-destructive">
+                        {question.documentLabel || "Document"} not uploaded
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}

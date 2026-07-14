@@ -7,7 +7,7 @@ import { BookingForm } from "@/components/booking/booking-form";
 import { BookingReview } from "@/components/booking/booking-review";
 import { getPageContent } from "@/lib/cms/get-page-content";
 import { renderInline } from "@/lib/cms/render";
-import { getPublicBookingData } from "@/actions/bookings";
+import { getCustomerDiscountPercent, getPublicBookingData } from "@/actions/bookings";
 import { auth } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +36,9 @@ export default async function BookingPage({
   const pending = pendingBookingFromParams(params);
   const showReview = Boolean(session?.user?.email && pending);
   const initialDate = firstParam(params, "date");
+  const customerDiscountPercent = session?.user?.email
+    ? await getCustomerDiscountPercent(session.user.email)
+    : 0;
 
   if (showReview && pending) {
     return (
@@ -56,6 +59,7 @@ export default async function BookingPage({
               offerings={bookingData.offerings}
               pending={pending}
               repeatDiscount={bookingData.repeatDiscount}
+              customerDiscountPercent={customerDiscountPercent}
             />
           </div>
         </main>
@@ -118,12 +122,14 @@ export default async function BookingPage({
                 offerings={bookingData.offerings}
                 pending={pending}
                 repeatDiscount={bookingData.repeatDiscount}
+                customerDiscountPercent={customerDiscountPercent}
               />
             ) : (
               <BookingForm
                 offerings={bookingData.offerings}
                 repeatDiscount={bookingData.repeatDiscount}
                 initialDate={initialDate}
+                customerDiscountPercent={customerDiscountPercent}
               />
             )
           ) : (
@@ -171,6 +177,7 @@ function pendingBookingFromParams(
     repeatPaymentMode: firstParam(params, "repeatPaymentMode") || "subscription",
     repeatCount: firstParam(params, "repeatCount") || undefined,
     customerName,
+    organisationName: firstParam(params, "organisationName") || undefined,
     customerPhone: firstParam(params, "customerPhone") || undefined,
     notes: firstParam(params, "notes") || undefined,
     promoteOnSite: firstParam(params, "promoteOnSite") || undefined,

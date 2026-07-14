@@ -18,7 +18,7 @@ export default async function AccountLoginPage({
         <p className="mb-6 text-center font-serif text-3xl tracking-tight text-white">
           Loddiswell Community Trust
         </p>
-        <AccountLoginForm callbackUrl={params.callbackUrl || "/account/bookings"} />
+        <AccountLoginForm callbackUrl={params.callbackUrl || "/account"} />
       </div>
     </main>
   );

@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { format } from "date-fns";
 import { createBookingCheckout } from "@/actions/bookings";
-import { money } from "@/lib/bookings";
+import { money, recurrenceIntervalLabel, recurrenceLabel } from "@/lib/bookings";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { BookingTermsButton } from "@/components/booking/booking-terms-button";
 
 type OfferingRow = {
   facilityName: string;
@@ -26,6 +27,7 @@ type PendingBooking = {
   repeatPaymentMode?: string;
   repeatCount?: string;
   customerName: string;
+  organisationName?: string;
   customerPhone?: string;
   notes?: string;
   promoteOnSite?: string;
@@ -51,10 +53,12 @@ export function BookingReview({
   offerings,
   pending,
   repeatDiscount,
+  customerDiscountPercent = 0,
 }: {
   offerings: OfferingRow[];
   pending: PendingBooking;
   repeatDiscount: { threshold: number; percent: number };
+  customerDiscountPercent?: number;
 }) {
   const offering = offerings.find((row) => row.offeringId === pending.offeringId);
   const pricedOffering = offerings.find(
@@ -86,26 +90,27 @@ export function BookingReview({
     : pending.endTime
       ? new Date(`${pending.date}T${pending.endTime}`)
       : addMinutes(start, offering.durationMinutes);
-  const recurring = pending.recurrence === "weekly";
+  const recurring = pending.recurrence !== "none";
   const repeatPaymentMode = pending.repeatPaymentMode === "upfront" ? "upfront" : "subscription";
   const repeatCount = Math.max(2, Math.min(52, Math.round(Number(pending.repeatCount) || repeatDiscount.threshold)));
   const hours = Math.max(1, end.getHours() - start.getHours());
   const baseAmount = pricedOffering.amount * (offering.startTime ? 1 : hours);
-  const recurringSubtotal = baseAmount * 4;
   const upfrontSubtotal = baseAmount * repeatCount;
-  const discountApplies =
+  // Mirror the server's bookingAmount: never stack — take the larger of the
+  // customer discount and an eligible repeat-booking discount.
+  const repeatEligible =
     recurring &&
     repeatPaymentMode === "upfront" &&
     repeatDiscount.percent > 0 &&
     repeatCount >= repeatDiscount.threshold;
-  const discountAmount = discountApplies
-    ? Math.round(upfrontSubtotal * repeatDiscount.percent / 100)
-    : 0;
-  const amount = recurring
+  const effectivePct = Math.max(customerDiscountPercent, repeatEligible ? repeatDiscount.percent : 0);
+  const subtotal = recurring
     ? repeatPaymentMode === "upfront"
-      ? upfrontSubtotal - discountAmount
-      : recurringSubtotal
+      ? upfrontSubtotal
+      : baseAmount
     : baseAmount;
+  const amount = Math.round((subtotal * (100 - effectivePct)) / 100);
+  const discountAmount = subtotal - amount;
 
   return (
     <form action={createBookingCheckout} className="mx-auto max-w-2xl">
@@ -144,25 +149,36 @@ export function BookingReview({
               <dt className="text-sm text-muted-foreground">Name</dt>
               <dd className="font-medium">{pending.customerName}</dd>
             </div>
+            {pending.organisationName && (
+              <div>
+                <dt className="text-sm text-muted-foreground">
+                  {pending.customerGroup === "business" ? "Business / event name" : "Club / event name"}
+                </dt>
+                <dd className="font-medium">{pending.organisationName}</dd>
+              </div>
+            )}
             <div>
               <dt className="text-sm text-muted-foreground">Payment</dt>
               <dd className="font-medium">
                 {money(amount)}{" "}
-                {recurring && repeatPaymentMode === "subscription" ? "monthly" : "today"}
+                {recurring && repeatPaymentMode === "subscription"
+                  ? `every ${recurrenceIntervalLabel(pending.recurrence)}`
+                  : "today"}
               </dd>
               {recurring && repeatPaymentMode === "upfront" && (
                 <dd className="mt-1 text-sm text-muted-foreground">
-                  {repeatCount} weekly sessions paid today
+                  {repeatCount} {recurrenceLabel(pending.recurrence).toLowerCase()} sessions paid today
                 </dd>
               )}
               {recurring && repeatPaymentMode === "subscription" && (
                 <dd className="mt-1 text-sm text-muted-foreground">
-                  Weekly booking billed monthly
+                  {recurrenceLabel(pending.recurrence)} booking charged every{" "}
+                  {recurrenceIntervalLabel(pending.recurrence)}
                 </dd>
               )}
               {discountAmount > 0 && (
                 <dd className="mt-1 text-sm text-muted-foreground">
-                  Includes {repeatDiscount.percent}% repeat booking discount
+                  Includes {effectivePct}% discount
                 </dd>
               )}
             </div>
@@ -185,7 +201,7 @@ export function BookingReview({
             <Button variant="outline" asChild>
               <Link href="/booking">Start again</Link>
             </Button>
-            <Button type="submit">Book now</Button>
+            <BookingTermsButton />
           </div>
         </CardContent>
       </Card>

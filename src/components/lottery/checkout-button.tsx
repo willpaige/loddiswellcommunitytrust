@@ -7,9 +7,15 @@ import { cn } from "@/lib/utils";
 
 type Interval = "month" | "year";
 
-export function LotteryCheckoutButton() {
+type LotteryCheckoutButtonProps = {
+  defaultInterval?: Interval;
+};
+
+export function LotteryCheckoutButton({
+  defaultInterval = "year",
+}: LotteryCheckoutButtonProps) {
   const [quantity, setQuantity] = useState(1);
-  const [interval, setInterval] = useState<Interval>("year");
+  const [interval, setInterval] = useState<Interval>(defaultInterval);
   const [loading, setLoading] = useState(false);
 
   async function handleCheckout() {

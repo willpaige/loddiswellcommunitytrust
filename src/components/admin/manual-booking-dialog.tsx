@@ -1,10 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalendarPlus } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { CalendarPlus, CheckCircle2, CreditCard, Receipt } from "lucide-react";
 import { format } from "date-fns";
 import { createManualBooking, getAvailableBookingSlots } from "@/actions/bookings";
-import { customerGroups } from "@/lib/bookings";
+import { getCustomerDiscountByEmail } from "@/actions/customers";
+import {
+  customerGroups,
+  money,
+  recurrenceLabel,
+  recurrenceOptions,
+  suggestRecurringAmount,
+  type Recurrence,
+} from "@/lib/bookings";
 import { AvailableDatePicker } from "@/components/booking/available-date-picker";
 import { AvailableTimePicker } from "@/components/booking/available-time-picker";
 import { Button } from "@/components/ui/button";
@@ -18,6 +27,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 
 type ManualBookingOffering = {
   offeringId: string;
@@ -25,6 +35,13 @@ type ManualBookingOffering = {
   facilityName: string;
   facilityBookableStartTime?: string;
   facilityBookableEndTime?: string;
+};
+
+type ManualBookingPrice = {
+  offeringId: string;
+  customerGroup: string;
+  amount: number;
+  variableDuration: boolean;
 };
 
 type AvailableSlot = {
@@ -35,23 +52,41 @@ type AvailableSlot = {
 
 export function ManualBookingDialog({
   offerings,
+  prices = [],
   open,
   onOpenChange,
   defaultDate,
   showTrigger = true,
 }: {
   offerings: ManualBookingOffering[];
+  prices?: ManualBookingPrice[];
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   defaultDate?: Date;
   showTrigger?: boolean;
 }) {
+  const router = useRouter();
   const formattedDefaultDate = defaultDate ? format(defaultDate, "yyyy-MM-dd") : "";
+  const [internalOpen, setInternalOpen] = useState(false);
   const [offeringId, setOfferingId] = useState(offerings[0]?.offeringId ?? "");
   const [slots, setSlots] = useState<AvailableSlot[]>([]);
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [endTime, setEndTime] = useState("");
+  const [recurrence, setRecurrence] = useState<Recurrence>("none");
+  const [repeatCount, setRepeatCount] = useState(8);
+  const [repeatPaymentMode, setRepeatPaymentMode] = useState<"upfront" | "subscription">("upfront");
+  const [billingInterval, setBillingInterval] = useState<Exclude<Recurrence, "none">>("monthly");
+  const [recurringAmount, setRecurringAmount] = useState("");
+  const [recurringEdited, setRecurringEdited] = useState(false);
+  const [customerDiscountPercent, setCustomerDiscountPercent] = useState(0);
+  const [paymentMode, setPaymentMode] = useState<"confirmed" | "payment_link" | "invoice">(
+    "confirmed"
+  );
+  const [customerGroup, setCustomerGroup] =
+    useState<(typeof customerGroups)[number]["value"]>(customerGroups[0]?.value ?? "parent_private");
+  const [promoteOnSite, setPromoteOnSite] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const selectedDateSlot = slots.find((slot) => slot.date === date);
   const availableTimes = selectedDateSlot?.times ?? [];
@@ -59,6 +94,42 @@ export function ManualBookingDialog({
   const selectedOffering = offerings.find((offering) => offering.offeringId === offeringId);
   const bookableStartTime = selectedOffering?.facilityBookableStartTime ?? "08:00";
   const bookableEndTime = selectedOffering?.facilityBookableEndTime ?? "23:00";
+  const dialogOpen = open ?? internalOpen;
+  const recurring = recurrence !== "none";
+  const isSubscription = paymentMode === "payment_link" && recurring && repeatPaymentMode === "subscription";
+  const needsOrganisationName = customerGroup === "team_community" || customerGroup === "business";
+  const organisationLabel =
+    customerGroup === "business" ? "Business / event name" : "Club / event name";
+
+  // Per-session price for the selected offering + customer group (pence).
+  const priceRow = prices.find(
+    (row) => row.offeringId === offeringId && row.customerGroup === customerGroup
+  );
+  const sessionHours =
+    time && endTime ? Math.max(1, Number(endTime.slice(0, 2)) - Number(time.slice(0, 2))) : 1;
+  const perSessionPence = priceRow
+    ? priceRow.amount * (priceRow.variableDuration ? sessionHours : 1)
+    : 0;
+  const grossSuggestedPence = recurring
+    ? suggestRecurringAmount(perSessionPence, recurrence, billingInterval)
+    : 0;
+  // Apply the customer's discount to the suggestion (once, client-side); the
+  // submitted figure is treated as final and is not re-discounted on the server.
+  const suggestedRecurringPence = Math.round(
+    (grossSuggestedPence * (100 - customerDiscountPercent)) / 100
+  );
+
+  // Auto-fill the recurring charge with the suggestion until the admin edits it.
+  useEffect(() => {
+    if (isSubscription && !recurringEdited) {
+      setRecurringAmount(suggestedRecurringPence ? (suggestedRecurringPence / 100).toFixed(2) : "");
+    }
+  }, [isSubscription, recurringEdited, suggestedRecurringPence]);
+
+  function handleOpenChange(nextOpen: boolean) {
+    setInternalOpen(nextOpen);
+    onOpenChange?.(nextOpen);
+  }
 
   useEffect(() => {
     if (!offeringId) return;
@@ -85,8 +156,19 @@ export function ManualBookingDialog({
     };
   }, [offeringId, formattedDefaultDate]);
 
+  async function handleSubmit(formData: FormData) {
+    setSaving(true);
+    try {
+      await createManualBooking(formData);
+      handleOpenChange(false);
+      router.refresh();
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={dialogOpen} onOpenChange={handleOpenChange}>
       {showTrigger && (
         <DialogTrigger asChild>
           <Button>
@@ -95,19 +177,80 @@ export function ManualBookingDialog({
           </Button>
         </DialogTrigger>
       )}
-      <DialogContent className="sm:max-w-3xl">
+      <DialogContent className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Manual booking</DialogTitle>
           <DialogDescription>
-            Create a confirmed booking without taking online payment.
+            Create a confirmed booking or reserve a booking and email a Stripe payment link.
           </DialogDescription>
         </DialogHeader>
 
         <form
           key={formattedDefaultDate}
-          action={createManualBooking}
+          action={handleSubmit}
           className="grid gap-4 sm:grid-cols-2"
         >
+          <input type="hidden" name="manualPaymentMode" value={paymentMode} />
+          <div className="space-y-2 sm:col-span-2">
+            <Label>Payment</Label>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <button
+                type="button"
+                onClick={() => setPaymentMode("confirmed")}
+                className={[
+                  "flex items-start gap-3 rounded-md border p-3 text-left text-sm transition",
+                  paymentMode === "confirmed"
+                    ? "border-sage-500 bg-sage-50 text-sage-900"
+                    : "hover:border-sage-300",
+                ].join(" ")}
+              >
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
+                <span>
+                  <span className="block font-medium">Confirm without payment</span>
+                  <span className="mt-1 block text-muted-foreground">
+                    Adds a confirmed booking and sends no Stripe link.
+                  </span>
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentMode("payment_link")}
+                className={[
+                  "flex items-start gap-3 rounded-md border p-3 text-left text-sm transition",
+                  paymentMode === "payment_link"
+                    ? "border-copper-500 bg-copper-50 text-copper-900"
+                    : "hover:border-copper-300",
+                ].join(" ")}
+              >
+                <CreditCard className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
+                <span>
+                  <span className="block font-medium">Email payment link</span>
+                  <span className="mt-1 block text-muted-foreground">
+                    Holds the slot as pending and sends a Stripe payment link.
+                  </span>
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentMode("invoice")}
+                className={[
+                  "flex items-start gap-3 rounded-md border p-3 text-left text-sm transition",
+                  paymentMode === "invoice"
+                    ? "border-copper-500 bg-copper-50 text-copper-900"
+                    : "hover:border-copper-300",
+                ].join(" ")}
+              >
+                <Receipt className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
+                <span>
+                  <span className="block font-medium">Send invoice</span>
+                  <span className="mt-1 block text-muted-foreground">
+                    Emails a Stripe invoice (card or bank transfer); slot held until paid.
+                  </span>
+                </span>
+              </button>
+            </div>
+          </div>
+
           <div className="space-y-2 sm:col-span-2">
             <Label htmlFor="manualOffering">Booking type</Label>
             <select
@@ -176,6 +319,12 @@ export function ManualBookingDialog({
             <select
               id="manualGroup"
               name="customerGroup"
+              value={customerGroup}
+              onChange={(event) => {
+                const nextGroup = event.target.value as (typeof customerGroups)[number]["value"];
+                setCustomerGroup(nextGroup);
+                if (event.target.value !== "team_community") setPromoteOnSite(false);
+              }}
               className="h-10 w-full rounded-md border bg-background px-3 text-sm"
             >
               {customerGroups.map((group) => (
@@ -186,12 +335,160 @@ export function ManualBookingDialog({
             </select>
           </div>
 
+          {needsOrganisationName && (
+            <div className="space-y-2">
+              <Label htmlFor="manualOrganisationName">{organisationLabel}</Label>
+              <Input id="manualOrganisationName" name="organisationName" required />
+            </div>
+          )}
+
           <div className="flex items-end">
             <label className="flex h-10 items-center gap-2 text-sm">
-              <input type="checkbox" name="recurrence" value="weekly" />
-              Weekly
+              <input
+                type="checkbox"
+                checked={recurring}
+                onChange={(event) => setRecurrence(event.target.checked ? "weekly" : "none")}
+              />
+              Repeat
             </label>
+            <input type="hidden" name="recurrence" value={recurrence} />
           </div>
+
+          {recurring && (
+            <>
+              <input
+                type="hidden"
+                name="repeatPaymentMode"
+                value={paymentMode === "payment_link" ? repeatPaymentMode : "upfront"}
+              />
+              <div className="space-y-2">
+                <Label htmlFor="manualRecurrenceFrequency">Session frequency</Label>
+                <select
+                  id="manualRecurrenceFrequency"
+                  value={recurrence}
+                  onChange={(event) => setRecurrence(event.target.value as Recurrence)}
+                  className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                >
+                  {recurrenceOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {paymentMode === "payment_link" && (
+                <div className="space-y-2">
+                  <Label htmlFor="manualRepeatPaymentMode">Payment</Label>
+                  <select
+                    id="manualRepeatPaymentMode"
+                    value={repeatPaymentMode}
+                    onChange={(event) =>
+                      setRepeatPaymentMode(event.target.value as "upfront" | "subscription")
+                    }
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                  >
+                    <option value="upfront">Pay upfront for a set number of sessions</option>
+                    <option value="subscription">Auto-charge card each period (ongoing)</option>
+                  </select>
+                </div>
+              )}
+
+              {isSubscription ? (
+                <>
+                  <input type="hidden" name="billingInterval" value={billingInterval} />
+                  <input
+                    type="hidden"
+                    name="recurringAmount"
+                    value={Math.round(Number(recurringAmount || 0) * 100)}
+                  />
+                  <div className="space-y-2">
+                    <Label htmlFor="manualBillingInterval">Billing frequency</Label>
+                    <select
+                      id="manualBillingInterval"
+                      value={billingInterval}
+                      onChange={(event) =>
+                        setBillingInterval(event.target.value as Exclude<Recurrence, "none">)
+                      }
+                      className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                    >
+                      {recurrenceOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor="manualRecurringAmount">Recurring charge (£)</Label>
+                    <Input
+                      id="manualRecurringAmount"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={recurringAmount}
+                      onChange={(event) => {
+                        setRecurringAmount(event.target.value);
+                        setRecurringEdited(true);
+                      }}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Charged every {recurrenceLabel(billingInterval).toLowerCase()} until cancelled.
+                      {suggestedRecurringPence > 0 &&
+                        ` Suggested ${money(suggestedRecurringPence)} (${recurrenceLabel(recurrence).toLowerCase()} sessions averaged over the year).`}{" "}
+                      The first charge is taken when the customer sets up their card via the emailed link.
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-2">
+                  <Label htmlFor="manualRepeatCount">Number of sessions</Label>
+                  <Input
+                    id="manualRepeatCount"
+                    name="repeatCount"
+                    type="number"
+                    min="2"
+                    max="52"
+                    value={repeatCount}
+                    onChange={(event) => setRepeatCount(Number(event.target.value))}
+                  />
+                </div>
+              )}
+            </>
+          )}
+
+          {customerGroup === "team_community" && (
+            <div className="space-y-3 rounded-md border p-4 sm:col-span-2">
+              <div className="flex items-start gap-3">
+                <Checkbox
+                  id="manualPromoteOnSite"
+                  name="promoteOnSite"
+                  checked={promoteOnSite}
+                  onCheckedChange={(checked) => setPromoteOnSite(checked === true)}
+                />
+                <div>
+                  <Label htmlFor="manualPromoteOnSite" className="font-normal">
+                    Promote this booking on the website
+                  </Label>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Adds a public event entry after the booking is confirmed.
+                  </p>
+                </div>
+              </div>
+              {promoteOnSite && (
+                <div className="space-y-2">
+                  <Label htmlFor="manualPromotionUrl">More info link</Label>
+                  <Input
+                    id="manualPromotionUrl"
+                    name="promotionUrl"
+                    type="url"
+                    required={promoteOnSite}
+                    placeholder="https://..."
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="manualName">Name</Label>
@@ -200,7 +497,31 @@ export function ManualBookingDialog({
 
           <div className="space-y-2">
             <Label htmlFor="manualEmail">Email</Label>
-            <Input id="manualEmail" name="customerEmail" type="email" required />
+            <Input
+              id="manualEmail"
+              name="customerEmail"
+              type="email"
+              required
+              onBlur={async (event) => {
+                const email = event.target.value.trim();
+                if (!email) {
+                  setCustomerDiscountPercent(0);
+                  return;
+                }
+                try {
+                  const pct = await getCustomerDiscountByEmail(email);
+                  setCustomerDiscountPercent(pct);
+                  if (pct > 0) setRecurringEdited(false);
+                } catch {
+                  setCustomerDiscountPercent(0);
+                }
+              }}
+            />
+            {customerDiscountPercent > 0 && (
+              <p className="text-xs text-muted-foreground">
+                This customer has a {customerDiscountPercent}% discount applied to their bookings.
+              </p>
+            )}
           </div>
 
           <div className="space-y-2 sm:col-span-2">
@@ -208,9 +529,51 @@ export function ManualBookingDialog({
             <Input id="manualPhone" name="customerPhone" />
           </div>
 
+          {paymentMode === "invoice" && (
+            <div className="space-y-3 rounded-md border p-4 sm:col-span-2">
+              <p className="text-sm font-medium">Billing address</p>
+              <p className="text-sm text-muted-foreground">
+                Shown as the bill-to on the invoice.
+              </p>
+              <div className="space-y-2">
+                <Label htmlFor="manualBillingLine1">Address line 1</Label>
+                <Input id="manualBillingLine1" name="billingLine1" required />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="manualBillingLine2">Address line 2</Label>
+                <Input id="manualBillingLine2" name="billingLine2" />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="manualBillingCity">Town / city</Label>
+                  <Input id="manualBillingCity" name="billingCity" required />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="manualBillingPostcode">Postcode</Label>
+                  <Input id="manualBillingPostcode" name="billingPostcode" required />
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-2 sm:col-span-2">
+            <Label htmlFor="manualNotes">Notes</Label>
+            <Input id="manualNotes" name="notes" />
+          </div>
+
           <div className="flex justify-end sm:col-span-2">
-            <Button type="submit" disabled={loadingSlots || slots.length === 0}>
-              {loadingSlots ? "Checking availability..." : "Create booking"}
+            <Button type="submit" disabled={saving || loadingSlots || slots.length === 0}>
+              {saving
+                ? "Creating booking..."
+                : loadingSlots
+                ? "Checking availability..."
+                : isSubscription
+                  ? "Create and send card setup link"
+                  : paymentMode === "payment_link"
+                    ? "Create and send payment link"
+                    : paymentMode === "invoice"
+                      ? "Create and send invoice"
+                      : "Create confirmed booking"}
             </Button>
           </div>
           {!loadingSlots && slots.length === 0 && (

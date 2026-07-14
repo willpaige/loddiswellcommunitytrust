@@ -3,7 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check } from "lucide-react";
 import { createBookingCheckout, getAvailableBookingSlots } from "@/actions/bookings";
-import { customerGroups, money } from "@/lib/bookings";
+import {
+  customerGroups,
+  money,
+  recurrenceIntervalLabel,
+  recurrenceLabel,
+  recurrenceOptions,
+  type Recurrence,
+} from "@/lib/bookings";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -40,10 +47,12 @@ export function BookingForm({
   offerings,
   repeatDiscount,
   initialDate,
+  customerDiscountPercent = 0,
 }: {
   offerings: OfferingRow[];
   repeatDiscount: { threshold: number; percent: number };
   initialDate?: string;
+  customerDiscountPercent?: number;
 }) {
   const facilities = useMemo(() => {
     const map = new Map<
@@ -75,7 +84,7 @@ export function BookingForm({
   const firstOfferingId = facilityOfferings[0]?.offeringId || "";
   const [offeringId, setOfferingId] = useState(firstOfferingId);
   const [customerGroup, setCustomerGroup] = useState<(typeof customerGroups)[number]["value"]>("parent_private");
-  const [recurring, setRecurring] = useState(false);
+  const [recurrence, setRecurrence] = useState<Recurrence>("none");
   const [repeatPaymentMode, setRepeatPaymentMode] = useState<"subscription" | "upfront">("subscription");
   const [repeatCount, setRepeatCount] = useState(repeatDiscount.threshold);
   const [promoteOnSite, setPromoteOnSite] = useState(false);
@@ -98,26 +107,31 @@ export function BookingForm({
   const availableTimes = selectedDateSlot?.times ?? [];
   const availableEndTimes = selectedDateSlot?.endTimesByStart?.[time] ?? [];
   const hasAvailability = slots.length > 0;
+  const recurring = recurrence !== "none";
   const selectedHours =
     time && endTime ? Math.max(1, Number(endTime.slice(0, 2)) - Number(time.slice(0, 2))) : 1;
   const displayAmount = selectedPrice
     ? selectedPrice.amount * (selectedOffering?.startTime ? 1 : selectedHours)
     : 0;
-  const repeatDiscountApplies =
+  const repeatEligible =
     recurring &&
     repeatPaymentMode === "upfront" &&
     repeatDiscount.percent > 0 &&
     repeatCount >= repeatDiscount.threshold;
-  const recurringSubtotal = displayAmount * 4;
+  // Mirror the server's bookingAmount: take the larger of the customer discount
+  // and an eligible repeat-booking discount — never stack.
+  const effectivePct = Math.max(customerDiscountPercent, repeatEligible ? repeatDiscount.percent : 0);
+  const needsOrganisationName = customerGroup === "team_community" || customerGroup === "business";
+  const organisationLabel =
+    customerGroup === "business" ? "Business / event name" : "Club / event name";
   const upfrontSubtotal = displayAmount * repeatCount;
-  const recurringDiscountAmount = repeatDiscountApplies
-    ? Math.round(upfrontSubtotal * repeatDiscount.percent / 100)
-    : 0;
-  const totalAmount = recurring
+  const subtotal = recurring
     ? repeatPaymentMode === "upfront"
-      ? upfrontSubtotal - recurringDiscountAmount
-      : recurringSubtotal
+      ? upfrontSubtotal
+      : displayAmount
     : displayAmount;
+  const totalAmount = Math.round((subtotal * (100 - effectivePct)) / 100);
+  const recurringDiscountAmount = subtotal - totalAmount;
 
   useEffect(() => {
     if (!offeringId) return;
@@ -229,7 +243,7 @@ export function BookingForm({
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-2 sm:col-span-2">
               <Label>Date</Label>
               <input type="hidden" name="date" value={date} required />
@@ -339,18 +353,33 @@ export function BookingForm({
               checked={recurring}
               onCheckedChange={(checked) => {
                 const nextRecurring = checked === true;
-                setRecurring(nextRecurring);
+                setRecurrence(nextRecurring ? "weekly" : "none");
                 if (!nextRecurring) setRepeatPaymentMode("subscription");
               }}
             />
             <Label htmlFor="recurring" className="font-normal">
-              Repeat weekly
+              Repeat this booking
             </Label>
-            <input type="hidden" name="recurrence" value={recurring ? "weekly" : "none"} />
+            <input type="hidden" name="recurrence" value={recurrence} />
           </div>
           {recurring && (
             <div className="space-y-4 rounded-md border p-4">
               <input type="hidden" name="repeatPaymentMode" value={repeatPaymentMode} />
+              <div className="space-y-2">
+                <Label htmlFor="recurrenceFrequency">Frequency</Label>
+                <select
+                  id="recurrenceFrequency"
+                  value={recurrence}
+                  onChange={(event) => setRecurrence(event.target.value as Recurrence)}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  {recurrenceOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <button
                   type="button"
@@ -362,9 +391,9 @@ export function BookingForm({
                       : "hover:border-copper-300",
                   ].join(" ")}
                 >
-                  <span className="block font-medium">Pay monthly</span>
+                  <span className="block font-medium">Pay by subscription</span>
                   <span className="mt-1 block text-sm text-muted-foreground">
-                    Ongoing monthly subscription for regular bookings.
+                    Automatically charged every {recurrenceIntervalLabel(recurrence)}.
                   </span>
                 </button>
                 <button
@@ -387,7 +416,7 @@ export function BookingForm({
               {repeatPaymentMode === "upfront" && (
                 <div className="grid gap-3 sm:grid-cols-[12rem_1fr]">
                   <div className="space-y-2">
-                    <Label htmlFor="repeatCount">Weekly sessions</Label>
+                    <Label htmlFor="repeatCount">Number of sessions</Label>
                     <Input
                       id="repeatCount"
                       name="repeatCount"
@@ -420,6 +449,12 @@ export function BookingForm({
               <Label htmlFor="customerName">Name</Label>
               <Input id="customerName" name="customerName" autoComplete="name" required />
             </div>
+            {needsOrganisationName && (
+              <div className="space-y-2">
+                <Label htmlFor="organisationName">{organisationLabel}</Label>
+                <Input id="organisationName" name="organisationName" required />
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="customerPhone">Phone</Label>
               <Input id="customerPhone" name="customerPhone" autoComplete="tel" />
@@ -433,7 +468,7 @@ export function BookingForm({
         </CardContent>
       </Card>
 
-      <Card className="h-fit">
+      <Card className="h-fit lg:sticky lg:top-24 lg:self-start">
         <CardHeader>
           <CardTitle>Summary</CardTitle>
           <CardDescription>{selectedOffering?.facilityName}</CardDescription>
@@ -460,22 +495,22 @@ export function BookingForm({
               {recurring
                 ? repeatPaymentMode === "upfront"
                   ? "Card payment today"
-                  : "Monthly subscription"
+                  : `${recurrenceLabel(recurrence)} subscription`
                 : "Card payment today"}
             </p>
             {recurringDiscountAmount > 0 && (
               <p className="mt-2 text-sm text-muted-foreground">
-                Subtotal {money(upfrontSubtotal)} · repeat discount -{money(recurringDiscountAmount)}
+                Subtotal {money(subtotal)} · {effectivePct}% discount -{money(recurringDiscountAmount)}
               </p>
             )}
             {recurring && repeatPaymentMode === "subscription" && (
               <p className="mt-2 text-sm text-muted-foreground">
-                Billed monthly for weekly bookings.
+                Charged every {recurrenceIntervalLabel(recurrence)}.
               </p>
             )}
             {recurring && repeatPaymentMode === "upfront" && (
               <p className="mt-2 text-sm text-muted-foreground">
-                {repeatCount} weekly sessions paid upfront.
+                {repeatCount} {recurrenceLabel(recurrence).toLowerCase()} sessions paid upfront.
               </p>
             )}
             <p className="mt-1 text-2xl font-semibold">

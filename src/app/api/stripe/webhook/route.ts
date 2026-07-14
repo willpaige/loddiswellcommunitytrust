@@ -2,10 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { db } from "@/lib/db";
 import { bookingOccurrences, bookings, lotteryTickets } from "@/lib/db/schema";
-import { createPromotionEventForBooking } from "@/actions/bookings";
+import {
+  createPromotionEventForBooking,
+  extendSubscriptionBookingOccurrences,
+  sendBookingConfirmedEmails,
+  sendBookingPaymentFailedEmail,
+} from "@/actions/bookings";
 import { eq } from "drizzle-orm";
 import { addYears } from "date-fns";
 import Stripe from "stripe";
+import { ensureLotteryTicketNumbers, ticketNumbersText } from "@/actions/lottery-ticket-numbers";
+import { sendTemplateEmail } from "@/lib/email/send";
+import { upsertCustomerRecord } from "@/actions/customer-records";
 
 type SubStatus = "active" | "expired" | "refunded" | "canceled" | "past_due";
 
@@ -79,6 +87,13 @@ async function upsertFromSubscription(
 
   const now = new Date();
   const expiry = cpe ?? addYears(now, 1);
+  if (email) {
+    await upsertCustomerRecord({
+      email,
+      name: name || "Unknown",
+      phone,
+    });
+  }
 
   await db
     .insert(lotteryTickets)
@@ -115,6 +130,27 @@ async function upsertFromSubscription(
         ...(phone !== undefined ? { phone } : {}),
       },
     });
+
+  const [ticket] = await db
+    .select()
+    .from(lotteryTickets)
+    .where(eq(lotteryTickets.stripeSubscriptionId, sub.id))
+    .limit(1);
+  if (ticket) {
+    await ensureLotteryTicketNumbers(ticket.id);
+    await sendTemplateEmail({
+      key: "lottery_welcome",
+      to: ticket.email,
+      variables: {
+        name: ticket.name,
+        quantity: ticket.quantity,
+        ticketNumbers: await ticketNumbersText(ticket.id),
+        manageUrl: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/account/lottery`,
+      },
+      relatedEntityType: "lottery",
+      relatedEntityId: `${ticket.id}:welcome`,
+    });
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -168,6 +204,7 @@ export async function POST(req: NextRequest) {
             .set({ status: "confirmed" })
             .where(eq(bookingOccurrences.bookingId, session.metadata.bookingId));
           await createPromotionEventForBooking(session.metadata.bookingId);
+          await sendBookingConfirmedEmails(session.metadata.bookingId);
           break;
         }
 
@@ -198,18 +235,30 @@ export async function POST(req: NextRequest) {
       case "customer.subscription.deleted": {
         const sub = event.data.object as Stripe.Subscription;
         if (sub.metadata?.type === "booking" && sub.metadata.bookingId) {
-          await db
-            .update(bookings)
-            .set({
-              status: "cancelled",
-              cancelledAt: new Date(),
-              updatedAt: new Date(),
-            })
-            .where(eq(bookings.id, sub.metadata.bookingId));
-          await db
-            .update(bookingOccurrences)
-            .set({ status: "cancelled" })
-            .where(eq(bookingOccurrences.bookingId, sub.metadata.bookingId));
+          if (event.type === "customer.subscription.deleted" || sub.status === "canceled") {
+            await db
+              .update(bookings)
+              .set({
+                status: "cancelled",
+                cancelledAt: new Date(),
+                updatedAt: new Date(),
+              })
+              .where(eq(bookings.id, sub.metadata.bookingId));
+            await db
+              .update(bookingOccurrences)
+              .set({ status: "cancelled" })
+              .where(eq(bookingOccurrences.bookingId, sub.metadata.bookingId));
+          } else {
+            await db
+              .update(bookings)
+              .set({
+                stripeSubscriptionId: sub.id,
+                stripeCustomerId:
+                  typeof sub.customer === "string" ? sub.customer : sub.customer.id,
+                updatedAt: new Date(),
+              })
+              .where(eq(bookings.id, sub.metadata.bookingId));
+          }
           break;
         }
 
@@ -225,8 +274,36 @@ export async function POST(req: NextRequest) {
         }
         break;
       }
+      case "invoice.paid":
       case "invoice.payment_succeeded": {
         const invoice = event.data.object as Stripe.Invoice;
+        // One-off booking invoices have no subscription — handle them first,
+        // before the subscription lookup below would `break` on a missing sub.
+        if (invoice.metadata?.type === "booking_invoice" && invoice.metadata.bookingId) {
+          const bookingId = invoice.metadata.bookingId;
+          const paymentIntent = (
+            invoice as unknown as { payment_intent?: string | { id: string } }
+          ).payment_intent;
+          await db
+            .update(bookings)
+            .set({
+              status: "confirmed",
+              invoiceStatus: "paid",
+              stripePaymentIntentId:
+                typeof paymentIntent === "string"
+                  ? paymentIntent
+                  : paymentIntent?.id ?? null,
+              updatedAt: new Date(),
+            })
+            .where(eq(bookings.id, bookingId));
+          await db
+            .update(bookingOccurrences)
+            .set({ status: "confirmed" })
+            .where(eq(bookingOccurrences.bookingId, bookingId));
+          await createPromotionEventForBooking(bookingId);
+          await sendBookingConfirmedEmails(bookingId, true);
+          break;
+        }
         const subRef = (invoice as unknown as { subscription?: string | Stripe.Subscription }).subscription;
         const subId = typeof subRef === "string" ? subRef : subRef?.id;
         if (!subId) break;
@@ -234,18 +311,100 @@ export async function POST(req: NextRequest) {
         // checkout.session.completed handler already inserted the row.
         if (invoice.billing_reason !== "subscription_cycle") break;
         const sub = await getStripe().subscriptions.retrieve(subId);
+        if (sub.metadata?.type === "booking" && sub.metadata.bookingId) {
+          await db
+            .update(bookings)
+            .set({
+              status: "confirmed",
+              updatedAt: new Date(),
+            })
+            .where(eq(bookings.id, sub.metadata.bookingId));
+          // Keep the indefinite booking's rolling occurrence window topped up on
+          // each billing cycle (the nightly cron is the backstop).
+          await extendSubscriptionBookingOccurrences(sub.metadata.bookingId);
+          break;
+        }
         await upsertFromSubscription(sub);
         break;
       }
       case "invoice.payment_failed": {
         const invoice = event.data.object as Stripe.Invoice;
+        if (invoice.metadata?.type === "booking_invoice" && invoice.metadata.bookingId) {
+          await db
+            .update(bookings)
+            .set({ status: "payment_failed", invoiceStatus: "open", updatedAt: new Date() })
+            .where(eq(bookings.id, invoice.metadata.bookingId));
+          await sendBookingPaymentFailedEmail(invoice.metadata.bookingId);
+          break;
+        }
         const subRef = (invoice as unknown as { subscription?: string | Stripe.Subscription }).subscription;
         const subId = typeof subRef === "string" ? subRef : subRef?.id;
         if (!subId) break;
+        const sub = await getStripe().subscriptions.retrieve(subId);
+        if (sub.metadata?.type === "booking" && sub.metadata.bookingId) {
+          await db
+            .update(bookings)
+            .set({ status: "payment_failed", updatedAt: new Date() })
+            .where(eq(bookings.id, sub.metadata.bookingId));
+          await sendBookingPaymentFailedEmail(sub.metadata.bookingId);
+          break;
+        }
         await db
           .update(lotteryTickets)
           .set({ status: "past_due" })
           .where(eq(lotteryTickets.stripeSubscriptionId, subId));
+        const [ticket] = await db
+          .select()
+          .from(lotteryTickets)
+          .where(eq(lotteryTickets.stripeSubscriptionId, subId))
+          .limit(1);
+        if (ticket) {
+          await sendTemplateEmail({
+            key: "lottery_payment_failed",
+            to: ticket.email,
+            variables: {
+              name: ticket.name,
+              manageUrl: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/account/lottery`,
+            },
+            relatedEntityType: "lottery",
+            relatedEntityId: `${ticket.id}:payment-failed`,
+          });
+        }
+        break;
+      }
+      case "invoice.finalized": {
+        const invoice = event.data.object as Stripe.Invoice;
+        if (invoice.metadata?.type === "booking_invoice" && invoice.metadata.bookingId) {
+          await db
+            .update(bookings)
+            .set({
+              invoiceStatus: "open",
+              invoiceHostedUrl: invoice.hosted_invoice_url ?? null,
+              invoicePdfUrl: invoice.invoice_pdf ?? null,
+              updatedAt: new Date(),
+            })
+            .where(eq(bookings.id, invoice.metadata.bookingId));
+        }
+        break;
+      }
+      case "invoice.marked_uncollectible": {
+        const invoice = event.data.object as Stripe.Invoice;
+        if (invoice.metadata?.type === "booking_invoice" && invoice.metadata.bookingId) {
+          await db
+            .update(bookings)
+            .set({ invoiceStatus: "uncollectible", updatedAt: new Date() })
+            .where(eq(bookings.id, invoice.metadata.bookingId));
+        }
+        break;
+      }
+      case "invoice.voided": {
+        const invoice = event.data.object as Stripe.Invoice;
+        if (invoice.metadata?.type === "booking_invoice" && invoice.metadata.bookingId) {
+          await db
+            .update(bookings)
+            .set({ invoiceStatus: "void", updatedAt: new Date() })
+            .where(eq(bookings.id, invoice.metadata.bookingId));
+        }
         break;
       }
     }

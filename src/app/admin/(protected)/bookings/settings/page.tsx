@@ -2,9 +2,15 @@ import { Ban, Pencil } from "lucide-react";
 import {
   createBookingBlock,
   getAdminBookingSetup,
+  updateBookingCancellationSettings,
   updateRepeatBookingDiscount,
   updateFacilityBookableHours,
 } from "@/actions/bookings";
+import {
+  assignRequirementSetToOffering,
+  getAdminOfferingsForRequirements,
+  getRequirementSets,
+} from "@/actions/booking-requirements";
 import { bookingHourOptions } from "@/lib/bookings";
 import { BookingPricesTable } from "@/components/admin/booking-prices-table";
 import { Button } from "@/components/ui/button";
@@ -15,7 +21,11 @@ import { Label } from "@/components/ui/label";
 export const dynamic = "force-dynamic";
 
 export default async function AdminBookingSettingsPage() {
-  const setup = await getAdminBookingSetup();
+  const [setup, requirementOfferings, requirementSets] = await Promise.all([
+    getAdminBookingSetup(),
+    getAdminOfferingsForRequirements(),
+    getRequirementSets(),
+  ]);
   const uniqueOfferings = setup.offerings.filter(
     (offering, index, all) =>
       all.findIndex((item) => item.offeringId === offering.offeringId) === index
@@ -39,7 +49,7 @@ export default async function AdminBookingSettingsPage() {
           <CardHeader>
             <CardTitle>Repeat booking discount</CardTitle>
             <CardDescription>
-              Advertised on weekly repeat bookings and applied automatically at checkout.
+              Advertised on repeat bookings and applied automatically at checkout.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -72,6 +82,39 @@ export default async function AdminBookingSettingsPage() {
               <div className="flex items-end">
                 <Button type="submit" variant="outline">
                   Save discount
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Customer cancellations</CardTitle>
+            <CardDescription>
+              Allow customers to cancel online and automatically refund eligible card payments until this many hours before the booking starts.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form action={updateBookingCancellationSettings} className="grid gap-4 sm:grid-cols-3">
+              <div className="space-y-2">
+                <Label htmlFor="cancellationNoticeHours">Notice required</Label>
+                <Input
+                  id="cancellationNoticeHours"
+                  name="noticeHours"
+                  type="number"
+                  min="0"
+                  step="1"
+                  defaultValue={setup.cancellationSettings.noticeHours}
+                  required
+                />
+                <p className="text-xs text-muted-foreground">
+                  Hours before start time. Use 0 to allow cancellation until the booking starts.
+                </p>
+              </div>
+              <div className="flex items-end">
+                <Button type="submit" variant="outline">
+                  Save cancellation policy
                 </Button>
               </div>
             </form>
@@ -211,6 +254,55 @@ export default async function AdminBookingSettingsPage() {
           </CardHeader>
           <CardContent>
             <BookingPricesTable rows={setup.offerings} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Requirement questionnaires</CardTitle>
+            <CardDescription>
+              Assign a questionnaire to a booking type. Customers complete it after booking;
+              build sets on the{" "}
+              <a className="underline" href="/admin/bookings/requirements">
+                Requirements
+              </a>{" "}
+              page.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {requirementOfferings.map((offering) => (
+              <form
+                key={offering.id}
+                action={assignRequirementSetToOffering}
+                className="flex flex-col gap-2 rounded-md border p-3 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <input type="hidden" name="offeringId" value={offering.id} />
+                <div className="text-sm">
+                  <span className="font-medium">{offering.facilityName}</span> — {offering.name}
+                  {!offering.active && <span className="ml-2 text-muted-foreground">(inactive)</span>}
+                </div>
+                <div className="flex items-center gap-2">
+                  <select
+                    name="requirementSetId"
+                    defaultValue={offering.requirementSetId ?? ""}
+                    className="h-10 rounded-md border bg-background px-3 text-sm"
+                  >
+                    <option value="">No questionnaire</option>
+                    {requirementSets.map((set) => (
+                      <option key={set.id} value={set.id}>
+                        {set.name}
+                      </option>
+                    ))}
+                  </select>
+                  <Button type="submit" variant="outline" size="sm">
+                    Save
+                  </Button>
+                </div>
+              </form>
+            ))}
+            {requirementOfferings.length === 0 && (
+              <p className="text-sm text-muted-foreground">No booking types found.</p>
+            )}
           </CardContent>
         </Card>
       </div>
