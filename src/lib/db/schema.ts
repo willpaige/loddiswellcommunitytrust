@@ -111,6 +111,7 @@ export const facilities = pgTable("facilities", {
   name: text("name").notNull(),
   description: text("description").notNull().default("{}"),
   address: text("address"),
+  what3words: text("what3words"),
   capacity: integer("capacity"),
   features: jsonb("features").$type<string[]>(),
   heroImageUrl: text("hero_image_url"),
@@ -344,6 +345,25 @@ export const bookingPrices = pgTable("booking_prices", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+export const bookingDiscountCodes = pgTable(
+  "booking_discount_codes",
+  {
+    id: text("id").primaryKey().$defaultFn(() => createId()),
+    code: text("code").notNull(),
+    description: text("description"),
+    discountPercent: integer("discount_percent").notNull(),
+    validFrom: timestamp("valid_from", { mode: "date" }),
+    validUntil: timestamp("valid_until", { mode: "date" }),
+    maxRedemptions: integer("max_redemptions"),
+    maxRedemptionsPerCustomer: integer("max_redemptions_per_customer"),
+    active: boolean("active").notNull().default(true),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex("booking_discount_codes_code_idx").on(table.code)]
+);
+
 export const bookings = pgTable(
   "bookings",
   {
@@ -370,11 +390,21 @@ export const bookings = pgTable(
       .notNull()
       .default("one_off"),
     amount: integer("amount").notNull().default(0),
+    discountCodeId: text("discount_code_id").references(() => bookingDiscountCodes.id, {
+      onDelete: "set null",
+    }),
+    discountCode: text("discount_code"),
+    discountPercent: integer("discount_percent").notNull().default(0),
+    discountAmount: integer("discount_amount").notNull().default(0),
     startDate: timestamp("start_date", { mode: "date" }).notNull(),
     endDate: timestamp("end_date", { mode: "date" }).notNull(),
     recurrence: text("recurrence", {
       enum: ["none", "weekly", "bi_weekly", "monthly", "quarterly", "yearly"],
     }).notNull().default("none"),
+    scheduleType: text("schedule_type", { enum: ["regular", "custom"] })
+      .notNull()
+      .default("regular"),
+    indefinite: boolean("indefinite").notNull().default(false),
     billingInterval: text("billing_interval", {
       enum: ["weekly", "bi_weekly", "monthly", "quarterly", "yearly"],
     }),
@@ -428,6 +458,16 @@ export const bookingOccurrences = pgTable(
     status: text("status", { enum: ["pending_payment", "confirmed", "cancelled"] })
       .notNull()
       .default("pending_payment"),
+    allocatedAmount: integer("allocated_amount").notNull().default(0),
+    promotionEventId: text("promotion_event_id").references(() => events.id, {
+      onDelete: "set null",
+    }),
+    refundStatus: text("refund_status", { enum: ["none", "due", "refunded"] })
+      .notNull()
+      .default("none"),
+    refundAmount: integer("refund_amount").notNull().default(0),
+    refundedAt: timestamp("refunded_at"),
+    refundedBy: text("refunded_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (table) => [
@@ -530,6 +570,7 @@ export const bookingBlocks = pgTable(
       .references(() => facilities.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     eventId: text("event_id").references(() => events.id, { onDelete: "cascade" }),
+    seriesId: text("series_id").references(() => bookingBlockSeries.id, { onDelete: "cascade" }),
     startDate: timestamp("start_date", { mode: "date" }).notNull(),
     endDate: timestamp("end_date", { mode: "date" }).notNull(),
     notes: text("notes"),
@@ -538,6 +579,22 @@ export const bookingBlocks = pgTable(
   },
   (table) => [index("booking_blocks_facility_start_idx").on(table.facilityId, table.startDate)]
 );
+
+export const bookingBlockSeries = pgTable("booking_block_series", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  facilityId: text("facility_id").notNull().references(() => facilities.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  startDate: timestamp("start_date", { mode: "date" }).notNull(),
+  endDate: timestamp("end_date", { mode: "date" }).notNull(),
+  recurrence: text("recurrence", {
+    enum: ["weekly", "bi_weekly", "monthly", "quarterly", "yearly"],
+  }).notNull(),
+  indefinite: boolean("indefinite").notNull().default(false),
+  repeatCount: integer("repeat_count").notNull().default(1),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+});
 
 export const siteSettings = pgTable("site_settings", {
   id: text("id")

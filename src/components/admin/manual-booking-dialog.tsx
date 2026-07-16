@@ -6,6 +6,7 @@ import { CalendarPlus, CheckCircle2, CreditCard, Receipt } from "lucide-react";
 import { format } from "date-fns";
 import { createManualBooking, getAvailableBookingSlots } from "@/actions/bookings";
 import { getCustomerDiscountByEmail } from "@/actions/customers";
+import { validateBookingDiscountCode, type DiscountCodeResult } from "@/actions/booking-discount-codes";
 import {
   customerGroups,
   money,
@@ -35,6 +36,7 @@ type ManualBookingOffering = {
   facilityName: string;
   facilityBookableStartTime?: string;
   facilityBookableEndTime?: string;
+  offeringType?: string;
 };
 
 type ManualBookingPrice = {
@@ -50,9 +52,12 @@ type AvailableSlot = {
   endTimesByStart?: Record<string, string[]>;
 };
 
+type CustomSession = { date: string; startTime: string; endTime: string };
+
 export function ManualBookingDialog({
   offerings,
   prices = [],
+  repeatDiscount = { threshold: 8, percent: 15 },
   open,
   onOpenChange,
   defaultDate,
@@ -60,6 +65,7 @@ export function ManualBookingDialog({
 }: {
   offerings: ManualBookingOffering[];
   prices?: ManualBookingPrice[];
+  repeatDiscount?: { threshold: number; percent: number };
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   defaultDate?: Date;
@@ -73,13 +79,21 @@ export function ManualBookingDialog({
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [endTime, setEndTime] = useState("");
+  const [customSchedule, setCustomSchedule] = useState(false);
+  const [customSessions, setCustomSessions] = useState<CustomSession[]>([]);
+  const [customPrice, setCustomPrice] = useState("");
   const [recurrence, setRecurrence] = useState<Recurrence>("none");
   const [repeatCount, setRepeatCount] = useState(8);
+  const [indefinite, setIndefinite] = useState(false);
   const [repeatPaymentMode, setRepeatPaymentMode] = useState<"upfront" | "subscription">("upfront");
   const [billingInterval, setBillingInterval] = useState<Exclude<Recurrence, "none">>("monthly");
   const [recurringAmount, setRecurringAmount] = useState("");
   const [recurringEdited, setRecurringEdited] = useState(false);
   const [customerDiscountPercent, setCustomerDiscountPercent] = useState(0);
+  const [customerEmail, setCustomerEmail] = useState("");
+  const [discountCode, setDiscountCode] = useState("");
+  const [discountCodeResult, setDiscountCodeResult] = useState<DiscountCodeResult | null>(null);
+  const [checkingCode, setCheckingCode] = useState(false);
   const [paymentMode, setPaymentMode] = useState<"confirmed" | "payment_link" | "invoice">(
     "confirmed"
   );
@@ -92,10 +106,12 @@ export function ManualBookingDialog({
   const availableTimes = selectedDateSlot?.times ?? [];
   const availableEndTimes = selectedDateSlot?.endTimesByStart?.[time] ?? [];
   const selectedOffering = offerings.find((offering) => offering.offeringId === offeringId);
+  const isKidsParty = selectedOffering?.offeringType === "kids_party";
+  const pricingCustomerGroup = isKidsParty ? "parent_private" : customerGroup;
   const bookableStartTime = selectedOffering?.facilityBookableStartTime ?? "08:00";
   const bookableEndTime = selectedOffering?.facilityBookableEndTime ?? "23:00";
   const dialogOpen = open ?? internalOpen;
-  const recurring = recurrence !== "none";
+  const recurring = !isKidsParty && recurrence !== "none";
   const isSubscription = paymentMode === "payment_link" && recurring && repeatPaymentMode === "subscription";
   const needsOrganisationName = customerGroup === "team_community" || customerGroup === "business";
   const organisationLabel =
@@ -103,7 +119,7 @@ export function ManualBookingDialog({
 
   // Per-session price for the selected offering + customer group (pence).
   const priceRow = prices.find(
-    (row) => row.offeringId === offeringId && row.customerGroup === customerGroup
+    (row) => row.offeringId === offeringId && row.customerGroup === pricingCustomerGroup
   );
   const sessionHours =
     time && endTime ? Math.max(1, Number(endTime.slice(0, 2)) - Number(time.slice(0, 2))) : 1;
@@ -118,6 +134,38 @@ export function ManualBookingDialog({
   const suggestedRecurringPence = Math.round(
     (grossSuggestedPence * (100 - customerDiscountPercent)) / 100
   );
+  const customGrossPence = customSessions.reduce((total, session) => {
+    const hours = Math.max(
+      1,
+      Number(session.endTime.slice(0, 2)) - Number(session.startTime.slice(0, 2))
+    );
+    return total + (priceRow?.amount ?? 0) * (priceRow?.variableDuration ? hours : 1);
+  }, 0);
+  const sessionCount = customSchedule ? customSessions.length : recurring ? repeatCount : 1;
+  const repeatDiscountApplies =
+    (customSchedule || (recurring && !isSubscription && !indefinite)) &&
+    sessionCount >= repeatDiscount.threshold;
+  const effectiveDiscountPercent = Math.max(
+    customerDiscountPercent,
+    repeatDiscountApplies ? repeatDiscount.percent : 0,
+    discountCodeResult?.valid ? discountCodeResult.discountPercent ?? 0 : 0
+  );
+  const regularGrossPence = perSessionPence * (recurring && !isSubscription && !indefinite ? repeatCount : 1);
+  const automaticTotalPence = Math.round(
+    ((customSchedule ? customGrossPence : regularGrossPence) * (100 - effectiveDiscountPercent)) / 100
+  );
+  const parsedCustomPrice = Number(customPrice);
+  const customPricePence = customPrice.trim() === "" || !Number.isFinite(parsedCustomPrice)
+    ? null
+    : Math.max(0, Math.round(parsedCustomPrice * 100));
+  const displayedTotalPence = customSchedule && customPricePence !== null
+    ? Math.round((customPricePence * (100 - effectiveDiscountPercent)) / 100)
+    : isSubscription
+      ? Math.round(
+          (Math.max(0, Math.round(Number(recurringAmount || 0) * 100)) *
+            (100 - (discountCodeResult?.valid ? discountCodeResult.discountPercent ?? 0 : 0))) / 100
+        )
+      : automaticTotalPence;
 
   // Auto-fill the recurring charge with the suggestion until the admin edits it.
   useEffect(() => {
@@ -156,6 +204,16 @@ export function ManualBookingDialog({
     };
   }, [offeringId, formattedDefaultDate]);
 
+  useEffect(() => {
+    if (!isKidsParty) return;
+    setCustomerGroup("parent_private");
+    setRecurrence("none");
+    setCustomSchedule(false);
+    setCustomSessions([]);
+    setIndefinite(false);
+    setPromoteOnSite(false);
+  }, [isKidsParty]);
+
   async function handleSubmit(formData: FormData) {
     setSaving(true);
     try {
@@ -191,6 +249,8 @@ export function ManualBookingDialog({
           className="grid gap-4 sm:grid-cols-2"
         >
           <input type="hidden" name="manualPaymentMode" value={paymentMode} />
+          <input type="hidden" name="scheduleType" value={customSchedule ? "custom" : "regular"} />
+          <input type="hidden" name="customSessions" value={JSON.stringify(customSessions)} />
           <div className="space-y-2 sm:col-span-2">
             <Label>Payment</Label>
             <div className="grid gap-3 sm:grid-cols-3">
@@ -269,7 +329,7 @@ export function ManualBookingDialog({
           </div>
 
           <div className="space-y-2 sm:col-span-2">
-            <Label>Date</Label>
+            <Label>{customSchedule ? "Add a date" : "Date"}</Label>
             <input type="hidden" name="date" value={date} required />
             <AvailableDatePicker
               slots={slots}
@@ -285,7 +345,7 @@ export function ManualBookingDialog({
             />
           </div>
 
-          <div className="space-y-2">
+          {!isKidsParty && <div className="space-y-2">
             <Label>Start time</Label>
             <AvailableTimePicker
               name="time"
@@ -299,7 +359,69 @@ export function ManualBookingDialog({
                 setEndTime(selectedDateSlot?.endTimesByStart?.[nextTime]?.[0] ?? "");
               }}
             />
-          </div>
+          </div>}
+          {isKidsParty && <input type="hidden" name="customerGroup" value="parent_private" />}
+
+          {customSchedule && (
+            <div className="space-y-3 rounded-md border p-4 sm:col-span-2">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium">Selected sessions</p>
+                  <p className="text-xs text-muted-foreground">Add between 2 and 52 independently timed sessions.</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={!date || !time || !endTime || customSessions.length >= 52}
+                  onClick={() => {
+                    const next = { date, startTime: time, endTime };
+                    if (!customSessions.some((item) => JSON.stringify(item) === JSON.stringify(next))) {
+                      setCustomSessions((items) => [...items, next].sort((a, b) =>
+                        `${a.date}${a.startTime}`.localeCompare(`${b.date}${b.startTime}`)
+                      ));
+                    }
+                  }}
+                >
+                  Add session
+                </Button>
+              </div>
+              {customSessions.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No sessions added yet.</p>
+              ) : (
+                <ul className="divide-y rounded-md border">
+                  {customSessions.map((session) => (
+                    <li key={`${session.date}-${session.startTime}-${session.endTime}`} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                      <span>{format(new Date(`${session.date}T12:00:00`), "d MMM yyyy")} · {session.startTime}–{session.endTime}</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setCustomSessions((items) => items.filter((item) => item !== session))}
+                      >
+                        Remove
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="max-w-xs space-y-2 pt-2">
+                <Label htmlFor="customBookingPrice">Custom total price (£)</Label>
+                <Input
+                  id="customBookingPrice"
+                  name="customPrice"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={customPrice}
+                  onChange={(event) => setCustomPrice(event.target.value)}
+                  placeholder="Leave blank to calculate automatically"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Overrides standard pricing for the whole group and is used for payment links and invoices.
+                </p>
+              </div>
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label>End time</Label>
@@ -314,7 +436,7 @@ export function ManualBookingDialog({
             />
           </div>
 
-          <div className="space-y-2">
+          {!isKidsParty && <div className="space-y-2">
             <Label htmlFor="manualGroup">Customer type</Label>
             <select
               id="manualGroup"
@@ -333,7 +455,8 @@ export function ManualBookingDialog({
                 </option>
               ))}
             </select>
-          </div>
+          </div>}
+          {isKidsParty && <input type="hidden" name="customerGroup" value="parent_private" />}
 
           {needsOrganisationName && (
             <div className="space-y-2">
@@ -342,19 +465,32 @@ export function ManualBookingDialog({
             </div>
           )}
 
-          <div className="flex items-end">
+          {!isKidsParty && <div className="flex items-end gap-5 sm:col-span-2">
             <label className="flex h-10 items-center gap-2 text-sm">
               <input
                 type="checkbox"
                 checked={recurring}
+                disabled={customSchedule}
                 onChange={(event) => setRecurrence(event.target.checked ? "weekly" : "none")}
               />
               Repeat
             </label>
+            <label className="flex h-10 items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={customSchedule}
+                onChange={(event) => {
+                  setCustomSchedule(event.target.checked);
+                  if (event.target.checked) setRecurrence("none");
+                }}
+              />
+              Custom dates
+            </label>
             <input type="hidden" name="recurrence" value={recurrence} />
-          </div>
+          </div>}
+          {isKidsParty && <input type="hidden" name="recurrence" value="none" />}
 
-          {recurring && (
+          {recurring && !customSchedule && (
             <>
               <input
                 type="hidden"
@@ -376,6 +512,18 @@ export function ManualBookingDialog({
                   ))}
                 </select>
               </div>
+
+              {paymentMode === "confirmed" && (
+                <label className="flex items-center gap-2 self-end pb-2 text-sm">
+                  <input
+                    type="checkbox"
+                    name="indefinite"
+                    checked={indefinite}
+                    onChange={(event) => setIndefinite(event.target.checked)}
+                  />
+                  Repeat indefinitely
+                </label>
+              )}
 
               {paymentMode === "payment_link" && (
                 <div className="space-y-2">
@@ -440,7 +588,7 @@ export function ManualBookingDialog({
                     </p>
                   </div>
                 </>
-              ) : (
+              ) : !indefinite || paymentMode !== "confirmed" ? (
                 <div className="space-y-2">
                   <Label htmlFor="manualRepeatCount">Number of sessions</Label>
                   <Input
@@ -453,11 +601,115 @@ export function ManualBookingDialog({
                     onChange={(event) => setRepeatCount(Number(event.target.value))}
                   />
                 </div>
+              ) : (
+                <p className="self-end pb-2 text-sm text-muted-foreground">
+                  Sessions are kept available on a rolling 180-day horizon until the booking is cancelled.
+                </p>
               )}
             </>
           )}
 
-          {customerGroup === "team_community" && (
+          <div className="rounded-md border border-sage-200 bg-sage-50 p-4 sm:col-span-2">
+            <div className="flex items-center gap-2">
+              <Receipt className="h-4 w-4 text-sage-700" aria-hidden="true" />
+              <h3 className="font-medium text-sage-900">Booking cost overview</h3>
+            </div>
+            {priceRow ? (
+              <dl className="mt-3 space-y-2 text-sm">
+                <div className="flex justify-between gap-4">
+                  <dt className="text-sage-700">Standard session price</dt>
+                  <dd>{money(perSessionPence)}</dd>
+                </div>
+                {customSchedule && (
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-sage-700">Selected sessions</dt>
+                    <dd>{customSessions.length}</dd>
+                  </div>
+                )}
+                {recurring && !indefinite && !isSubscription && (
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-sage-700">Number of sessions</dt>
+                    <dd>{repeatCount}</dd>
+                  </div>
+                )}
+                {!isSubscription && !indefinite && (
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-sage-700">Standard total</dt>
+                    <dd>{money(customSchedule ? customGrossPence : regularGrossPence)}</dd>
+                  </div>
+                )}
+                {effectiveDiscountPercent > 0 && customPricePence === null && !isSubscription && (
+                  <div className="flex justify-between gap-4 text-sage-700">
+                    <dt>Discount applied</dt>
+                    <dd>{effectiveDiscountPercent}%</dd>
+                  </div>
+                )}
+                {customSchedule && customPricePence !== null && (
+                  <div className="flex justify-between gap-4 text-copper-700">
+                    <dt>Custom price override</dt>
+                    <dd>{money(customPricePence)}</dd>
+                  </div>
+                )}
+                <div className="flex justify-between gap-4 border-t border-sage-200 pt-2 text-base font-semibold text-sage-950">
+                  <dt>
+                    {isSubscription
+                      ? `Charge every ${recurrenceLabel(billingInterval).toLowerCase()}`
+                      : indefinite
+                        ? "Recorded value per session"
+                        : paymentMode === "confirmed"
+                          ? "Recorded booking value"
+                          : "Amount due"}
+                  </dt>
+                  <dd>{money(indefinite ? perSessionPence : displayedTotalPence)}</dd>
+                </div>
+              </dl>
+            ) : (
+              <p className="mt-2 text-sm text-sage-700">
+                No price is configured for this booking type and customer group.
+              </p>
+            )}
+            <p className="mt-3 text-xs text-sage-700">
+              {paymentMode === "confirmed"
+                ? "No payment link or invoice will be sent."
+                : paymentMode === "invoice"
+                  ? "This amount will be used on the Stripe invoice."
+                  : "This amount will be used for the Stripe payment link."}
+            </p>
+            <div className="mt-4 space-y-2 border-t border-sage-200 pt-4">
+              <Label htmlFor="manualDiscountCode">Discount code</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="manualDiscountCode"
+                  name="discountCode"
+                  value={discountCode}
+                  onChange={(event) => {
+                    setDiscountCode(event.target.value.toUpperCase());
+                    setDiscountCodeResult(null);
+                  }}
+                  placeholder="Enter code"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={checkingCode || !discountCode.trim()}
+                  onClick={async () => {
+                    setCheckingCode(true);
+                    try { setDiscountCodeResult(await validateBookingDiscountCode(discountCode, customerEmail)); }
+                    finally { setCheckingCode(false); }
+                  }}
+                >
+                  {checkingCode ? "Checking…" : "Apply"}
+                </Button>
+              </div>
+              {discountCodeResult && (
+                <p className={`text-sm ${discountCodeResult.valid ? "text-sage-800" : "text-destructive"}`}>
+                  {discountCodeResult.message}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {!isKidsParty && customerGroup === "team_community" && (
             <div className="space-y-3 rounded-md border p-4 sm:col-span-2">
               <div className="flex items-start gap-3">
                 <Checkbox
@@ -502,6 +754,8 @@ export function ManualBookingDialog({
               name="customerEmail"
               type="email"
               required
+              value={customerEmail}
+              onChange={(event) => setCustomerEmail(event.target.value)}
               onBlur={async (event) => {
                 const email = event.target.value.trim();
                 if (!email) {
@@ -562,7 +816,12 @@ export function ManualBookingDialog({
           </div>
 
           <div className="flex justify-end sm:col-span-2">
-            <Button type="submit" disabled={saving || loadingSlots || slots.length === 0}>
+            <Button
+              type="submit"
+              disabled={saving || loadingSlots || slots.length === 0 ||
+                (customSchedule && customSessions.length < 2) ||
+                Boolean(discountCode.trim() && !discountCodeResult?.valid)}
+            >
               {saving
                 ? "Creating booking..."
                 : loadingSlots

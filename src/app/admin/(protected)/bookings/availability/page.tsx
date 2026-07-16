@@ -12,6 +12,12 @@ export default async function AdminBookingAvailabilityPage() {
     (offering, index, all) =>
       all.findIndex((item) => item.offeringId === offering.offeringId) === index
   );
+  const prices = setup.offerings.map((offering) => ({
+    offeringId: offering.offeringId,
+    customerGroup: offering.customerGroup,
+    amount: offering.amount,
+    variableDuration: offering.startTime == null,
+  }));
 
   return (
     <div>
@@ -22,7 +28,12 @@ export default async function AdminBookingAvailabilityPage() {
         </p>
       </div>
 
-      <AvailabilityCalendar items={items} manualBookingOfferings={uniqueOfferings} />
+      <AvailabilityCalendar
+        items={items}
+        manualBookingOfferings={uniqueOfferings}
+        manualBookingPrices={prices}
+        repeatDiscount={setup.repeatDiscount}
+      />
     </div>
   );
 }

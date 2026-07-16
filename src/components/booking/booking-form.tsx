@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check } from "lucide-react";
 import { createBookingCheckout, getAvailableBookingSlots } from "@/actions/bookings";
+import { validateBookingDiscountCode, type DiscountCodeResult } from "@/actions/booking-discount-codes";
 import {
   customerGroups,
   money,
@@ -93,21 +94,26 @@ export function BookingForm({
   const [time, setTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [loadingSlots, setLoadingSlots] = useState(false);
+  const [discountCode, setDiscountCode] = useState("");
+  const [discountCodeResult, setDiscountCodeResult] = useState<DiscountCodeResult | null>(null);
+  const [checkingCode, setCheckingCode] = useState(false);
 
   const selectedOffering =
     facilityOfferings.find((offering) => offering.offeringId === offeringId) ||
     facilityOfferings[0];
+  const isKidsParty = selectedOffering?.offeringType === "kids_party";
+  const pricingCustomerGroup = isKidsParty ? "parent_private" : customerGroup;
   const selectedPrice = offerings.find(
     (offering) =>
       offering.offeringId === selectedOffering?.offeringId &&
-      offering.customerGroup === customerGroup
+      offering.customerGroup === pricingCustomerGroup
   );
   const selectedFacility = facilities.find((facility) => facility.id === facilityId);
   const selectedDateSlot = slots.find((slot) => slot.date === date);
   const availableTimes = selectedDateSlot?.times ?? [];
   const availableEndTimes = selectedDateSlot?.endTimesByStart?.[time] ?? [];
   const hasAvailability = slots.length > 0;
-  const recurring = recurrence !== "none";
+  const recurring = !isKidsParty && recurrence !== "none";
   const selectedHours =
     time && endTime ? Math.max(1, Number(endTime.slice(0, 2)) - Number(time.slice(0, 2))) : 1;
   const displayAmount = selectedPrice
@@ -120,8 +126,12 @@ export function BookingForm({
     repeatCount >= repeatDiscount.threshold;
   // Mirror the server's bookingAmount: take the larger of the customer discount
   // and an eligible repeat-booking discount — never stack.
-  const effectivePct = Math.max(customerDiscountPercent, repeatEligible ? repeatDiscount.percent : 0);
-  const needsOrganisationName = customerGroup === "team_community" || customerGroup === "business";
+  const effectivePct = Math.max(
+    customerDiscountPercent,
+    repeatEligible ? repeatDiscount.percent : 0,
+    discountCodeResult?.valid ? discountCodeResult.discountPercent ?? 0 : 0
+  );
+  const needsOrganisationName = !isKidsParty && (customerGroup === "team_community" || customerGroup === "business");
   const organisationLabel =
     customerGroup === "business" ? "Business / event name" : "Club / event name";
   const upfrontSubtotal = displayAmount * repeatCount;
@@ -158,15 +168,33 @@ export function BookingForm({
     };
   }, [offeringId, initialDate]);
 
+  useEffect(() => {
+    if (!isKidsParty) return;
+    setCustomerGroup("parent_private");
+    setRecurrence("none");
+    setRepeatPaymentMode("upfront");
+    setPromoteOnSite(false);
+  }, [isKidsParty]);
+
   function handleFacilityChange(value: string) {
     setFacilityId(value);
     const next = offerings.find((offering) => offering.facilityId === value);
     setOfferingId(next?.offeringId || "");
   }
 
+  async function applyDiscountCode() {
+    setCheckingCode(true);
+    try {
+      setDiscountCodeResult(await validateBookingDiscountCode(discountCode));
+    } finally {
+      setCheckingCode(false);
+    }
+  }
+
   return (
     <form action={createBookingCheckout} className="grid gap-6 lg:grid-cols-[1fr_22rem]">
       <input type="hidden" name="facilityId" value={facilityId} />
+      <input type="hidden" name="discountCode" value={discountCode} />
       <Card>
         <CardHeader>
           <CardTitle>Choose your booking</CardTitle>
@@ -291,7 +319,7 @@ export function BookingForm({
                 />
               </div>
             )}
-            <div className="space-y-2">
+            {!isKidsParty && <div className="space-y-2">
               <Label htmlFor="customerGroup">Customer type</Label>
               <select
                 id="customerGroup"
@@ -310,10 +338,11 @@ export function BookingForm({
                   </option>
                 ))}
               </select>
-            </div>
+            </div>}
+            {isKidsParty && <input type="hidden" name="customerGroup" value="parent_private" />}
           </div>
 
-          {customerGroup === "team_community" && (
+          {!isKidsParty && customerGroup === "team_community" && (
             <div className="space-y-3 rounded-md border p-4">
               <div className="flex items-start gap-3">
                 <Checkbox
@@ -347,7 +376,7 @@ export function BookingForm({
             </div>
           )}
 
-          <div className="flex items-center gap-3 rounded-md border p-3">
+          {!isKidsParty && <div className="flex items-center gap-3 rounded-md border p-3">
             <Checkbox
               id="recurring"
               checked={recurring}
@@ -361,8 +390,9 @@ export function BookingForm({
               Repeat this booking
             </Label>
             <input type="hidden" name="recurrence" value={recurrence} />
-          </div>
-          {recurring && (
+          </div>}
+          {isKidsParty && <input type="hidden" name="recurrence" value="none" />}
+          {recurring && !isKidsParty && (
             <div className="space-y-4 rounded-md border p-4">
               <input type="hidden" name="repeatPaymentMode" value={repeatPaymentMode} />
               <div className="space-y-2">
@@ -517,13 +547,45 @@ export function BookingForm({
               {selectedPrice ? money(totalAmount) : "—"}
             </p>
           </div>
-          <Button type="submit" className="w-full" disabled={loadingSlots || !hasAvailability}>
+          <div className="space-y-2">
+            <Label htmlFor="discountCodeDisplay">Discount code</Label>
+            <div className="flex gap-2">
+              <Input
+                id="discountCodeDisplay"
+                value={discountCode}
+                onChange={(event) => {
+                  setDiscountCode(event.target.value.toUpperCase());
+                  setDiscountCodeResult(null);
+                }}
+                placeholder="Enter code"
+              />
+              <Button type="button" variant="outline" onClick={applyDiscountCode} disabled={checkingCode || !discountCode.trim()}>
+                {checkingCode ? "Checking…" : "Apply"}
+              </Button>
+            </div>
+            {discountCodeResult && (
+              <p className={`text-sm ${discountCodeResult.valid ? "text-sage-700" : "text-destructive"}`}>
+                {discountCodeResult.message}
+                {discountCodeResult.valid && (discountCodeResult.discountPercent ?? 0) < effectivePct
+                  ? " Your larger existing discount is used."
+                  : ""}
+              </p>
+            )}
+          </div>
+          <Button
+            type="submit"
+            className="w-full"
+            disabled={loadingSlots || !hasAvailability || Boolean(discountCode.trim() && !discountCodeResult?.valid)}
+          >
             {loadingSlots ? "Checking availability..." : "Continue to payment"}
           </Button>
           {!loadingSlots && !hasAvailability && (
             <p className="text-sm text-destructive">
               No available dates for this booking type.
             </p>
+          )}
+          {discountCode.trim() && !discountCodeResult?.valid && (
+            <p className="text-sm text-muted-foreground">Apply the discount code before continuing.</p>
           )}
           <p className="text-xs text-muted-foreground">
             Online cancellations are available up to 48 hours before the booking.

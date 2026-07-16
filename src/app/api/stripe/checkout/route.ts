@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
+import { isLotteryLive } from "@/lib/lottery-launch";
 
 export async function POST(req: NextRequest) {
+  if (!isLotteryLive()) {
+    return NextResponse.json({ error: "Lottery ticket sales are not open yet" }, { status: 404 });
+  }
   try {
     const { quantity, interval, source } = await req.json();
 

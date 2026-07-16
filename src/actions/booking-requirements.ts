@@ -1,7 +1,7 @@
 "use server";
 
 import { addDays, format, startOfDay } from "date-fns";
-import { and, asc, eq, gte, inArray, isNotNull, lt } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, lt } from "drizzle-orm";
 import { put, del } from "@vercel/blob";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
@@ -272,11 +272,27 @@ export async function addRequirementQuestion(formData: FormData) {
   if (!setId || !label) throw new Error("A question label is required.");
   const type = formData.get("type") === "text" ? "text" : "yes_no";
   const requiresDocumentOnYes = type === "yes_no" && formData.get("requiresDocumentOnYes") === "on";
+  const [duplicate] = await db
+    .select({ id: requirementQuestions.id })
+    .from(requirementQuestions)
+    .where(
+      and(
+        eq(requirementQuestions.setId, setId),
+        eq(requirementQuestions.label, label),
+        eq(requirementQuestions.active, true)
+      )
+    )
+    .limit(1);
+  if (duplicate) {
+    revalidatePath("/admin/bookings/requirements");
+    return;
+  }
   const [last] = await db
     .select({ sortOrder: requirementQuestions.sortOrder })
     .from(requirementQuestions)
     .where(eq(requirementQuestions.setId, setId))
-    .orderBy(asc(requirementQuestions.sortOrder));
+    .orderBy(desc(requirementQuestions.sortOrder))
+    .limit(1);
   await db.insert(requirementQuestions).values({
     setId,
     label,

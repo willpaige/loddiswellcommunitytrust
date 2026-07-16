@@ -1,12 +1,16 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import { getAdminBooking, getAdminBookingSetup } from "@/actions/bookings";
+import { getAdminBooking, getAdminBookingOccurrences, getAdminBookingSetup } from "@/actions/bookings";
 import { getAdminBookingRequirements } from "@/actions/booking-requirements";
 import { BookingEditForm } from "@/components/admin/booking-edit-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { BookingOccurrenceActions } from "@/components/admin/booking-occurrence-actions";
+import { format } from "date-fns";
+import { money } from "@/lib/bookings";
+import { CustomBookingScheduleEditor } from "@/components/admin/custom-booking-schedule-editor";
 
 export const dynamic = "force-dynamic";
 
@@ -16,10 +20,11 @@ export default async function AdminEditBookingPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [booking, setup, requirements] = await Promise.all([
+  const [booking, setup, requirements, occurrences] = await Promise.all([
     getAdminBooking(id),
     getAdminBookingSetup(),
     getAdminBookingRequirements(id),
+    getAdminBookingOccurrences([id]),
   ]);
   if (!booking) notFound();
 
@@ -50,6 +55,46 @@ export default async function AdminEditBookingPage({
         }}
         offerings={uniqueOfferings}
       />
+
+      {booking.scheduleType === "custom" && (
+        <Card className="mt-6 max-w-4xl">
+          <CardHeader><CardTitle>Custom sessions</CardTitle></CardHeader>
+          <CardContent>
+            <ul className="divide-y rounded-md border">
+              {occurrences.map((occurrence) => (
+                <li key={occurrence.id} className="flex flex-wrap items-center justify-between gap-3 p-3">
+                  <div>
+                    <p className={occurrence.status === "cancelled" ? "line-through text-muted-foreground" : "font-medium"}>
+                      {format(occurrence.startDate, "d MMMM yyyy, HH:mm")}–{format(occurrence.endDate, "HH:mm")}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {money(occurrence.allocatedAmount)} · {occurrence.status}
+                      {occurrence.refundStatus !== "none" && ` · refund ${occurrence.refundStatus}`}
+                    </p>
+                  </div>
+                  <BookingOccurrenceActions
+                    occurrenceId={occurrence.id}
+                    cancelled={occurrence.status === "cancelled"}
+                    refundDue={occurrence.refundStatus === "due"}
+                  />
+                </li>
+              ))}
+            </ul>
+            {booking.offeringId && (() => {
+              const selected = uniqueOfferings.find((item) => item.offeringId === booking.offeringId);
+              return selected ? (
+                <CustomBookingScheduleEditor
+                  bookingId={booking.id}
+                  offeringId={booking.offeringId}
+                  bookableStartTime={selected.facilityBookableStartTime}
+                  bookableEndTime={selected.facilityBookableEndTime}
+                  occurrences={occurrences}
+                />
+              ) : null;
+            })()}
+          </CardContent>
+        </Card>
+      )}
 
       {requirements?.hasRequirements && (
         <Card className="mt-6 max-w-4xl">

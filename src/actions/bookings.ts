@@ -1,7 +1,7 @@
 "use server";
 
 import { addDays, addHours, addMonths, addWeeks, addYears, differenceInHours, format } from "date-fns";
-import { and, asc, desc, eq, gt, gte, inArray, lt, lte, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, lt, lte, ne, or, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createId } from "@paralleldrive/cuid2";
@@ -10,6 +10,7 @@ import { logAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import {
   bookingBlocks,
+  bookingBlockSeries,
   bookingOccurrences,
   bookingOfferings,
   bookingPrices,
@@ -30,6 +31,7 @@ import {
 } from "@/lib/bookings";
 import { sendTemplateEmail } from "@/lib/email/send";
 import { upsertCustomerRecord } from "@/actions/customer-records";
+import { validateBookingDiscountCode } from "@/actions/booking-discount-codes";
 
 const publicFacilitySlugs = ["village-hall", "pavilion", "tennis-courts"];
 const defaultRepeatDiscount = {
@@ -264,6 +266,7 @@ function bookingCallbackUrl(formData: FormData) {
     "notes",
     "promoteOnSite",
     "promotionUrl",
+    "discountCode",
   ].forEach((key) => {
     const value = formData.get(key);
     if (typeof value === "string" && value.trim()) {
@@ -284,6 +287,17 @@ async function requireAdmin() {
 
 function moneyText(amount: number) {
   return `£${(amount / 100).toFixed(2)}`;
+}
+
+async function bookingScheduleText(bookingId: string) {
+  const rows = await db
+    .select({ startDate: bookingOccurrences.startDate, endDate: bookingOccurrences.endDate })
+    .from(bookingOccurrences)
+    .where(and(eq(bookingOccurrences.bookingId, bookingId), ne(bookingOccurrences.status, "cancelled")))
+    .orderBy(asc(bookingOccurrences.startDate));
+  return rows
+    .map((row) => `${format(row.startDate, "d MMM yyyy, HH:mm")}–${format(row.endDate, "HH:mm")}`)
+    .join("; ");
 }
 
 async function getBookingManagerEmail() {
@@ -320,6 +334,7 @@ async function getBookingEmailData(bookingId: string) {
     .limit(1);
   if (!booking) return null;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const schedule = await bookingScheduleText(bookingId);
   return {
     ...booking,
     variables: {
@@ -331,6 +346,7 @@ async function getBookingEmailData(bookingId: string) {
       amount: moneyText(booking.amount),
       startDate: format(booking.startDate, "d MMM yyyy, HH:mm"),
       endTime: format(booking.endDate, "HH:mm"),
+      schedule,
       facilityName: booking.facilityName,
       offeringName: booking.offeringName || "Booking",
       accessInstructions: booking.accessInstructions || "Please contact the Trust if you need access details.",
@@ -358,6 +374,7 @@ async function createBookingStripeCheckoutSession(bookingId: string) {
     .where(eq(bookings.id, bookingId))
     .limit(1);
   if (!booking) throw new Error("Booking not found.");
+  const schedule = await bookingScheduleText(bookingId);
 
   // Billing cadence can differ from the session cadence; fall back to the
   // session recurrence when no explicit billing interval was set.
@@ -378,7 +395,7 @@ async function createBookingStripeCheckoutSession(bookingId: string) {
             description:
               booking.paymentType === "subscription"
                 ? `${recurrenceLabel(booking.recurrence)} session, billed ${recurrenceLabel(billingInterval).toLowerCase()}, from ${format(booking.startDate, "d MMM yyyy")}`
-                : format(booking.startDate, "d MMM yyyy, HH:mm"),
+                : schedule || format(booking.startDate, "d MMM yyyy, HH:mm"),
           },
           ...(booking.paymentType === "subscription"
             ? { recurring: stripeRecurringPriceData(billingInterval) }
@@ -457,6 +474,7 @@ export async function createBookingInvoice(bookingId: string) {
     .where(eq(bookings.id, bookingId))
     .limit(1);
   if (!booking) throw new Error("Booking not found.");
+  const schedule = await bookingScheduleText(bookingId);
 
   const stripe = getStripe();
 
@@ -527,7 +545,7 @@ export async function createBookingInvoice(bookingId: string) {
     customer: customerId,
     currency: "gbp",
     amount: booking.amount,
-    description: `${booking.facilityName} - ${booking.offeringName || "Booking"} · ${format(booking.startDate, "d MMM yyyy, HH:mm")}`,
+    description: `${booking.facilityName} - ${booking.offeringName || "Booking"} · ${schedule || format(booking.startDate, "d MMM yyyy, HH:mm")}`,
   });
 
   const invoice = await stripe.invoices.create(
@@ -543,7 +561,7 @@ export async function createBookingInvoice(bookingId: string) {
       payment_settings: { payment_method_types: ["card"] },
       metadata: { type: "booking_invoice", bookingId },
     },
-    { idempotencyKey: `booking-invoice-${bookingId}` }
+    { idempotencyKey: `booking-invoice-${bookingId}-${booking.amount}` }
   );
   if (!invoice.id) throw new Error("Stripe did not return an invoice id.");
   await db
@@ -822,7 +840,7 @@ async function assertAvailable(
   }
 }
 
-// Keeps indefinite subscription bookings topped up with a rolling ~180-day
+// Keeps indefinite subscription and no-payment bookings topped up with a rolling ~180-day
 // window of occurrences. Run nightly by the extend-bookings cron and on each
 // Stripe billing cycle. Idempotent via the (bookingId, startDate) unique index.
 // Conflicts (a future slot already taken) are skipped and reported to the
@@ -845,7 +863,7 @@ export async function extendSubscriptionBookingOccurrences(bookingId?: string) {
     .leftJoin(bookingOfferings, eq(bookings.offeringId, bookingOfferings.id))
     .where(
       and(
-        eq(bookings.paymentType, "subscription"),
+        or(eq(bookings.paymentType, "subscription"), eq(bookings.indefinite, true)),
         eq(bookings.status, "confirmed"),
         ne(bookings.recurrence, "none"),
         ...(bookingId ? [eq(bookings.id, bookingId)] : [])
@@ -919,6 +937,46 @@ export async function extendSubscriptionBookingOccurrences(bookingId?: string) {
   }
 
   return { bookingsChecked: subs.length, created, conflicts: conflicts.length };
+}
+
+export async function extendRecurringBookingBlocks() {
+  const horizonEnd = addDays(new Date(), SUBSCRIPTION_HORIZON_DAYS);
+  const series = await db.select().from(bookingBlockSeries).where(eq(bookingBlockSeries.indefinite, true));
+  let created = 0;
+  for (const item of series) {
+    const [{ maxStart }] = await db
+      .select({ maxStart: sql<Date | null>`max(${bookingBlocks.startDate})` })
+      .from(bookingBlocks)
+      .where(eq(bookingBlocks.seriesId, item.id));
+    const ranges = occurrenceDatesInWindow(
+      item.startDate,
+      item.endDate,
+      item.recurrence,
+      maxStart ?? null,
+      horizonEnd
+    );
+    if (ranges.length > 0) {
+      await db.insert(bookingBlocks).values(ranges.map((range) => ({
+        facilityId: item.facilityId,
+        seriesId: item.id,
+        title: item.title,
+        startDate: range.startDate,
+        endDate: range.endDate,
+        notes: item.notes,
+        createdBy: item.createdBy,
+      })));
+      created += ranges.length;
+    }
+  }
+  return { seriesChecked: series.length, created };
+}
+
+export async function extendIndefiniteBookingSchedules() {
+  const [bookingsResult, blocksResult] = await Promise.all([
+    extendSubscriptionBookingOccurrences(),
+    extendRecurringBookingBlocks(),
+  ]);
+  return { bookings: bookingsResult, blocks: blocksResult };
 }
 
 export async function getAvailableBookingSlots(offeringId: string) {
@@ -1080,20 +1138,20 @@ function hasCapacity(
 
 async function readBookingForm(formData: FormData) {
   const offeringId = String(formData.get("offeringId") || "");
-  const customerGroup = String(formData.get("customerGroup") || "") as CustomerGroup;
+  let customerGroup = String(formData.get("customerGroup") || "") as CustomerGroup;
   const date = String(formData.get("date") || "");
   const time = String(formData.get("time") || "");
   const requestedEndTime = String(formData.get("endTime") || "");
   const recurrenceValue = String(formData.get("recurrence") || "none");
-  const recurrence: Recurrence =
+  let recurrence: Recurrence =
     recurrenceOptions.some((option) => option.value === recurrenceValue)
       ? (recurrenceValue as Recurrence)
       : "none";
-  const repeatPaymentMode: "subscription" | "upfront" =
+  let repeatPaymentMode: "subscription" | "upfront" =
     recurrence !== "none" && formData.get("repeatPaymentMode") === "upfront"
       ? "upfront"
       : "subscription";
-  const repeatCount = recurrence !== "none"
+  let repeatCount = recurrence !== "none"
     ? Math.max(1, Math.min(52, Math.round(Number(formData.get("repeatCount") || 8))))
     : 1;
   // Billing interval can differ from the session recurrence (e.g. a weekly
@@ -1118,6 +1176,15 @@ async function readBookingForm(formData: FormData) {
     .where(eq(bookingOfferings.id, offeringId))
     .limit(1);
   if (!offering || !offering.active) throw new Error("Invalid booking option.");
+
+  // Kids parties are a fixed, one-off private booking. Enforce this here as
+  // well as hiding the irrelevant controls in both booking forms.
+  if (offering.type === "kids_party") {
+    customerGroup = "parent_private";
+    recurrence = "none";
+    repeatPaymentMode = "upfront";
+    repeatCount = 1;
+  }
 
   const [price] = await db
     .select()
@@ -1213,6 +1280,86 @@ function bookingAmount(
   return applyPct(amount); // subscription: per-cycle
 }
 
+type CustomSessionInput = { date: string; startTime: string; endTime: string };
+
+function parseCustomSessions(
+  raw: FormDataEntryValue | null,
+  offering: typeof bookingOfferings.$inferSelect,
+  facility: { bookableStartTime: string; bookableEndTime: string },
+  minimum = 2
+) {
+  let input: CustomSessionInput[];
+  try {
+    input = JSON.parse(String(raw || "[]")) as CustomSessionInput[];
+  } catch {
+    throw new Error("Invalid custom booking schedule.");
+  }
+  if (!Array.isArray(input) || input.length < minimum || input.length > 52) {
+    throw new Error(`Choose between ${minimum} and 52 custom sessions.`);
+  }
+  const earliest = addDays(new Date(), 1);
+  earliest.setHours(0, 0, 0, 0);
+  const seen = new Set<string>();
+  const sessions = input
+    .map((item) => {
+      const startTime = offering.startTime || String(item.startTime || "");
+      const endTime = offering.endTime || String(item.endTime || "");
+      const startDate = combineDateAndTime(String(item.date || ""), startTime);
+      const endDate = combineDateAndTime(String(item.date || ""), endTime);
+      const key = `${startDate.toISOString()}-${endDate.toISOString()}`;
+      if (seen.has(key)) throw new Error("Custom sessions cannot contain duplicates.");
+      seen.add(key);
+      if (endDate <= startDate || startDate < earliest) throw new Error("Invalid custom session time.");
+      if (!offering.allowedDays.includes(startDate.getDay())) {
+        throw new Error("One or more dates are not available for this booking type.");
+      }
+      if (
+        timeToMinutes(startTime) < timeToMinutes(facility.bookableStartTime) ||
+        timeToMinutes(endTime) > timeToMinutes(facility.bookableEndTime) ||
+        differenceInHours(endDate, startDate) * 60 < offering.durationMinutes
+      ) {
+        throw new Error("One or more sessions are outside the venue's bookable hours.");
+      }
+      return { startDate, endDate };
+    })
+    .sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
+  for (let index = 1; index < sessions.length; index += 1) {
+    if (sessions[index].startDate < sessions[index - 1].endDate) {
+      throw new Error("Custom sessions cannot overlap.");
+    }
+  }
+  return sessions;
+}
+
+function allocateCustomAmounts(
+  sessions: Array<{ startDate: Date; endDate: Date }>,
+  baseAmount: number,
+  variableDuration: boolean,
+  repeatDiscount: { threshold: number; percent: number },
+  customerDiscountPercent: number,
+  totalOverride?: number
+) {
+  const raw = sessions.map(({ startDate, endDate }) =>
+    baseAmount * (variableDuration ? Math.max(1, differenceInHours(endDate, startDate)) : 1)
+  );
+  const discount = Math.max(
+    customerDiscountPercent,
+    sessions.length >= repeatDiscount.threshold ? repeatDiscount.percent : 0
+  );
+  const calculatedTotal = Math.round((raw.reduce((sum, amount) => sum + amount, 0) * (100 - discount)) / 100);
+  const total = totalOverride ?? calculatedTotal;
+  const rawTotal = raw.reduce((sum, amount) => sum + amount, 0);
+  const allocations = raw.map((amount) =>
+    Math.floor(rawTotal > 0 ? (amount / rawTotal) * total : total / raw.length)
+  );
+  let remainder = total - allocations.reduce((sum, amount) => sum + amount, 0);
+  for (let index = 0; remainder > 0; index = (index + 1) % allocations.length) {
+    allocations[index] += 1;
+    remainder -= 1;
+  }
+  return { total, allocations };
+}
+
 export async function getCustomerDiscountPercent(email: string) {
   if (!email) return 0;
   const [row] = await db
@@ -1262,6 +1409,7 @@ export async function createPromotionEventForBooking(bookingId: string) {
       startDate: bookings.startDate,
       endDate: bookings.endDate,
       status: bookings.status,
+      scheduleType: bookings.scheduleType,
       promoteOnSite: bookings.promoteOnSite,
       promotionUrl: bookings.promotionUrl,
       promotionEventId: bookings.promotionEventId,
@@ -1280,29 +1428,41 @@ export async function createPromotionEventForBooking(bookingId: string) {
     booking.status !== "confirmed" ||
     booking.customerGroup !== "team_community" ||
     !booking.promoteOnSite ||
-    !booking.promotionUrl ||
-    booking.promotionEventId
+    !booking.promotionUrl
   ) {
     return;
   }
+  if (booking.scheduleType === "regular" && booking.promotionEventId) return;
 
-  const eventId = createId();
-  await db.insert(events).values({
-    id: eventId,
-    title: booking.organisationName || booking.customerName || booking.offeringName || "Team / community booking",
-    description: promotionDescription(booking.facilityName, booking.promotionUrl),
-    location: booking.facilityName,
-    startDate: booking.startDate,
-    endDate: booking.endDate,
-    allDay: false,
-    externalUrl: booking.promotionUrl,
-    published: true,
-    createdBy: booking.createdBy,
-  });
-  await db
-    .update(bookings)
-    .set({ promotionEventId: eventId, updatedAt: new Date() })
-    .where(eq(bookings.id, booking.id));
+  const occurrences = await db
+    .select()
+    .from(bookingOccurrences)
+    .where(and(eq(bookingOccurrences.bookingId, booking.id), ne(bookingOccurrences.status, "cancelled")));
+  const occurrencesToPromote = booking.scheduleType === "custom" ? occurrences : occurrences.slice(0, 1);
+  for (const occurrence of occurrencesToPromote) {
+    if (occurrence.promotionEventId) continue;
+    const eventId = createId();
+    await db.insert(events).values({
+      id: eventId,
+      title: booking.organisationName || booking.customerName || booking.offeringName || "Team / community booking",
+      description: promotionDescription(booking.facilityName, booking.promotionUrl),
+      location: booking.facilityName,
+      startDate: occurrence.startDate,
+      endDate: occurrence.endDate,
+      allDay: false,
+      externalUrl: booking.promotionUrl,
+      published: true,
+      createdBy: booking.createdBy,
+    });
+    await db
+      .update(bookingOccurrences)
+      .set({ promotionEventId: eventId })
+      .where(eq(bookingOccurrences.id, occurrence.id));
+    if (!booking.promotionEventId) {
+      await db.update(bookings).set({ promotionEventId: eventId }).where(eq(bookings.id, booking.id));
+      booking.promotionEventId = eventId;
+    }
+  }
   revalidatePath("/events");
 }
 
@@ -1333,6 +1493,11 @@ export async function createBookingCheckout(formData: FormData) {
   const customerPhone = String(formData.get("customerPhone") || "").trim() || null;
   const notes = String(formData.get("notes") || "").trim() || null;
   const customerEmail = customer.email.toLowerCase();
+  const submittedDiscountCode = String(formData.get("discountCode") || "").trim();
+  const codeResult = submittedDiscountCode
+    ? await validateBookingDiscountCode(submittedDiscountCode, customerEmail)
+    : null;
+  if (codeResult && !codeResult.valid) throw new Error(codeResult.message);
   if (!customerName) throw new Error("Name is required.");
   if ((price.customerGroup === "team_community" || price.customerGroup === "business") && !organisationName) {
     throw new Error("Business, club, or event name is required.");
@@ -1352,6 +1517,10 @@ export async function createBookingCheckout(formData: FormData) {
   }
 
   const bookingId = createId();
+  const effectiveDiscountPercent = Math.max(
+    customer.discountPercent,
+    codeResult?.discountPercent ?? 0
+  );
   const amount = bookingAmount(
     price.amount,
     start,
@@ -1361,7 +1530,17 @@ export async function createBookingCheckout(formData: FormData) {
     repeatDiscount,
     repeatPaymentMode,
     repeatCount,
-    customer.discountPercent
+    effectiveDiscountPercent
+  );
+  const undiscountedAmount = bookingAmount(
+    price.amount, start, end, recurrence, !offering.endTime,
+    { ...repeatDiscount, percent: 0 }, repeatPaymentMode, repeatCount, 0
+  );
+  const repeatEligible = recurrence !== "none" && repeatPaymentMode === "upfront" &&
+    repeatCount >= repeatDiscount.threshold;
+  const appliedDiscountPercent = Math.max(
+    effectiveDiscountPercent,
+    repeatEligible ? repeatDiscount.percent : 0
   );
   // A 100% discount makes this free — Stripe rejects a £0 charge, so confirm
   // the booking directly without going through checkout.
@@ -1384,6 +1563,10 @@ export async function createBookingCheckout(formData: FormData) {
         ? "subscription"
         : "one_off",
     amount,
+    discountCodeId: codeResult?.id ?? null,
+    discountCode: codeResult?.code ?? null,
+    discountPercent: appliedDiscountPercent,
+    discountAmount: Math.max(0, undiscountedAmount - amount),
     startDate: start,
     endDate: end,
     recurrence,
@@ -1545,7 +1728,6 @@ export async function getCustomerBookings() {
       startDate: bookings.startDate,
       endDate: bookings.endDate,
       recurrence: bookings.recurrence,
-      stripeCheckoutSessionId: bookings.stripeCheckoutSessionId,
       facilityName: facilities.name,
       offeringName: bookingOfferings.name,
     })
@@ -1573,6 +1755,9 @@ export async function retryCustomerBookingPayment(formData: FormData) {
       id: bookings.id,
       status: bookings.status,
       paymentType: bookings.paymentType,
+      invoiceStatus: bookings.invoiceStatus,
+      stripeCheckoutSessionId: bookings.stripeCheckoutSessionId,
+      stripePaymentIntentId: bookings.stripePaymentIntentId,
       amount: bookings.amount,
       customerEmail: bookings.customerEmail,
       startDate: bookings.startDate,
@@ -1647,6 +1832,7 @@ export async function getAdminBookings() {
       id: bookings.id,
       status: bookings.status,
       paymentType: bookings.paymentType,
+      stripePaymentIntentId: bookings.stripePaymentIntentId,
       invoiceStatus: bookings.invoiceStatus,
       amount: bookings.amount,
       customerName: bookings.customerName,
@@ -1656,6 +1842,7 @@ export async function getAdminBookings() {
       startDate: bookings.startDate,
       endDate: bookings.endDate,
       recurrence: bookings.recurrence,
+      scheduleType: bookings.scheduleType,
       repeatCount: bookings.repeatCount,
       facilityName: facilities.name,
       offeringName: bookingOfferings.name,
@@ -1664,6 +1851,16 @@ export async function getAdminBookings() {
     .innerJoin(facilities, eq(bookings.facilityId, facilities.id))
     .leftJoin(bookingOfferings, eq(bookings.offeringId, bookingOfferings.id))
     .orderBy(desc(bookings.startDate));
+}
+
+export async function getAdminBookingOccurrences(bookingIds: string[]) {
+  await requireAdmin();
+  if (bookingIds.length === 0) return [];
+  return db
+    .select()
+    .from(bookingOccurrences)
+    .where(inArray(bookingOccurrences.bookingId, bookingIds))
+    .orderBy(asc(bookingOccurrences.startDate));
 }
 
 export async function getAdminBooking(id: string) {
@@ -1683,7 +1880,9 @@ export async function getAdminBooking(id: string) {
       startDate: bookings.startDate,
       endDate: bookings.endDate,
       recurrence: bookings.recurrence,
+      scheduleType: bookings.scheduleType,
       repeatCount: bookings.repeatCount,
+      stripePaymentIntentId: bookings.stripePaymentIntentId,
       offeringId: bookings.offeringId,
       billingLine1: bookings.billingLine1,
       billingLine2: bookings.billingLine2,
@@ -1978,15 +2177,42 @@ export async function createBookingBlock(formData: FormData) {
     String(formData.get("endTime") || "")
   );
   if (!facilityId || !title || endDate <= startDate) throw new Error("Invalid block.");
+  const recurrenceValue = String(formData.get("recurrence") || "none");
+  const recurrence = recurrenceOptions.find((option) => option.value === recurrenceValue)?.value ?? null;
+  const indefinite = formData.get("indefinite") === "on";
+  const repeatCount = Math.max(2, Math.min(104, Math.round(Number(formData.get("repeatCount") || 2))));
+  const notes = String(formData.get("notes") || "").trim() || null;
+  const createdBy = session.user?.id ?? null;
 
-  await db.insert(bookingBlocks).values({
-    facilityId,
-    title,
-    startDate,
-    endDate,
-    notes: String(formData.get("notes") || "").trim() || null,
-    createdBy: session.user?.id ?? null,
-  });
+  if (!recurrence) {
+    await db.insert(bookingBlocks).values({ facilityId, title, startDate, endDate, notes, createdBy });
+  } else {
+    const seriesId = createId();
+    await db.insert(bookingBlockSeries).values({
+      id: seriesId,
+      facilityId,
+      title,
+      startDate,
+      endDate,
+      recurrence,
+      indefinite,
+      repeatCount,
+      notes,
+      createdBy,
+    });
+    const ranges = indefinite
+      ? occurrenceDatesInWindow(startDate, endDate, recurrence, null, addDays(new Date(), SUBSCRIPTION_HORIZON_DAYS))
+      : occurrenceDates(startDate, endDate, recurrence, repeatCount);
+    await db.insert(bookingBlocks).values(ranges.map((range) => ({
+      facilityId,
+      seriesId,
+      title,
+      startDate: range.startDate,
+      endDate: range.endDate,
+      notes,
+      createdBy,
+    })));
+  }
   await logAudit({ action: "create", entity: "booking", description: `Blocked booking time: ${title}` });
   revalidatePath("/admin/bookings");
   revalidatePath("/booking");
@@ -1997,6 +2223,19 @@ export async function createManualBooking(formData: FormData) {
   const { offering, price, start, end, recurrence, repeatPaymentMode, repeatCount, billingInterval, recurringAmount } =
     await readBookingForm(formData);
   const repeatDiscount = await getRepeatDiscountSettings();
+  const scheduleType = formData.get("scheduleType") === "custom" ? "custom" : "regular";
+  const [facilityHours] = await db
+    .select({
+      bookableStartTime: facilities.bookableStartTime,
+      bookableEndTime: facilities.bookableEndTime,
+    })
+    .from(facilities)
+    .where(eq(facilities.id, offering.facilityId))
+    .limit(1);
+  if (!facilityHours) throw new Error("Invalid venue.");
+  const customSessions = scheduleType === "custom"
+    ? parseCustomSessions(formData.get("customSessions"), offering, facilityHours)
+    : null;
 
   const manualPaymentMode = String(formData.get("manualPaymentMode") || "confirmed");
   const sendPaymentLink = manualPaymentMode === "payment_link";
@@ -2005,7 +2244,10 @@ export async function createManualBooking(formData: FormData) {
   // Auto-charged, indefinite subscription: billing cadence is independent of the
   // session cadence and the slot is held with a rolling 180-day occurrence window.
   const isSubscription =
-    sendPaymentLink && recurrence !== "none" && repeatPaymentMode === "subscription";
+    scheduleType === "regular" && sendPaymentLink && recurrence !== "none" && repeatPaymentMode === "subscription";
+  const indefinite =
+    scheduleType === "regular" && recurrence !== "none" &&
+    (isSubscription || (!requiresPayment && formData.get("indefinite") === "on"));
   const perSessionAmount = bookingAmount(
     price.amount,
     start,
@@ -2018,14 +2260,14 @@ export async function createManualBooking(formData: FormData) {
   );
   const subscriptionAmount = recurringAmount ?? suggestRecurringAmount(perSessionAmount, recurrence, billingInterval);
 
-  const dates = isSubscription
+  const dates = customSessions ?? (indefinite
     ? occurrenceDatesInWindow(start, end, recurrence, null, addDays(new Date(), SUBSCRIPTION_HORIZON_DAYS))
     : occurrenceDates(
         start,
         end,
         recurrence,
         repeatPaymentMode === "upfront" ? repeatCount : defaultSubscriptionOccurrenceCount(recurrence)
-      );
+      ));
   await assertAvailable(offering.facilityId, offering.capacity, dates);
 
   const id = createId();
@@ -2059,13 +2301,48 @@ export async function createManualBooking(formData: FormData) {
     name: customerName,
     phone: customerPhone,
   });
+  const submittedDiscountCode = String(formData.get("discountCode") || "").trim();
+  const codeResult = submittedDiscountCode
+    ? await validateBookingDiscountCode(submittedDiscountCode, customerEmail)
+    : null;
+  if (codeResult && !codeResult.valid) throw new Error(codeResult.message);
   // The subscription flat fee is already net (discounted in the dialog suggestion),
   // so only resolve/apply the customer discount for list-price-derived amounts.
   const customerDiscountPercent = isSubscription
     ? 0
     : await getCustomerDiscountPercent(customerEmail);
-  const finalAmount = isSubscription
-    ? subscriptionAmount
+  const pricingDiscountPercent = Math.max(
+    customerDiscountPercent,
+    codeResult?.discountPercent ?? 0
+  );
+  const customPriceRaw = (() => {
+    const raw = String(formData.get("customPrice") || "").trim();
+    if (!raw) return undefined;
+    const amount = Number(raw);
+    if (!Number.isFinite(amount) || amount < 0) throw new Error("Enter a valid custom price.");
+    return Math.round(amount * 100);
+  })();
+  const customRepeatEligible = Boolean(customSessions && customSessions.length >= repeatDiscount.threshold);
+  const customEffectivePercent = Math.max(
+    pricingDiscountPercent,
+    customRepeatEligible ? repeatDiscount.percent : 0
+  );
+  const customAmounts = customSessions
+    ? allocateCustomAmounts(
+        customSessions,
+        price.amount,
+        !offering.endTime,
+        repeatDiscount,
+        pricingDiscountPercent,
+        customPriceRaw === undefined
+          ? undefined
+          : Math.round((customPriceRaw * (100 - customEffectivePercent)) / 100)
+      )
+    : null;
+  const finalAmount = customAmounts
+    ? customAmounts.total
+    : isSubscription
+    ? Math.round((subscriptionAmount * (100 - (codeResult?.discountPercent ?? 0))) / 100)
     : bookingAmount(
         price.amount,
         start,
@@ -2075,8 +2352,17 @@ export async function createManualBooking(formData: FormData) {
         repeatDiscount,
         repeatPaymentMode,
         repeatCount,
-        customerDiscountPercent
+        pricingDiscountPercent
       );
+  const manualSubtotal = customPriceRaw ?? (customSessions
+    ? customSessions.reduce((sum, date) => sum + bookingAmount(
+        price.amount, date.startDate, date.endDate, "none", !offering.endTime,
+        { threshold: 0, percent: 0 }, "upfront", 1, 0
+      ), 0)
+    : isSubscription
+      ? subscriptionAmount
+      : bookingAmount(price.amount, start, end, recurrence, !offering.endTime,
+          { ...repeatDiscount, percent: 0 }, repeatPaymentMode, repeatCount, 0));
   // A fully discounted (free) booking can't go through Stripe — confirm it directly.
   const willCharge = requiresPayment && finalAmount > 0;
   await db.insert(bookings).values({
@@ -2098,21 +2384,33 @@ export async function createManualBooking(formData: FormData) {
     paymentType: isSubscription ? "subscription" : sendPaymentLink ? "one_off" : "manual",
     billingInterval: isSubscription ? billingInterval : null,
     amount: finalAmount,
-    startDate: start,
-    endDate: end,
+    discountCodeId: codeResult?.id ?? null,
+    discountCode: codeResult?.code ?? null,
+    discountPercent: Math.max(
+      codeResult?.discountPercent ?? 0,
+      customerDiscountPercent,
+      customRepeatEligible || (recurrence !== "none" && repeatPaymentMode === "upfront" && repeatCount >= repeatDiscount.threshold)
+        ? repeatDiscount.percent : 0
+    ),
+    discountAmount: Math.max(0, manualSubtotal - finalAmount),
+    startDate: dates[0].startDate,
+    endDate: dates[0].endDate,
     recurrence,
-    repeatCount: recurrence !== "none" ? dates.length : 1,
+    scheduleType,
+    indefinite,
+    repeatCount: scheduleType === "custom" ? dates.length : recurrence !== "none" ? dates.length : 1,
     promoteOnSite,
     promotionUrl,
     requirementSetId: offering.requirementSetId ?? null,
   });
   await db.insert(bookingOccurrences).values(
-    dates.map((date) => ({
+    dates.map((date, index) => ({
       bookingId: id,
       facilityId: offering.facilityId,
       startDate: date.startDate,
       endDate: date.endDate,
       status: willCharge ? ("pending_payment" as const) : ("confirmed" as const),
+      allocatedAmount: customAmounts?.allocations[index] ?? 0,
     }))
   );
 
@@ -2132,6 +2430,12 @@ export async function createManualBooking(formData: FormData) {
 
 export async function updateAdminBooking(id: string, formData: FormData) {
   await requireAdmin();
+  const [currentBooking] = await db
+    .select({ scheduleType: bookings.scheduleType })
+    .from(bookings)
+    .where(eq(bookings.id, id))
+    .limit(1);
+  if (!currentBooking) throw new Error("Booking not found.");
   const { offering, price, start, end, recurrence, repeatPaymentMode, repeatCount } =
     await readBookingForm(formData);
   const repeatDiscount = await getRepeatDiscountSettings();
@@ -2141,7 +2445,9 @@ export async function updateAdminBooking(id: string, formData: FormData) {
     recurrence,
     recurrence !== "none" ? repeatCount : 1
   );
-  await assertAvailable(offering.facilityId, offering.capacity, dates, id);
+  if (currentBooking.scheduleType !== "custom") {
+    await assertAvailable(offering.facilityId, offering.capacity, dates, id);
+  }
 
   const customerName = String(formData.get("customerName") || "").trim();
   const organisationName = String(formData.get("organisationName") || "").trim() || null;
@@ -2158,6 +2464,26 @@ export async function updateAdminBooking(id: string, formData: FormData) {
     phone: String(formData.get("customerPhone") || "").trim() || null,
   });
   const customerDiscountPercent = await getCustomerDiscountPercent(customerEmail);
+
+  if (currentBooking.scheduleType === "custom") {
+    await db.update(bookings).set({
+      userId,
+      customerName,
+      organisationName,
+      customerEmail,
+      customerPhone: String(formData.get("customerPhone") || "").trim() || null,
+      billingLine1: String(formData.get("billingLine1") || "").trim() || null,
+      billingLine2: String(formData.get("billingLine2") || "").trim() || null,
+      billingCity: String(formData.get("billingCity") || "").trim() || null,
+      billingPostcode: String(formData.get("billingPostcode") || "").trim() || null,
+      notes: String(formData.get("notes") || "").trim() || null,
+      updatedAt: new Date(),
+    }).where(eq(bookings.id, id));
+    await logAudit({ action: "update", entity: "booking", entityId: id, description: "Updated custom booking details" });
+    revalidatePath("/admin/bookings");
+    revalidatePath(`/admin/bookings/${id}/edit`);
+    return;
+  }
 
   await db
     .update(bookings)
@@ -2215,13 +2541,31 @@ export async function updateAdminBooking(id: string, formData: FormData) {
 export async function cancelAdminBooking(formData: FormData) {
   await requireAdmin();
   const id = String(formData.get("bookingId") || "");
+  const shouldRefund = formData.get("refund") === "true";
   // Stop billing first: a subscription booking left running in Stripe would keep
   // charging the customer's card even after we mark it cancelled here.
   const [booking] = await db
-    .select({ paymentType: bookings.paymentType, stripeSubscriptionId: bookings.stripeSubscriptionId })
+    .select({
+      paymentType: bookings.paymentType,
+      status: bookings.status,
+      stripePaymentIntentId: bookings.stripePaymentIntentId,
+      stripeSubscriptionId: bookings.stripeSubscriptionId,
+    })
     .from(bookings)
     .where(eq(bookings.id, id))
     .limit(1);
+  if (!booking) throw new Error("Booking not found.");
+  if (booking.status === "cancelled") throw new Error("This booking is already cancelled.");
+
+  if (shouldRefund) {
+    if (booking.paymentType !== "one_off" || !booking.stripePaymentIntentId) {
+      throw new Error("This booking does not have a refundable card payment.");
+    }
+    await getStripe().refunds.create(
+      { payment_intent: booking.stripePaymentIntentId },
+      { idempotencyKey: `admin-booking-refund-${id}` }
+    );
+  }
   if (booking?.paymentType === "subscription" && booking.stripeSubscriptionId) {
     await getStripe().subscriptions.cancel(booking.stripeSubscriptionId);
   }
@@ -2234,7 +2578,262 @@ export async function cancelAdminBooking(formData: FormData) {
     .set({ status: "cancelled" })
     .where(eq(bookingOccurrences.bookingId, id));
   await sendBookingCancellationEmails(id);
-  await logAudit({ action: "delete", entity: "booking", entityId: id, description: "Cancelled booking" });
+  await logAudit({
+    action: "delete",
+    entity: "booking",
+    entityId: id,
+    description: shouldRefund ? "Cancelled and refunded booking" : "Cancelled booking",
+  });
   revalidatePath("/admin/bookings");
   revalidatePath("/booking");
+}
+
+export async function cancelAdminBookingOccurrence(formData: FormData) {
+  const session = await requireAdmin();
+  const occurrenceId = String(formData.get("occurrenceId") || "");
+  const [row] = await db
+    .select({
+      occurrence: bookingOccurrences,
+      bookingId: bookings.id,
+      bookingStatus: bookings.status,
+      paymentType: bookings.paymentType,
+      invoiceStatus: bookings.invoiceStatus,
+      stripeInvoiceId: bookings.stripeInvoiceId,
+      stripePaymentIntentId: bookings.stripePaymentIntentId,
+      stripeCheckoutSessionId: bookings.stripeCheckoutSessionId,
+      amount: bookings.amount,
+    })
+    .from(bookingOccurrences)
+    .innerJoin(bookings, eq(bookingOccurrences.bookingId, bookings.id))
+    .where(eq(bookingOccurrences.id, occurrenceId))
+    .limit(1);
+  if (!row || row.occurrence.status === "cancelled") throw new Error("Session not found or already cancelled.");
+
+  let refundStatus: "none" | "due" | "refunded" = "none";
+  let refundedAt: Date | null = null;
+  let refundedBy: string | null = null;
+  if (row.bookingStatus === "confirmed" && row.occurrence.allocatedAmount > 0) {
+    if (row.paymentType === "one_off" && row.stripePaymentIntentId) {
+      await getStripe().refunds.create(
+        { payment_intent: row.stripePaymentIntentId, amount: row.occurrence.allocatedAmount },
+        { idempotencyKey: `booking-occurrence-refund-${occurrenceId}` }
+      );
+      refundStatus = "refunded";
+      refundedAt = new Date();
+      refundedBy = session.user?.id ?? null;
+    } else if (row.invoiceStatus === "paid") {
+      refundStatus = "due";
+    }
+  }
+
+  if (row.invoiceStatus === "open" && row.stripeInvoiceId) {
+    await getStripe().invoices.voidInvoice(row.stripeInvoiceId);
+  }
+
+  if (row.bookingStatus === "pending_payment" && row.stripeCheckoutSessionId) {
+    try {
+      await getStripe().checkout.sessions.expire(row.stripeCheckoutSessionId);
+    } catch {
+      // A completed or already-expired session needs no further action here.
+    }
+  }
+  await db
+    .update(bookingOccurrences)
+    .set({
+      status: "cancelled",
+      refundStatus,
+      refundAmount: refundStatus === "none" ? 0 : row.occurrence.allocatedAmount,
+      refundedAt,
+      refundedBy,
+    })
+    .where(eq(bookingOccurrences.id, occurrenceId));
+  if (row.occurrence.promotionEventId) {
+    await db.delete(events).where(eq(events.id, row.occurrence.promotionEventId));
+  }
+
+  const remaining = await db
+    .select()
+    .from(bookingOccurrences)
+    .where(and(eq(bookingOccurrences.bookingId, row.bookingId), ne(bookingOccurrences.status, "cancelled")))
+    .orderBy(asc(bookingOccurrences.startDate));
+  await db
+    .update(bookings)
+    .set({
+      status: remaining.length === 0 ? "cancelled" : row.bookingStatus,
+      cancelledAt: remaining.length === 0 ? new Date() : null,
+      repeatCount: remaining.length,
+      amount: Math.max(0, row.amount - row.occurrence.allocatedAmount),
+      startDate: remaining[0]?.startDate ?? row.occurrence.startDate,
+      endDate: remaining[0]?.endDate ?? row.occurrence.endDate,
+      stripeCheckoutSessionId: row.bookingStatus === "pending_payment" ? null : undefined,
+      stripeInvoiceId: row.invoiceStatus === "open" ? null : undefined,
+      invoiceStatus: row.invoiceStatus === "open" ? null : undefined,
+      invoiceHostedUrl: row.invoiceStatus === "open" ? null : undefined,
+      invoicePdfUrl: row.invoiceStatus === "open" ? null : undefined,
+      updatedAt: new Date(),
+    })
+    .where(eq(bookings.id, row.bookingId));
+
+  if (row.bookingStatus === "pending_payment" && remaining.length > 0 && row.paymentType === "one_off") {
+    const paymentUrl = await createBookingStripeCheckoutSession(row.bookingId);
+    await sendManualBookingPaymentLinkEmail(row.bookingId, paymentUrl);
+  }
+  if (row.invoiceStatus === "open" && remaining.length > 0) {
+    await createBookingInvoice(row.bookingId);
+  }
+  await logAudit({
+    action: "delete",
+    entity: "booking",
+    entityId: row.bookingId,
+    description: `Cancelled booking session on ${format(row.occurrence.startDate, "d MMM yyyy, HH:mm")}`,
+    metadata: { occurrenceId, refundStatus, refundAmount: row.occurrence.allocatedAmount },
+  });
+  revalidatePath("/admin/bookings");
+  revalidatePath(`/admin/bookings/${row.bookingId}/edit`);
+  revalidatePath("/booking");
+  revalidatePath("/events");
+}
+
+export async function markOccurrenceRefunded(formData: FormData) {
+  const session = await requireAdmin();
+  const occurrenceId = String(formData.get("occurrenceId") || "");
+  const [occurrence] = await db
+    .select()
+    .from(bookingOccurrences)
+    .where(eq(bookingOccurrences.id, occurrenceId))
+    .limit(1);
+  if (!occurrence || occurrence.refundStatus !== "due") throw new Error("No refund is due.");
+  await db
+    .update(bookingOccurrences)
+    .set({ refundStatus: "refunded", refundedAt: new Date(), refundedBy: session.user?.id ?? null })
+    .where(eq(bookingOccurrences.id, occurrenceId));
+  await logAudit({
+    action: "update",
+    entity: "booking",
+    entityId: occurrence.bookingId,
+    description: "Marked occurrence refund as paid",
+    metadata: { occurrenceId, refundAmount: occurrence.refundAmount },
+  });
+  revalidatePath("/admin/bookings");
+  revalidatePath(`/admin/bookings/${occurrence.bookingId}/edit`);
+}
+
+export async function saveCustomBookingOccurrence(formData: FormData) {
+  await requireAdmin();
+  const bookingId = String(formData.get("bookingId") || "");
+  const occurrenceId = String(formData.get("occurrenceId") || "");
+  const [booking] = await db
+    .select({
+      id: bookings.id,
+      scheduleType: bookings.scheduleType,
+      status: bookings.status,
+      paymentType: bookings.paymentType,
+      amount: bookings.amount,
+      customerEmail: bookings.customerEmail,
+      invoiceStatus: bookings.invoiceStatus,
+      stripeCheckoutSessionId: bookings.stripeCheckoutSessionId,
+      stripePaymentIntentId: bookings.stripePaymentIntentId,
+      offering: bookingOfferings,
+      facilityBookableStartTime: facilities.bookableStartTime,
+      facilityBookableEndTime: facilities.bookableEndTime,
+      priceAmount: bookingPrices.amount,
+    })
+    .from(bookings)
+    .innerJoin(bookingOfferings, eq(bookings.offeringId, bookingOfferings.id))
+    .innerJoin(facilities, eq(bookings.facilityId, facilities.id))
+    .innerJoin(
+      bookingPrices,
+      and(eq(bookingPrices.offeringId, bookings.offeringId), eq(bookingPrices.customerGroup, bookings.customerGroup))
+    )
+    .where(eq(bookings.id, bookingId))
+    .limit(1);
+  if (!booking || booking.scheduleType !== "custom" || booking.status === "cancelled") {
+    throw new Error("Custom booking not found.");
+  }
+  const [next] = parseCustomSessions(
+    JSON.stringify([{ date: formData.get("date"), startTime: formData.get("time"), endTime: formData.get("endTime") }]),
+    booking.offering,
+    {
+      bookableStartTime: booking.facilityBookableStartTime,
+      bookableEndTime: booking.facilityBookableEndTime,
+    },
+    1
+  );
+  const target = { startDate: next.startDate, endDate: next.endDate };
+  const existing = occurrenceId
+    ? (await db.select().from(bookingOccurrences).where(and(
+        eq(bookingOccurrences.id, occurrenceId),
+        eq(bookingOccurrences.bookingId, bookingId)
+      )).limit(1))[0]
+    : null;
+  const financiallyLocked = Boolean(
+    booking.invoiceStatus || booking.stripeCheckoutSessionId || booking.stripePaymentIntentId
+  );
+  if (occurrenceId && !existing) throw new Error("Session not found.");
+  const siblings = await db.select().from(bookingOccurrences).where(and(
+    eq(bookingOccurrences.bookingId, bookingId),
+    ne(bookingOccurrences.status, "cancelled")
+  ));
+  if (siblings.some((item) => item.id !== occurrenceId && item.startDate < target.endDate && item.endDate > target.startDate)) {
+    throw new Error("Custom sessions cannot overlap.");
+  }
+  await assertAvailable(booking.offering.facilityId, booking.offering.capacity, [target], bookingId);
+
+  if (existing) {
+    const oldMinutes = existing.endDate.getTime() - existing.startDate.getTime();
+    const newMinutes = target.endDate.getTime() - target.startDate.getTime();
+    if (financiallyLocked && oldMinutes !== newMinutes) {
+      throw new Error("Paid sessions can only be moved without changing their duration.");
+    }
+    await db.update(bookingOccurrences).set(target).where(eq(bookingOccurrences.id, existing.id));
+    if (existing.promotionEventId) {
+      await db.update(events).set(target).where(eq(events.id, existing.promotionEventId));
+    }
+  } else {
+    if (financiallyLocked || booking.paymentType !== "manual") {
+      throw new Error("Create a separate booking to add sessions after payment has been arranged.");
+    }
+    const discount = await getCustomerDiscountPercent(booking.customerEmail);
+    const allocatedAmount = bookingAmount(
+      booking.priceAmount,
+      target.startDate,
+      target.endDate,
+      "none",
+      !booking.offering.endTime,
+      { threshold: 999, percent: 0 },
+      "upfront",
+      1,
+      discount
+    );
+    await db.insert(bookingOccurrences).values({
+      bookingId,
+      facilityId: booking.offering.facilityId,
+      ...target,
+      status: booking.status === "confirmed" ? "confirmed" : "pending_payment",
+      allocatedAmount,
+    });
+    await db.update(bookings).set({ amount: booking.amount + allocatedAmount }).where(eq(bookings.id, bookingId));
+  }
+  const active = await db.select().from(bookingOccurrences).where(and(
+    eq(bookingOccurrences.bookingId, bookingId),
+    ne(bookingOccurrences.status, "cancelled")
+  )).orderBy(asc(bookingOccurrences.startDate));
+  await db.update(bookings).set({
+    startDate: active[0].startDate,
+    endDate: active[0].endDate,
+    repeatCount: active.length,
+    updatedAt: new Date(),
+  }).where(eq(bookings.id, bookingId));
+  await createPromotionEventForBooking(bookingId);
+  await logAudit({
+    action: "update",
+    entity: "booking",
+    entityId: bookingId,
+    description: existing ? "Rescheduled custom booking session" : "Added custom booking session",
+    metadata: { occurrenceId: existing?.id ?? null, startDate: target.startDate },
+  });
+  revalidatePath("/admin/bookings");
+  revalidatePath(`/admin/bookings/${bookingId}/edit`);
+  revalidatePath("/booking");
+  revalidatePath("/events");
 }

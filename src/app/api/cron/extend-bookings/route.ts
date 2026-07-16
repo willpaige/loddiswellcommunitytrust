@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { extendSubscriptionBookingOccurrences } from "@/actions/bookings";
+import { extendIndefiniteBookingSchedules } from "@/actions/bookings";
 
 export async function GET(req: NextRequest) {
   const secret = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
@@ -7,6 +7,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const result = await extendSubscriptionBookingOccurrences();
+  const result = await extendIndefiniteBookingSchedules();
   return NextResponse.json(result);
 }

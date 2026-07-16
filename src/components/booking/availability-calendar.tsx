@@ -34,9 +34,18 @@ type ManualBookingOffering = {
   facilityBookableEndTime?: string;
 };
 
+type ManualBookingPrice = {
+  offeringId: string;
+  customerGroup: string;
+  amount: number;
+  variableDuration: boolean;
+};
+
 export function AvailabilityCalendar({
   items,
   manualBookingOfferings = [],
+  manualBookingPrices = [],
+  repeatDiscount,
   month = new Date(),
   title,
   description,
@@ -44,6 +53,8 @@ export function AvailabilityCalendar({
 }: {
   items: AvailabilityCalendarItem[];
   manualBookingOfferings?: ManualBookingOffering[];
+  manualBookingPrices?: ManualBookingPrice[];
+  repeatDiscount?: { threshold: number; percent: number };
   month?: Date;
   title?: string;
   description?: string;
@@ -61,6 +72,8 @@ export function AvailabilityCalendar({
     <Card>
       <ManualBookingDialog
         offerings={manualBookingOfferings}
+        prices={manualBookingPrices}
+        repeatDiscount={repeatDiscount}
         open={manualBookingOpen}
         onOpenChange={setManualBookingOpen}
         defaultDate={selectedDate}

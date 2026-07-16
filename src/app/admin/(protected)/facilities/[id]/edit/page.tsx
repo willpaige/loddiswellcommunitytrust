@@ -26,6 +26,7 @@ export default function EditFacilityPage() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("{}");
   const [address, setAddress] = useState("");
+  const [what3words, setWhat3words] = useState("");
   const [capacity, setCapacity] = useState("");
   const [features, setFeatures] = useState("");
   const [rates, setRates] = useState<KeyValuePair[]>([]);
@@ -48,6 +49,7 @@ export default function EditFacilityPage() {
         setName(facility.name);
         setDescription(facility.description);
         setAddress(facility.address || "");
+        setWhat3words(facility.what3words || "");
         setCapacity(facility.capacity?.toString() || "");
         setFeatures(
           facility.features ? (facility.features as string[]).join("\n") : ""
@@ -83,6 +85,7 @@ export default function EditFacilityPage() {
     formData.set("name", name);
     formData.set("description", description);
     formData.set("address", address);
+    formData.set("what3words", what3words.trim());
     formData.set("capacity", capacity);
     formData.set(
       "features",
@@ -176,6 +179,21 @@ export default function EditFacilityPage() {
                   placeholder="e.g., 100"
                 />
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="what3words">What3words address</Label>
+              <Input
+                id="what3words"
+                value={what3words}
+                onChange={(e) => setWhat3words(e.target.value)}
+                placeholder="///word.word.word"
+                pattern="/{3}[^.\s/]+\.[^.\s/]+\.[^.\s/]+|[^.\s/]+\.[^.\s/]+\.[^.\s/]+"
+                title="Enter three words separated by dots, for example ///word.word.word"
+              />
+              <p className="text-xs text-muted-foreground">
+                Shown publicly as a link to the venue’s precise location.
+              </p>
             </div>
 
             <div className="space-y-2">

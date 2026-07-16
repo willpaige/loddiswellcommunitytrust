@@ -13,6 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { PendingSubmitButton } from "@/components/admin/pending-submit-button";
 
 export const dynamic = "force-dynamic";
 
@@ -163,9 +164,10 @@ export default async function AdminRequirementsPage() {
                     Require a document upload when answered &ldquo;yes&rdquo;
                   </label>
                   <div className="sm:col-span-2">
-                    <Button type="submit" size="sm">
-                      Add question
-                    </Button>
+                    <PendingSubmitButton
+                      idleLabel="Add question"
+                      pendingLabel="Adding question..."
+                    />
                   </div>
                 </form>
               </div>

@@ -36,6 +36,7 @@ const navItems = [
       { name: "Bookings", href: "/admin/bookings" },
       { name: "Availability", href: "/admin/bookings/availability" },
       { name: "Requirements", href: "/admin/bookings/requirements" },
+      { name: "Discount codes", href: "/admin/bookings/discount-codes" },
       { name: "Settings", href: "/admin/bookings/settings" },
     ],
   },

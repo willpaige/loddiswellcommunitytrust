@@ -11,7 +11,7 @@ import {
   getAdminOfferingsForRequirements,
   getRequirementSets,
 } from "@/actions/booking-requirements";
-import { bookingHourOptions } from "@/lib/bookings";
+import { bookingHourOptions, recurrenceOptions } from "@/lib/bookings";
 import { BookingPricesTable } from "@/components/admin/booking-prices-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -237,7 +237,24 @@ export default async function AdminBookingSettingsPage() {
                   ))}
                 </select>
               </div>
-              <div className="flex items-end">
+              <div className="space-y-2">
+                <Label htmlFor="blockRecurrence">Repeat</Label>
+                <select id="blockRecurrence" name="recurrence" defaultValue="none" className="h-10 w-full rounded-md border bg-background px-3 text-sm">
+                  <option value="none">Does not repeat</option>
+                  {recurrenceOptions.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="blockRepeatCount">Number of blocks</Label>
+                <Input id="blockRepeatCount" name="repeatCount" type="number" min="2" max="104" defaultValue="2" />
+              </div>
+              <label className="flex items-center gap-2 self-end pb-2 text-sm">
+                <input type="checkbox" name="indefinite" />
+                Repeat indefinitely
+              </label>
+              <div className="flex items-end lg:col-span-2">
                 <Button type="submit">Block</Button>
               </div>
             </form>

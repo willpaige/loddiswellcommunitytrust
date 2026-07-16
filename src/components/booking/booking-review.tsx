@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { format } from "date-fns";
 import { createBookingCheckout } from "@/actions/bookings";
+import type { DiscountCodeResult } from "@/actions/booking-discount-codes";
 import { money, recurrenceIntervalLabel, recurrenceLabel } from "@/lib/bookings";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,6 +11,7 @@ type OfferingRow = {
   facilityName: string;
   offeringId: string;
   offeringName: string;
+  offeringType: string;
   startTime: string | null;
   endTime: string | null;
   durationMinutes: number;
@@ -32,6 +34,7 @@ type PendingBooking = {
   notes?: string;
   promoteOnSite?: string;
   promotionUrl?: string;
+  discountCode?: string;
 };
 
 function addMinutes(date: Date, minutes: number) {
@@ -54,11 +57,13 @@ export function BookingReview({
   pending,
   repeatDiscount,
   customerDiscountPercent = 0,
+  discountCodeResult = null,
 }: {
   offerings: OfferingRow[];
   pending: PendingBooking;
   repeatDiscount: { threshold: number; percent: number };
   customerDiscountPercent?: number;
+  discountCodeResult?: DiscountCodeResult | null;
 }) {
   const offering = offerings.find((row) => row.offeringId === pending.offeringId);
   const pricedOffering = offerings.find(
@@ -103,7 +108,11 @@ export function BookingReview({
     repeatPaymentMode === "upfront" &&
     repeatDiscount.percent > 0 &&
     repeatCount >= repeatDiscount.threshold;
-  const effectivePct = Math.max(customerDiscountPercent, repeatEligible ? repeatDiscount.percent : 0);
+  const effectivePct = Math.max(
+    customerDiscountPercent,
+    repeatEligible ? repeatDiscount.percent : 0,
+    discountCodeResult?.valid ? discountCodeResult.discountPercent ?? 0 : 0
+  );
   const subtotal = recurring
     ? repeatPaymentMode === "upfront"
       ? upfrontSubtotal
@@ -126,6 +135,11 @@ export function BookingReview({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          {pending.discountCode && discountCodeResult && (
+            <div className={`rounded-md p-3 text-sm ${discountCodeResult.valid ? "bg-sage-50 text-sage-900" : "bg-destructive/10 text-destructive"}`}>
+              {discountCodeResult.message}
+            </div>
+          )}
           <dl className="grid gap-4 sm:grid-cols-2">
             <div>
               <dt className="text-sm text-muted-foreground">Venue</dt>
@@ -141,10 +155,10 @@ export function BookingReview({
                 {format(start, "d MMM yyyy, HH:mm")} to {format(end, "HH:mm")}
               </dd>
             </div>
-            <div>
+            {offering.offeringType !== "kids_party" && <div>
               <dt className="text-sm text-muted-foreground">Customer type</dt>
               <dd className="font-medium">{customerGroupLabel(pending.customerGroup)}</dd>
-            </div>
+            </div>}
             <div>
               <dt className="text-sm text-muted-foreground">Name</dt>
               <dd className="font-medium">{pending.customerName}</dd>
@@ -201,7 +215,11 @@ export function BookingReview({
             <Button variant="outline" asChild>
               <Link href="/booking">Start again</Link>
             </Button>
+          {discountCodeResult?.valid === false ? (
+            <Button asChild className="w-full"><Link href="/booking">Change discount code</Link></Button>
+          ) : (
             <BookingTermsButton />
+          )}
           </div>
         </CardContent>
       </Card>

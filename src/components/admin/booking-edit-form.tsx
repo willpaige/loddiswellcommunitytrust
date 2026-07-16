@@ -39,6 +39,7 @@ type Booking = {
   startDate: Date;
   endDate: Date;
   recurrence: Recurrence;
+  scheduleType: "regular" | "custom";
   repeatCount: number;
   billingLine1: string | null;
   billingLine2: string | null;
@@ -164,6 +165,7 @@ export function BookingEditForm({
   }
 
   const hasInvoice = Boolean(booking.stripeInvoiceId);
+  const customSchedule = booking.scheduleType === "custom";
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -173,12 +175,19 @@ export function BookingEditForm({
           <CardTitle>Booking details</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
+          {customSchedule && (
+            <p className="rounded-md border border-copper-200 bg-copper-50 p-3 text-sm text-copper-900 sm:col-span-2">
+              This booking uses custom dates. Manage its sessions in the Custom sessions panel below.
+            </p>
+          )}
+          {customSchedule && <input type="hidden" name="offeringId" value={offeringId} />}
           <div className="space-y-2 sm:col-span-2">
             <Label htmlFor="offeringId">Booking type</Label>
             <select
               id="offeringId"
-              name="offeringId"
+              name={customSchedule ? undefined : "offeringId"}
               value={offeringId}
+              disabled={customSchedule}
               onChange={(event) => setOfferingId(event.target.value)}
               className="h-10 w-full rounded-md border bg-background px-3 text-sm"
             >
@@ -195,7 +204,7 @@ export function BookingEditForm({
             <AvailableDatePicker
               slots={slots}
               value={date}
-              disabled={loadingSlots}
+              disabled={customSchedule || loadingSlots}
               onChange={(nextDate) => {
                 const nextSlot = slots.find((slot) => slot.date === nextDate);
                 const nextTime = nextSlot?.times[0] ?? "";
@@ -214,7 +223,7 @@ export function BookingEditForm({
               availableTimes={availableTimes}
               startTime={selectedOffering?.facilityBookableStartTime ?? "08:00"}
               endTime={selectedOffering?.facilityBookableEndTime ?? "23:00"}
-              disabled={loadingSlots || availableTimes.length === 0}
+              disabled={customSchedule || loadingSlots || availableTimes.length === 0}
               onChange={(nextTime) => {
                 setTime(nextTime);
                 setEndTime(selectedDateSlot?.endTimesByStart?.[nextTime]?.[0] ?? "");
@@ -230,7 +239,7 @@ export function BookingEditForm({
               availableTimes={availableEndTimes}
               startTime={time || selectedOffering?.facilityBookableStartTime || "08:00"}
               endTime={selectedOffering?.facilityBookableEndTime ?? "23:00"}
-              disabled={loadingSlots || availableEndTimes.length === 0}
+              disabled={customSchedule || loadingSlots || availableEndTimes.length === 0}
               onChange={setEndTime}
             />
           </div>
@@ -259,6 +268,7 @@ export function BookingEditForm({
               <input
                 type="checkbox"
                 checked={recurring}
+                disabled={customSchedule}
                 onChange={(event) => setRecurrence(event.target.checked ? "weekly" : "none")}
               />
               Repeat

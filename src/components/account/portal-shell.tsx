@@ -20,6 +20,7 @@ export function AccountPortalShell({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const lotteryLive = Date.now() >= Date.parse("2026-07-31T23:00:00.000Z");
 
   return (
     <main className="bg-background pb-16">
@@ -36,7 +37,7 @@ export function AccountPortalShell({
               </p>
             </div>
             <nav className="flex flex-wrap gap-2" aria-label="Account navigation">
-              {portalNav.map((item) => {
+              {portalNav.filter((item) => item.href !== "/account/lottery" || lotteryLive).map((item) => {
                 const active =
                   item.href === "/account"
                     ? pathname === item.href

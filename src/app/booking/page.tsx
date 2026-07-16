@@ -9,6 +9,7 @@ import { getPageContent } from "@/lib/cms/get-page-content";
 import { renderInline } from "@/lib/cms/render";
 import { getCustomerDiscountPercent, getPublicBookingData } from "@/actions/bookings";
 import { auth } from "@/lib/auth";
+import { validateBookingDiscountCode } from "@/actions/booking-discount-codes";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,9 @@ export default async function BookingPage({
   const customerDiscountPercent = session?.user?.email
     ? await getCustomerDiscountPercent(session.user.email)
     : 0;
+  const discountCodeResult = pending?.discountCode
+    ? await validateBookingDiscountCode(pending.discountCode, session?.user?.email ?? undefined)
+    : null;
 
   if (showReview && pending) {
     return (
@@ -60,6 +64,7 @@ export default async function BookingPage({
               pending={pending}
               repeatDiscount={bookingData.repeatDiscount}
               customerDiscountPercent={customerDiscountPercent}
+              discountCodeResult={discountCodeResult}
             />
           </div>
         </main>
@@ -123,6 +128,7 @@ export default async function BookingPage({
                 pending={pending}
                 repeatDiscount={bookingData.repeatDiscount}
                 customerDiscountPercent={customerDiscountPercent}
+                discountCodeResult={discountCodeResult}
               />
             ) : (
               <BookingForm
@@ -182,5 +188,6 @@ function pendingBookingFromParams(
     notes: firstParam(params, "notes") || undefined,
     promoteOnSite: firstParam(params, "promoteOnSite") || undefined,
     promotionUrl: firstParam(params, "promotionUrl") || undefined,
+    discountCode: firstParam(params, "discountCode") || undefined,
   };
 }

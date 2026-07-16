@@ -1,10 +1,12 @@
-import { format } from "date-fns";
+import { differenceInHours, format } from "date-fns";
 import Link from "next/link";
 import { Pencil } from "lucide-react";
-import { cancelAdminBooking, getAdminBookingSetup, getAdminBookings } from "@/actions/bookings";
+import { getAdminBookingOccurrences, getAdminBookingSetup, getAdminBookings } from "@/actions/bookings";
 import { getBookingRequirementStatuses } from "@/lib/booking-requirements";
 import { money } from "@/lib/bookings";
 import { ManualBookingDialog } from "@/components/admin/manual-booking-dialog";
+import { CancelBookingButton } from "@/components/admin/cancel-booking-button";
+import { BookingOccurrenceActions } from "@/components/admin/booking-occurrence-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,6 +23,10 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminBookingsPage() {
   const [bookings, setup] = await Promise.all([getAdminBookings(), getAdminBookingSetup()]);
+  const occurrences = await getAdminBookingOccurrences(bookings.map((booking) => booking.id));
+  const occurrencesByBooking = new Map(
+    bookings.map((booking) => [booking.id, occurrences.filter((item) => item.bookingId === booking.id)])
+  );
   const requirementStatuses = await getBookingRequirementStatuses(bookings.map((b) => b.id));
   const uniqueOfferings = setup.offerings.filter(
     (offering, index, all) =>
@@ -42,7 +48,11 @@ export default async function AdminBookingsPage() {
             View customer and manual bookings with payment and confirmation status.
           </p>
         </div>
-        <ManualBookingDialog offerings={uniqueOfferings} prices={offeringPrices} />
+        <ManualBookingDialog
+          offerings={uniqueOfferings}
+          prices={offeringPrices}
+          repeatDiscount={setup.repeatDiscount}
+        />
       </div>
 
       <Card className="-mx-4 sm:-mx-6 lg:-mx-8">
@@ -69,6 +79,25 @@ export default async function AdminBookingsPage() {
                   <p className="text-sm text-muted-foreground">
                     {booking.offeringName || "Booking"} · {format(booking.startDate, "d MMM yyyy, HH:mm")}
                   </p>
+                  {booking.scheduleType === "custom" && (
+                    <ul className="mt-2 space-y-1 border-l-2 border-copper-200 pl-3">
+                      {occurrencesByBooking.get(booking.id)?.map((occurrence) => (
+                        <li key={occurrence.id} className="flex items-center gap-2 text-xs">
+                          <span className={occurrence.status === "cancelled" ? "line-through text-muted-foreground" : ""}>
+                            {format(occurrence.startDate, "d MMM, HH:mm")}–{format(occurrence.endDate, "HH:mm")}
+                            {occurrence.allocatedAmount > 0 && ` · ${money(occurrence.allocatedAmount)}`}
+                          </span>
+                          {occurrence.refundStatus === "due" && <Badge variant="destructive">Refund due</Badge>}
+                          {occurrence.refundStatus === "refunded" && <Badge variant="outline">Refunded</Badge>}
+                          <BookingOccurrenceActions
+                            occurrenceId={occurrence.id}
+                            cancelled={occurrence.status === "cancelled"}
+                            refundDue={occurrence.refundStatus === "due"}
+                          />
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </TableCell>
                 <TableCell>
                   <p>{booking.customerName}</p>
@@ -110,12 +139,19 @@ export default async function AdminBookingsPage() {
                       </Link>
                     </Button>
                     {booking.status !== "cancelled" && (
-                      <form action={cancelAdminBooking}>
-                        <input type="hidden" name="bookingId" value={booking.id} />
-                        <Button type="submit" variant="ghost" size="sm">
-                          Cancel
-                        </Button>
-                      </form>
+                      <CancelBookingButton
+                        bookingId={booking.id}
+                        customerName={booking.customerName}
+                        facilityName={booking.facilityName}
+                        insideCancellationWindow={
+                          differenceInHours(booking.startDate, new Date()) <
+                          setup.cancellationSettings.noticeHours
+                        }
+                        canRefund={
+                          booking.paymentType === "one_off" &&
+                          Boolean(booking.stripePaymentIntentId)
+                        }
+                      />
                     )}
                   </div>
                 </TableCell>

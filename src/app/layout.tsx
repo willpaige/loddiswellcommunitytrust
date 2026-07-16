@@ -4,7 +4,10 @@ import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { SiteChrome } from "@/components/layout/site-chrome";
 import { NewsletterSignup } from "@/components/newsletter-signup";
+import { isLotteryLive } from "@/lib/lottery-launch";
 import "./globals.css";
+
+export const dynamic = "force-dynamic";
 
 const dmSerifDisplay = DM_Serif_Display({
   subsets: ["latin"],
@@ -70,6 +73,7 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const lotteryLive = isLotteryLive();
   return (
     <html lang="en" className={`${dmSerifDisplay.variable} ${dmSans.variable}`}>
       <head>
@@ -83,14 +87,14 @@ export default function RootLayout({
           Skip to main content
         </a>
         <SiteChrome>
-          <Header />
+          <Header lotteryLive={lotteryLive} />
         </SiteChrome>
         <main id="main-content" className="flex-1">
           {children}
         </main>
         <SiteChrome>
           <NewsletterSignup />
-          <Footer />
+          <Footer lotteryLive={lotteryLive} />
         </SiteChrome>
       </body>
     </html>

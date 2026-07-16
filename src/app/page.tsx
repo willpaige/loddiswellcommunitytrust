@@ -13,6 +13,9 @@ import { SectionLabel } from "@/components/ui/section-label";
 import { getPageContent } from "@/lib/cms/get-page-content";
 import { renderInline, renderRichText } from "@/lib/cms/render";
 import { getFacilities } from "@/actions/facilities";
+import { isLotteryLive } from "@/lib/lottery-launch";
+
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { metaDescription } = await getPageContent("home");
@@ -87,6 +90,7 @@ function renderHeroTitle(text: string) {
 }
 
 export default async function HomePage() {
+  const lotteryLive = isLotteryLive();
   const [{ blocks }, allFacilities] = await Promise.all([
     getPageContent("home"),
     getFacilities(),
@@ -146,8 +150,8 @@ export default async function HomePage() {
 
       <section className="py-20 sm:py-24 bg-background">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-            {quickLinks.map((link) => (
+          <div className={`grid grid-cols-1 gap-6 ${lotteryLive ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
+            {quickLinks.filter((link) => link.href !== "/lottery" || lotteryLive).map((link) => (
               <Link
                 key={link.name}
                 href={link.href}
@@ -285,7 +289,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      <section className="py-20 sm:py-24 bg-sage-800 text-sage-50">
+      {lotteryLive && <section className="py-20 sm:py-24 bg-sage-800 text-sage-50">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-copper-300 mb-4">
             {renderInline(blocks.cta_eyebrow, "Support Loddiswell")}
@@ -312,7 +316,7 @@ export default async function HomePage() {
             </Link>
           </div>
         </div>
-      </section>
+      </section>}
     </div>
   );
 }

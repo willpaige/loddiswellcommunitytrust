@@ -33,8 +33,8 @@ export const emailTemplateDefaults: EmailTemplateDefault[] = [
     name: "Booking confirmation",
     description: "Sent to a customer when an online booking is confirmed.",
     subject: "Your Loddiswell booking is confirmed",
-    body: "Hi {{customerName}},\n\nYour booking for {{facilityName}} is confirmed.\n\nBooking: {{offeringName}}\nDate and time: {{startDate}} to {{endTime}}\nAmount paid: {{amount}}\n\nYou can manage your booking from your account.",
-    variables: ["customerName", "facilityName", "offeringName", "startDate", "endTime", "amount", "bookingUrl"],
+    body: "Hi {{customerName}},\n\nYour booking for {{facilityName}} is confirmed.\n\nBooking: {{offeringName}}\nSchedule: {{schedule}}\nAmount paid: {{amount}}\n\nYou can manage your booking from your account.",
+    variables: ["customerName", "facilityName", "offeringName", "startDate", "endTime", "schedule", "amount", "bookingUrl"],
   },
   {
     key: "booking_manager_notification",
@@ -42,8 +42,8 @@ export const emailTemplateDefaults: EmailTemplateDefault[] = [
     name: "Booking manager notification",
     description: "Sent to the booking manager when a customer booking is confirmed.",
     subject: "New booking: {{facilityName}} on {{startDate}}",
-    body: "A new booking has been confirmed.\n\nCustomer: {{customerName}}\nEmail: {{customerEmail}}\nPhone: {{customerPhone}}\nVenue: {{facilityName}}\nBooking: {{offeringName}}\nDate and time: {{startDate}} to {{endTime}}\nAmount: {{amount}}\n\nNotes: {{notes}}",
-    variables: ["customerName", "customerEmail", "customerPhone", "facilityName", "offeringName", "startDate", "endTime", "amount", "notes"],
+    body: "A new booking has been confirmed.\n\nCustomer: {{customerName}}\nEmail: {{customerEmail}}\nPhone: {{customerPhone}}\nVenue: {{facilityName}}\nBooking: {{offeringName}}\nSchedule: {{schedule}}\nAmount: {{amount}}\n\nNotes: {{notes}}",
+    variables: ["customerName", "customerEmail", "customerPhone", "facilityName", "offeringName", "startDate", "endTime", "schedule", "amount", "notes"],
   },
   {
     key: "manual_booking_confirmation",
@@ -51,8 +51,8 @@ export const emailTemplateDefaults: EmailTemplateDefault[] = [
     name: "Manual booking confirmation",
     description: "Sent to a customer when an admin creates a manual booking.",
     subject: "Your Loddiswell booking has been added",
-    body: "Hi {{customerName}},\n\nYour booking for {{facilityName}} has been added by the Trust.\n\nBooking: {{offeringName}}\nDate and time: {{startDate}} to {{endTime}}\n\nPlease contact us if anything looks wrong.",
-    variables: ["customerName", "facilityName", "offeringName", "startDate", "endTime"],
+    body: "Hi {{customerName}},\n\nYour booking for {{facilityName}} has been added by the Trust.\n\nBooking: {{offeringName}}\nSchedule: {{schedule}}\n\nPlease contact us if anything looks wrong.",
+    variables: ["customerName", "facilityName", "offeringName", "startDate", "endTime", "schedule"],
   },
   {
     key: "manual_booking_payment_link",
@@ -60,8 +60,8 @@ export const emailTemplateDefaults: EmailTemplateDefault[] = [
     name: "Manual booking payment link",
     description: "Sent to a customer when an admin creates a booking that needs online payment.",
     subject: "Payment link for your Loddiswell booking",
-    body: "Hi {{customerName}},\n\nWe have reserved your booking for {{facilityName}}.\n\nBooking: {{offeringName}}\nDate and time: {{startDate}} to {{endTime}}\nAmount due: {{amount}}\n\nPlease use this secure Stripe link to pay and confirm your booking:\n\n{{paymentUrl}}",
-    variables: ["customerName", "facilityName", "offeringName", "startDate", "endTime", "amount", "paymentUrl"],
+    body: "Hi {{customerName}},\n\nWe have reserved your booking for {{facilityName}}.\n\nBooking: {{offeringName}}\nSchedule: {{schedule}}\nAmount due: {{amount}}\n\nPlease use this secure Stripe link to pay and confirm your booking:\n\n{{paymentUrl}}",
+    variables: ["customerName", "facilityName", "offeringName", "startDate", "endTime", "schedule", "amount", "paymentUrl"],
   },
   {
     key: "booking_cancellation",
