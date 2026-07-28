@@ -57,7 +57,7 @@ export default async function BookingPage({
           />
           <div className="absolute inset-0 bg-sage-900/75" aria-hidden="true" />
           <div className="relative mx-auto w-full max-w-2xl">
-            <div className="mx-auto mb-6 w-full max-w-[340px] rounded-sm bg-white p-3">
+            <div className="mx-auto mb-6 w-full max-w-[340px]">
               <BrandLogo />
             </div>
             <BookingReview

@@ -48,7 +48,7 @@ export function Header() {
       >
         <Link
           href="/"
-          className="w-[190px] rounded-sm bg-white/95 p-2 no-underline shadow-sm sm:w-[240px]"
+          className="w-[190px] no-underline sm:w-[240px]"
           aria-label="Loddiswell Community Trust home"
         >
           <BrandLogo />
