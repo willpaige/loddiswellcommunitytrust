@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { isLotteryLive } from "@/lib/lottery-launch";
 import { CheckCircle2, Ticket } from "lucide-react";
 import { confirmStripeBooking } from "@/actions/bookings";
 import { Button } from "@/components/ui/button";
@@ -12,7 +11,6 @@ export default async function BookingSuccessPage({
 }: {
   searchParams: Promise<{ session_id?: string }>;
 }) {
-  const lotteryLive = isLotteryLive();
   const params = await searchParams;
   if (params.session_id) {
     await confirmStripeBooking(params.session_id);
@@ -22,7 +20,7 @@ export default async function BookingSuccessPage({
     <main className="bg-background">
       <section className="bg-sage-800 pb-20 pt-36 sm:pt-44">
         <div className="mx-auto grid max-w-5xl gap-6 px-4 sm:px-6 lg:grid-cols-[1fr_22rem] lg:px-8">
-        {lotteryLive && <Card>
+        <Card>
           <CardHeader>
             <CheckCircle2 className="h-12 w-12 text-primary" aria-hidden="true" />
             <CardTitle className="font-serif text-3xl">Booking confirmed</CardTitle>
@@ -38,7 +36,7 @@ export default async function BookingSuccessPage({
               <Link href="/booking">Make another booking</Link>
             </Button>
           </CardContent>
-        </Card>}
+        </Card>
 
         <Card>
           <CardHeader>

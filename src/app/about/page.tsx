@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { isLotteryLive } from "@/lib/lottery-launch";
 import Image from "next/image";
 import { FileText, Users, History, Download } from "lucide-react";
 import { format } from "date-fns";
@@ -38,7 +37,6 @@ function formatBytes(bytes: number | null): string {
 }
 
 export default async function AboutPage() {
-  const lotteryLive = isLotteryLive();
   const [{ blocks, heroImageUrl }, documents, trustees] = await Promise.all([
     getPageContent("about"),
     getDocuments(),
@@ -233,12 +231,12 @@ export default async function AboutPage() {
             >
               Contact Us
             </Link>
-            {lotteryLive && <Link
+            <Link
               href="/lottery"
               className="inline-flex items-center rounded-md border border-sage-500 px-5 py-3 text-sm font-semibold text-sage-50 no-underline hover:bg-sage-700 transition-colors"
             >
               Join the Lottery
-            </Link>}
+            </Link>
           </div>
         </div>
       </section>

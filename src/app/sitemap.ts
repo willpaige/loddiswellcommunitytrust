@@ -1,5 +1,4 @@
 import type { MetadataRoute } from "next";
-import { isLotteryLive } from "@/lib/lottery-launch";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +23,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/privacy",
   ];
 
-  return staticPages.filter((route) => route !== "/lottery" || isLotteryLive()).map((route) => ({
+  return staticPages.map((route) => ({
     url: `${baseUrl}${route}`,
     lastModified: new Date(),
     changeFrequency: route === "" ? "weekly" : "monthly",

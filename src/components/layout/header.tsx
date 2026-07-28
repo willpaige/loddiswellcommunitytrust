@@ -14,7 +14,7 @@ const navigation = [
   { name: "Contact", href: "/contact" },
 ];
 
-export function Header({ lotteryLive = false }: { lotteryLive?: boolean }) {
+export function Header() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -58,7 +58,7 @@ export function Header({ lotteryLive = false }: { lotteryLive?: boolean }) {
         {/* Desktop navigation */}
         <div className="hidden lg:flex lg:items-center lg:gap-8">
           <div className="flex items-center gap-8">
-            {navigation.filter((item) => item.href !== "/lottery" || lotteryLive).map((item) => {
+            {navigation.map((item) => {
               const active = isActive(item.href);
               return (
                 <Link
@@ -139,7 +139,7 @@ export function Header({ lotteryLive = false }: { lotteryLive?: boolean }) {
       {mobileMenuOpen && (
         <div className="lg:hidden border-t border-border bg-background/95 backdrop-blur-sm">
           <div className="space-y-1 px-4 py-4">
-            {navigation.filter((item) => item.href !== "/lottery" || lotteryLive).map((item) => {
+            {navigation.map((item) => {
               const active = isActive(item.href);
               return (
                 <Link

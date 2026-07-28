@@ -8,15 +8,13 @@ import { AccountPortalShell } from "@/components/account/portal-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { isLotteryLive } from "@/lib/lottery-launch";
 
 export const dynamic = "force-dynamic";
 
 export default async function AccountOverviewPage() {
-  const lotteryLive = isLotteryLive();
   const [bookings, lotteryEntries] = await Promise.all([
     getCustomerBookings(),
-    lotteryLive ? getCustomerLotteryEntries() : Promise.resolve([]),
+    getCustomerLotteryEntries(),
   ]);
   const nextBooking = bookings.find((booking) => booking.status !== "cancelled");
   const activeLotteryEntries = lotteryEntries.filter((entry) => entry.status === "active");
@@ -28,7 +26,7 @@ export default async function AccountOverviewPage() {
       description="Manage facility bookings and lottery entries from one place."
     >
       <div className="grid gap-6 lg:grid-cols-2">
-        {lotteryLive && <Card>
+        <Card>
           <CardHeader>
             <CalendarDays className="h-8 w-8 text-copper-500" aria-hidden="true" />
             <CardTitle>Bookings</CardTitle>
@@ -68,7 +66,7 @@ export default async function AccountOverviewPage() {
               </Button>
             </div>
           </CardContent>
-        </Card>}
+        </Card>
 
         <Card>
           <CardHeader>
