@@ -158,7 +158,7 @@ export function ManualBookingDialog({
   const customPricePence = customPrice.trim() === "" || !Number.isFinite(parsedCustomPrice)
     ? null
     : Math.max(0, Math.round(parsedCustomPrice * 100));
-  const displayedTotalPence = customSchedule && customPricePence !== null
+  const displayedTotalPence = !isSubscription && customPricePence !== null
     ? Math.round((customPricePence * (100 - effectiveDiscountPercent)) / 100)
     : isSubscription
       ? Math.round(
@@ -328,6 +328,35 @@ export function ManualBookingDialog({
             </select>
           </div>
 
+          {!isKidsParty && <div className="space-y-2">
+            <Label htmlFor="manualGroup">Customer type</Label>
+            <select
+              id="manualGroup"
+              name="customerGroup"
+              value={customerGroup}
+              onChange={(event) => {
+                const nextGroup = event.target.value as (typeof customerGroups)[number]["value"];
+                setCustomerGroup(nextGroup);
+                if (event.target.value !== "team_community") setPromoteOnSite(false);
+              }}
+              className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+            >
+              {customerGroups.map((group) => (
+                <option key={group.value} value={group.value}>
+                  {group.label}
+                </option>
+              ))}
+            </select>
+          </div>}
+          {isKidsParty && <input type="hidden" name="customerGroup" value="parent_private" />}
+
+          {needsOrganisationName && (
+            <div className="space-y-2">
+              <Label htmlFor="manualOrganisationName">{organisationLabel}</Label>
+              <Input id="manualOrganisationName" name="organisationName" required />
+            </div>
+          )}
+
           <div className="space-y-2 sm:col-span-2">
             <Label>{customSchedule ? "Add a date" : "Date"}</Label>
             <input type="hidden" name="date" value={date} required />
@@ -345,7 +374,7 @@ export function ManualBookingDialog({
             />
           </div>
 
-          {!isKidsParty && <div className="space-y-2">
+          <div className="space-y-2">
             <Label>Start time</Label>
             <AvailableTimePicker
               name="time"
@@ -359,8 +388,20 @@ export function ManualBookingDialog({
                 setEndTime(selectedDateSlot?.endTimesByStart?.[nextTime]?.[0] ?? "");
               }}
             />
-          </div>}
-          {isKidsParty && <input type="hidden" name="customerGroup" value="parent_private" />}
+          </div>
+
+          <div className="space-y-2">
+            <Label>End time</Label>
+            <AvailableTimePicker
+              name="endTime"
+              value={endTime}
+              availableTimes={availableEndTimes}
+              startTime={time || bookableStartTime}
+              endTime={bookableEndTime}
+              disabled={loadingSlots || availableEndTimes.length === 0}
+              onChange={setEndTime}
+            />
+          </div>
 
           {customSchedule && (
             <div className="space-y-3 rounded-md border p-4 sm:col-span-2">
@@ -404,64 +445,6 @@ export function ManualBookingDialog({
                   ))}
                 </ul>
               )}
-              <div className="max-w-xs space-y-2 pt-2">
-                <Label htmlFor="customBookingPrice">Custom total price (£)</Label>
-                <Input
-                  id="customBookingPrice"
-                  name="customPrice"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={customPrice}
-                  onChange={(event) => setCustomPrice(event.target.value)}
-                  placeholder="Leave blank to calculate automatically"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Overrides standard pricing for the whole group and is used for payment links and invoices.
-                </p>
-              </div>
-            </div>
-          )}
-
-          <div className="space-y-2">
-            <Label>End time</Label>
-            <AvailableTimePicker
-              name="endTime"
-              value={endTime}
-              availableTimes={availableEndTimes}
-              startTime={time || bookableStartTime}
-              endTime={bookableEndTime}
-              disabled={loadingSlots || availableEndTimes.length === 0}
-              onChange={setEndTime}
-            />
-          </div>
-
-          {!isKidsParty && <div className="space-y-2">
-            <Label htmlFor="manualGroup">Customer type</Label>
-            <select
-              id="manualGroup"
-              name="customerGroup"
-              value={customerGroup}
-              onChange={(event) => {
-                const nextGroup = event.target.value as (typeof customerGroups)[number]["value"];
-                setCustomerGroup(nextGroup);
-                if (event.target.value !== "team_community") setPromoteOnSite(false);
-              }}
-              className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-            >
-              {customerGroups.map((group) => (
-                <option key={group.value} value={group.value}>
-                  {group.label}
-                </option>
-              ))}
-            </select>
-          </div>}
-          {isKidsParty && <input type="hidden" name="customerGroup" value="parent_private" />}
-
-          {needsOrganisationName && (
-            <div className="space-y-2">
-              <Label htmlFor="manualOrganisationName">{organisationLabel}</Label>
-              <Input id="manualOrganisationName" name="organisationName" required />
             </div>
           )}
 
@@ -609,11 +592,29 @@ export function ManualBookingDialog({
             </>
           )}
 
-          <div className="rounded-md border border-sage-200 bg-sage-50 p-4 sm:col-span-2">
+          <div className="order-[90] rounded-md border border-sage-200 bg-sage-50 p-4 sm:col-span-2">
             <div className="flex items-center gap-2">
               <Receipt className="h-4 w-4 text-sage-700" aria-hidden="true" />
               <h3 className="font-medium text-sage-900">Booking cost overview</h3>
             </div>
+            {!isSubscription && (
+              <div className="mt-4 max-w-md space-y-2">
+                <Label htmlFor="customBookingPrice">Custom total price (£)</Label>
+                <Input
+                  id="customBookingPrice"
+                  name="customPrice"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={customPrice}
+                  onChange={(event) => setCustomPrice(event.target.value)}
+                  placeholder="Leave blank to use the standard total"
+                />
+                <p className="text-xs text-sage-700">
+                  Overrides the standard total for this booking. Any applicable discount is applied to this amount.
+                </p>
+              </div>
+            )}
             {priceRow ? (
               <dl className="mt-3 space-y-2 text-sm">
                 <div className="flex justify-between gap-4">
@@ -638,13 +639,13 @@ export function ManualBookingDialog({
                     <dd>{money(customSchedule ? customGrossPence : regularGrossPence)}</dd>
                   </div>
                 )}
-                {effectiveDiscountPercent > 0 && customPricePence === null && !isSubscription && (
+                {effectiveDiscountPercent > 0 && !isSubscription && (
                   <div className="flex justify-between gap-4 text-sage-700">
                     <dt>Discount applied</dt>
                     <dd>{effectiveDiscountPercent}%</dd>
                   </div>
                 )}
-                {customSchedule && customPricePence !== null && (
+                {!isSubscription && customPricePence !== null && (
                   <div className="flex justify-between gap-4 text-copper-700">
                     <dt>Custom price override</dt>
                     <dd>{money(customPricePence)}</dd>
@@ -660,7 +661,7 @@ export function ManualBookingDialog({
                           ? "Recorded booking value"
                           : "Amount due"}
                   </dt>
-                  <dd>{money(indefinite ? perSessionPence : displayedTotalPence)}</dd>
+                  <dd>{money(customPricePence !== null && !isSubscription ? displayedTotalPence : indefinite ? perSessionPence : displayedTotalPence)}</dd>
                 </div>
               </dl>
             ) : (
@@ -815,7 +816,7 @@ export function ManualBookingDialog({
             <Input id="manualNotes" name="notes" />
           </div>
 
-          <div className="flex justify-end sm:col-span-2">
+          <div className="order-[100] flex justify-end sm:col-span-2">
             <Button
               type="submit"
               disabled={saving || loadingSlots || slots.length === 0 ||
@@ -836,7 +837,7 @@ export function ManualBookingDialog({
             </Button>
           </div>
           {!loadingSlots && slots.length === 0 && (
-            <p className="text-sm text-destructive sm:col-span-2">
+            <p className="order-[101] text-sm text-destructive sm:col-span-2">
               No available dates for this booking type.
             </p>
           )}

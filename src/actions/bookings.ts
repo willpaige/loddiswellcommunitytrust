@@ -5,6 +5,7 @@ import { and, asc, desc, eq, gt, gte, inArray, lt, lte, ne, or, sql } from "driz
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createId } from "@paralleldrive/cuid2";
+import { del } from "@vercel/blob";
 import { auth } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
@@ -14,6 +15,7 @@ import {
   bookingOccurrences,
   bookingOfferings,
   bookingPrices,
+  bookingRequirementDocuments,
   bookings,
   events,
   facilities,
@@ -1911,13 +1913,18 @@ export async function getAdminBookingSetup() {
     db
     .select({
       id: bookingBlocks.id,
+      seriesId: bookingBlocks.seriesId,
       title: bookingBlocks.title,
       startDate: bookingBlocks.startDate,
       endDate: bookingBlocks.endDate,
       facilityName: facilities.name,
+      recurrence: bookingBlockSeries.recurrence,
+      indefinite: bookingBlockSeries.indefinite,
+      repeatCount: bookingBlockSeries.repeatCount,
     })
     .from(bookingBlocks)
     .innerJoin(facilities, eq(bookingBlocks.facilityId, facilities.id))
+    .leftJoin(bookingBlockSeries, eq(bookingBlocks.seriesId, bookingBlockSeries.id))
     .orderBy(desc(bookingBlocks.startDate)),
   ]);
   return { ...setup, cancellationSettings, blocks };
@@ -2070,6 +2077,26 @@ export async function updateBookingPrice(formData: FormData) {
 
   await logAudit({ action: "update", entity: "booking", description: "Updated booking price" });
   revalidatePath("/admin/bookings");
+  revalidatePath("/admin/bookings/settings");
+  revalidatePath("/admin/bookings/availability");
+  revalidatePath("/booking");
+}
+
+export async function deleteBookingBlock(id: string) {
+  await requireAdmin();
+  await db.delete(bookingBlocks).where(eq(bookingBlocks.id, id));
+  await logAudit({ action: "delete", entity: "booking", entityId: id, description: "Deleted blocked-out time" });
+  revalidatePath("/admin/bookings/settings");
+  revalidatePath("/admin/bookings/availability");
+  revalidatePath("/booking");
+}
+
+export async function deleteBookingBlockSeries(id: string) {
+  await requireAdmin();
+  await db.delete(bookingBlockSeries).where(eq(bookingBlockSeries.id, id));
+  await logAudit({ action: "delete", entity: "booking", entityId: id, description: "Deleted recurring blocked-out time series" });
+  revalidatePath("/admin/bookings/settings");
+  revalidatePath("/admin/bookings/availability");
   revalidatePath("/booking");
 }
 
@@ -2215,6 +2242,8 @@ export async function createBookingBlock(formData: FormData) {
   }
   await logAudit({ action: "create", entity: "booking", description: `Blocked booking time: ${title}` });
   revalidatePath("/admin/bookings");
+  revalidatePath("/admin/bookings/settings");
+  revalidatePath("/admin/bookings/availability");
   revalidatePath("/booking");
 }
 
@@ -2327,6 +2356,13 @@ export async function createManualBooking(formData: FormData) {
     pricingDiscountPercent,
     customRepeatEligible ? repeatDiscount.percent : 0
   );
+  const regularRepeatEligible =
+    recurrence !== "none" && repeatPaymentMode === "upfront" &&
+    repeatCount >= repeatDiscount.threshold;
+  const regularEffectivePercent = Math.max(
+    pricingDiscountPercent,
+    regularRepeatEligible ? repeatDiscount.percent : 0
+  );
   const customAmounts = customSessions
     ? allocateCustomAmounts(
         customSessions,
@@ -2343,6 +2379,8 @@ export async function createManualBooking(formData: FormData) {
     ? customAmounts.total
     : isSubscription
     ? Math.round((subscriptionAmount * (100 - (codeResult?.discountPercent ?? 0))) / 100)
+    : customPriceRaw !== undefined
+    ? Math.round((customPriceRaw * (100 - regularEffectivePercent)) / 100)
     : bookingAmount(
         price.amount,
         start,
@@ -2586,6 +2624,81 @@ export async function cancelAdminBooking(formData: FormData) {
   });
   revalidatePath("/admin/bookings");
   revalidatePath("/booking");
+}
+
+export async function deleteAdminBooking(id: string) {
+  await requireAdmin();
+  const [booking] = await db
+    .select({
+      customerName: bookings.customerName,
+      facilityId: bookings.facilityId,
+      stripeCheckoutSessionId: bookings.stripeCheckoutSessionId,
+      stripeSubscriptionId: bookings.stripeSubscriptionId,
+      stripeInvoiceId: bookings.stripeInvoiceId,
+      promotionEventId: bookings.promotionEventId,
+    })
+    .from(bookings)
+    .where(eq(bookings.id, id))
+    .limit(1);
+  if (!booking) throw new Error("Booking not found.");
+
+  // Stop anything that could charge the customer after the local record has
+  // gone. Completed card payments are deliberately not refunded by deletion.
+  const stripe = process.env.STRIPE_SECRET_KEY ? getStripe() : null;
+  if (stripe && booking.stripeSubscriptionId) {
+    const subscription = await stripe.subscriptions.retrieve(booking.stripeSubscriptionId);
+    if (subscription.status !== "canceled") {
+      await stripe.subscriptions.cancel(booking.stripeSubscriptionId);
+    }
+  }
+  if (stripe && booking.stripeCheckoutSessionId) {
+    const checkout = await stripe.checkout.sessions.retrieve(booking.stripeCheckoutSessionId);
+    if (checkout.status === "open") {
+      await stripe.checkout.sessions.expire(booking.stripeCheckoutSessionId);
+    }
+  }
+  if (stripe && booking.stripeInvoiceId) {
+    const invoice = await stripe.invoices.retrieve(booking.stripeInvoiceId);
+    if (invoice.status === "draft") {
+      await stripe.invoices.del(booking.stripeInvoiceId);
+    } else if (invoice.status === "open") {
+      await stripe.invoices.voidInvoice(booking.stripeInvoiceId);
+    }
+  }
+
+  const [documents, occurrenceEvents] = await Promise.all([
+    db
+      .select({ fileUrl: bookingRequirementDocuments.fileUrl })
+      .from(bookingRequirementDocuments)
+      .where(eq(bookingRequirementDocuments.bookingId, id)),
+    db
+      .select({ promotionEventId: bookingOccurrences.promotionEventId })
+      .from(bookingOccurrences)
+      .where(eq(bookingOccurrences.bookingId, id)),
+  ]);
+  const promotionEventIds = Array.from(new Set([
+    booking.promotionEventId,
+    ...occurrenceEvents.map((item) => item.promotionEventId),
+  ].filter((eventId): eventId is string => Boolean(eventId))));
+
+  await db.delete(bookings).where(eq(bookings.id, id));
+  if (promotionEventIds.length) {
+    await db.delete(events).where(inArray(events.id, promotionEventIds));
+  }
+  if (documents.length) {
+    await Promise.allSettled(documents.map((document) => del(document.fileUrl)));
+  }
+
+  await logAudit({
+    action: "delete",
+    entity: "booking",
+    entityId: id,
+    description: `Permanently deleted booking for ${booking.customerName}`,
+  });
+  revalidatePath("/admin/bookings");
+  revalidatePath("/admin/bookings/availability");
+  revalidatePath("/booking");
+  revalidatePath("/events");
 }
 
 export async function cancelAdminBookingOccurrence(formData: FormData) {

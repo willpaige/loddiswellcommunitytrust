@@ -1,12 +1,13 @@
 import { differenceInHours, format } from "date-fns";
 import Link from "next/link";
 import { Pencil } from "lucide-react";
-import { getAdminBookingOccurrences, getAdminBookingSetup, getAdminBookings } from "@/actions/bookings";
+import { deleteAdminBooking, getAdminBookingOccurrences, getAdminBookingSetup, getAdminBookings } from "@/actions/bookings";
 import { getBookingRequirementStatuses } from "@/lib/booking-requirements";
 import { money } from "@/lib/bookings";
 import { ManualBookingDialog } from "@/components/admin/manual-booking-dialog";
 import { CancelBookingButton } from "@/components/admin/cancel-booking-button";
 import { BookingOccurrenceActions } from "@/components/admin/booking-occurrence-actions";
+import { DeleteButton } from "@/components/admin/delete-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -55,26 +56,26 @@ export default async function AdminBookingsPage() {
         />
       </div>
 
-      <Card className="-mx-4 sm:-mx-6 lg:-mx-8">
-        <CardHeader className="px-4 sm:px-6 lg:px-8">
+      <Card className="overflow-hidden">
+        <CardHeader>
           <CardTitle>All bookings</CardTitle>
           <CardDescription>Newest bookings first.</CardDescription>
         </CardHeader>
-        <Table className="min-w-[68rem]">
+        <Table className="min-w-[54rem] table-fixed">
           <TableHeader>
             <TableRow>
-              <TableHead>Booking</TableHead>
-              <TableHead>Customer</TableHead>
-              <TableHead>Org / event</TableHead>
-              <TableHead>Payment</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead className="w-[30%] pl-6">Booking</TableHead>
+              <TableHead className="w-[21%]">Customer</TableHead>
+              <TableHead className="w-[14%]">Org / event</TableHead>
+              <TableHead className="w-[14%]">Payment</TableHead>
+              <TableHead className="w-[13%]">Status</TableHead>
+              <TableHead className="w-[8%] pr-6 text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {bookings.map((booking) => (
               <TableRow key={booking.id}>
-                <TableCell>
+                <TableCell className="pl-6">
                   <p className="font-medium">{booking.facilityName}</p>
                   <p className="text-sm text-muted-foreground">
                     {booking.offeringName || "Booking"} · {format(booking.startDate, "d MMM yyyy, HH:mm")}
@@ -131,7 +132,7 @@ export default async function AdminBookingsPage() {
                     </Badge>
                   )}
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell className="pr-6 text-right">
                   <div className="flex justify-end gap-1">
                     <Button variant="ghost" size="icon" asChild className="h-8 w-8">
                       <Link href={`/admin/bookings/${booking.id}/edit`} title="Edit booking">
@@ -153,6 +154,12 @@ export default async function AdminBookingsPage() {
                         }
                       />
                     )}
+                    <DeleteButton
+                      id={booking.id}
+                      action={deleteAdminBooking}
+                      label={`Delete booking for ${booking.customerName}`}
+                      description="This permanently deletes the booking and its occurrences. When Stripe is configured, active subscriptions are cancelled and unpaid invoices voided. Completed payments are not refunded. This cannot be undone."
+                    />
                   </div>
                 </TableCell>
               </TableRow>

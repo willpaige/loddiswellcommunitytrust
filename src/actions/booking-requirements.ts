@@ -309,8 +309,17 @@ export async function addRequirementQuestion(formData: FormData) {
 export async function updateRequirementQuestion(formData: FormData) {
   await requireAdmin();
   const id = String(formData.get("id") || "");
+  if (!id) throw new Error("Question not found.");
+  if (formData.get("intent") === "remove") {
+    await db
+      .update(requirementQuestions)
+      .set({ active: false, updatedAt: new Date() })
+      .where(eq(requirementQuestions.id, id));
+    revalidatePath("/admin/bookings/requirements");
+    return;
+  }
   const label = String(formData.get("label") || "").trim();
-  if (!id || !label) throw new Error("A question label is required.");
+  if (!label) throw new Error("A question label is required.");
   const type = formData.get("type") === "text" ? "text" : "yes_no";
   const requiresDocumentOnYes = type === "yes_no" && formData.get("requiresDocumentOnYes") === "on";
   await db
@@ -328,9 +337,15 @@ export async function updateRequirementQuestion(formData: FormData) {
   revalidatePath("/admin/bookings/requirements");
 }
 
-export async function deactivateRequirementQuestion(formData: FormData) {
+export async function removeRequirementQuestion(id: string) {
   await requireAdmin();
-  const id = String(formData.get("id") || "");
+  if (!id) throw new Error("Question not found.");
+  const [question] = await db
+    .select({ id: requirementQuestions.id })
+    .from(requirementQuestions)
+    .where(eq(requirementQuestions.id, id))
+    .limit(1);
+  if (!question) throw new Error("Question not found.");
   await db
     .update(requirementQuestions)
     .set({ active: false, updatedAt: new Date() })

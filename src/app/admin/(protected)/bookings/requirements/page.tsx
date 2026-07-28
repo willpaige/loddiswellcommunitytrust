@@ -3,7 +3,6 @@ import { ArrowLeft } from "lucide-react";
 import {
   addRequirementQuestion,
   createRequirementSet,
-  deactivateRequirementQuestion,
   getRequirementSets,
   updateRequirementQuestion,
   updateRequirementSet,
@@ -14,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { PendingSubmitButton } from "@/components/admin/pending-submit-button";
+import { RemoveRequirementQuestionButton } from "@/components/admin/remove-requirement-question-button";
 
 export const dynamic = "force-dynamic";
 
@@ -130,14 +130,7 @@ export default async function AdminRequirementsPage() {
                       <Button type="submit" variant="outline" size="sm">
                         Save question
                       </Button>
-                      <Button
-                        type="submit"
-                        formAction={deactivateRequirementQuestion}
-                        variant="ghost"
-                        size="sm"
-                      >
-                        Remove
-                      </Button>
+                      <RemoveRequirementQuestionButton id={question.id} />
                     </div>
                   </form>
                 ))}

@@ -1,6 +1,8 @@
+import { format } from "date-fns";
 import { Ban, Pencil } from "lucide-react";
 import {
-  createBookingBlock,
+  deleteBookingBlock,
+  deleteBookingBlockSeries,
   getAdminBookingSetup,
   updateBookingCancellationSettings,
   updateRepeatBookingDiscount,
@@ -11,7 +13,9 @@ import {
   getAdminOfferingsForRequirements,
   getRequirementSets,
 } from "@/actions/booking-requirements";
-import { bookingHourOptions, recurrenceOptions } from "@/lib/bookings";
+import { bookingHourOptions, recurrenceLabel } from "@/lib/bookings";
+import { BookingBlockForm } from "@/components/admin/booking-block-form";
+import { DeleteButton } from "@/components/admin/delete-button";
 import { BookingPricesTable } from "@/components/admin/booking-prices-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,6 +38,14 @@ export default async function AdminBookingSettingsPage() {
     (offering, index, all) =>
       all.findIndex((item) => item.facilityId === offering.facilityId) === index
   );
+  const displayedBlocks = setup.blocks.filter((block) => {
+    if (!block.seriesId) return true;
+    const seriesBlocks = setup.blocks.filter((item) => item.seriesId === block.seriesId);
+    const first = seriesBlocks.reduce((earliest, item) =>
+      item.startDate < earliest.startDate ? item : earliest
+    );
+    return first.id === block.id;
+  });
 
   return (
     <div>
@@ -182,82 +194,37 @@ export default async function AdminBookingSettingsPage() {
             <CardDescription>Make a venue unavailable for maintenance, closures, or Trust events.</CardDescription>
           </CardHeader>
           <CardContent>
-            <form action={createBookingBlock} className="grid gap-4 lg:grid-cols-6">
-              <div className="space-y-2">
-                <Label htmlFor="blockFacility">Venue</Label>
-                <select id="blockFacility" name="facilityId" className="h-10 w-full rounded-md border bg-background px-3 text-sm">
-                  {facilities.map((facility) => (
-                    <option key={facility.facilityId} value={facility.facilityId}>
-                      {facility.facilityName}
-                    </option>
+            <BookingBlockForm facilities={facilities} />
+            <div className="mt-8 border-t pt-6">
+              <h3 className="font-medium">Existing block-outs</h3>
+              {displayedBlocks.length ? (
+                <ul className="mt-3 divide-y rounded-md border">
+                  {displayedBlocks.map((block) => (
+                    <li key={block.id} className="flex items-center justify-between gap-4 px-4 py-3">
+                      <div>
+                        <p className="font-medium">{block.title}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {block.facilityName} · {format(block.startDate, "d MMM yyyy, HH:mm")}–{format(block.endDate, "d MMM yyyy, HH:mm")}
+                        </p>
+                        {block.seriesId && block.recurrence && (
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            Repeats {recurrenceLabel(block.recurrence).toLowerCase()}
+                            {block.indefinite ? " indefinitely" : ` · ${block.repeatCount} blocks total`}
+                          </p>
+                        )}
+                      </div>
+                      {block.seriesId ? (
+                        <DeleteButton id={block.seriesId} action={deleteBookingBlockSeries} label={`Delete all ${block.title} block-outs`} description="This removes every occurrence in this recurring block-out series. This cannot be undone." />
+                      ) : (
+                        <DeleteButton id={block.id} action={deleteBookingBlock} label={`Delete ${block.title}`} description="This removes this blocked-out occurrence. This cannot be undone." />
+                      )}
+                    </li>
                   ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="blockTitle">Title</Label>
-                <Input id="blockTitle" name="title" required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="blockStartDate">Start date</Label>
-                <Input id="blockStartDate" name="startDate" type="date" required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="blockStartTime">Start time</Label>
-                <select
-                  id="blockStartTime"
-                  name="startTime"
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                  defaultValue="09:00"
-                  required
-                >
-                  {bookingHourOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="blockEndDate">End date</Label>
-                <Input id="blockEndDate" name="endDate" type="date" required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="blockEndTime">End time</Label>
-                <select
-                  id="blockEndTime"
-                  name="endTime"
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                  defaultValue="10:00"
-                  required
-                >
-                  {bookingHourOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="blockRecurrence">Repeat</Label>
-                <select id="blockRecurrence" name="recurrence" defaultValue="none" className="h-10 w-full rounded-md border bg-background px-3 text-sm">
-                  <option value="none">Does not repeat</option>
-                  {recurrenceOptions.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="blockRepeatCount">Number of blocks</Label>
-                <Input id="blockRepeatCount" name="repeatCount" type="number" min="2" max="104" defaultValue="2" />
-              </div>
-              <label className="flex items-center gap-2 self-end pb-2 text-sm">
-                <input type="checkbox" name="indefinite" />
-                Repeat indefinitely
-              </label>
-              <div className="flex items-end lg:col-span-2">
-                <Button type="submit">Block</Button>
-              </div>
-            </form>
+                </ul>
+              ) : (
+                <p className="mt-2 text-sm text-muted-foreground">No blocked-out times have been added.</p>
+              )}
+            </div>
           </CardContent>
         </Card>
 
