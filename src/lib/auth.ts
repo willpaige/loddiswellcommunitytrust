@@ -19,19 +19,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   pages: {
-    signIn: "/admin/login",
-    verifyRequest: "/admin/verify",
-    error: "/admin/login",
+    signIn: "/account/login",
+    verifyRequest: "/account/verify",
+    error: "/account/login",
   },
   callbacks: {
     async signIn({ user }) {
       if (!user.email) return false;
-      const allowed = await db
-        .select()
-        .from(users)
-        .where(eq(users.email, user.email))
-        .limit(1);
-      return allowed.length > 0;
+      return true;
     },
     async session({ session, user }) {
       if (session.user) {
@@ -42,7 +37,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           .where(eq(users.id, user.id))
           .limit(1);
         (session.user as unknown as Record<string, unknown>).role =
-          dbUser[0]?.role || "editor";
+          dbUser[0]?.role || "customer";
       }
       return session;
     },

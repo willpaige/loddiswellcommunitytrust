@@ -8,6 +8,7 @@ import { facilities } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { getFacility } from "@/actions/facilities";
 import { facilityIcon } from "@/lib/cms/facility-icons";
+import { formatWhat3words } from "@/lib/what3words";
 import {
   firstParagraphText,
   renderRichText,
@@ -55,6 +56,7 @@ export default async function FacilityPage({ params }: Props) {
 
   const Icon = facilityIcon(slug);
   const descJson = parseDescription(facility.description);
+  const what3words = formatWhat3words(facility.what3words);
 
   return (
     <div>
@@ -169,12 +171,26 @@ export default async function FacilityPage({ params }: Props) {
                 </div>
               )}
 
-              {facility.address && (
+              {(facility.address || what3words) && (
                 <div className="rounded-lg border border-border bg-card p-6">
                   <h3 className="font-serif text-lg mb-4">Location</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {facility.address}
-                  </p>
+                  {facility.address && (
+                    <p className="text-sm text-muted-foreground">
+                      {facility.address}
+                    </p>
+                  )}
+                  {what3words && (
+                    <a
+                      href={what3words.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-copper-600 no-underline hover:text-copper-700"
+                    >
+                      {what3words.label}
+                      <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span className="sr-only"> (opens in a new tab)</span>
+                    </a>
+                  )}
                   <Link
                     href="/contact"
                     className="mt-4 inline-flex items-center rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground no-underline hover:bg-muted transition-colors"

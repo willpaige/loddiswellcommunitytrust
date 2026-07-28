@@ -20,7 +20,7 @@ import {
 import { createDraw } from "@/actions/lottery-draws";
 
 type PrizeRow = { prize: string };
-type DrawnRow = { rank: number; winner: string; prize: string };
+type DrawnRow = { rank: number; winner: string; prize: string; ticketNumber?: number };
 
 function todayDateInput(): string {
   const d = new Date();
@@ -77,6 +77,7 @@ export function RandomDrawForm() {
       const rows: DrawnRow[] = winners.map((w, i) => ({
         rank: i + 1,
         winner: w.name,
+        ticketNumber: w.ticketNumber,
         prize: prizes[i]?.prize ?? "",
       }));
       setDrawn(rows);
@@ -249,7 +250,7 @@ export function RandomDrawForm() {
                     {ordinal(r.rank)}
                   </span>
                   <Input
-                    value={r.winner}
+                    value={r.ticketNumber ? `${r.winner} (#${r.ticketNumber})` : r.winner}
                     onChange={(e) => updateDrawnWinner(i, e.target.value)}
                   />
                   <span className="text-sm text-muted-foreground">{r.prize}</span>

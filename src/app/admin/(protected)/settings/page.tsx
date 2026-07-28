@@ -26,7 +26,15 @@ export default function SettingsPage() {
   const [villageHallAddress, setVillageHallAddress] = useState("");
   const [pavilionAddress, setPavilionAddress] = useState("");
   const [bookingsPhoneNumber, setBookingsPhoneNumber] = useState("");
+  const [bookingManagerEmail, setBookingManagerEmail] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [legalName, setLegalName] = useState("");
+  const [charityNumber, setCharityNumber] = useState("");
+  const [bankAccountName, setBankAccountName] = useState("");
+  const [bankSortCode, setBankSortCode] = useState("");
+  const [bankAccountNumber, setBankAccountNumber] = useState("");
+  const [invoiceFooterNote, setInvoiceFooterNote] = useState("");
+  const [invoiceDaysUntilDue, setInvoiceDaysUntilDue] = useState("14");
 
   useEffect(() => {
     async function load() {
@@ -41,7 +49,15 @@ export default function SettingsPage() {
         setVillageHallAddress(settings.villageHallAddress || "");
         setPavilionAddress(settings.pavilionAddress || "");
         setBookingsPhoneNumber(settings.bookingsPhoneNumber || "");
+        setBookingManagerEmail(settings.bookingManagerEmail || "");
         setPhoneNumber(settings.phoneNumber || "");
+        setLegalName(settings.legalName || "");
+        setCharityNumber(settings.charityNumber || "");
+        setBankAccountName(settings.bankAccountName || "");
+        setBankSortCode(settings.bankSortCode || "");
+        setBankAccountNumber(settings.bankAccountNumber || "");
+        setInvoiceFooterNote(settings.invoiceFooterNote || "");
+        setInvoiceDaysUntilDue(String(settings.invoiceDaysUntilDue ?? 14));
       }
       setPageLoading(false);
     }
@@ -62,7 +78,15 @@ export default function SettingsPage() {
     formData.set("villageHallAddress", villageHallAddress);
     formData.set("pavilionAddress", pavilionAddress);
     formData.set("bookingsPhoneNumber", bookingsPhoneNumber);
+    formData.set("bookingManagerEmail", bookingManagerEmail);
     formData.set("phoneNumber", phoneNumber);
+    formData.set("legalName", legalName);
+    formData.set("charityNumber", charityNumber);
+    formData.set("bankAccountName", bankAccountName);
+    formData.set("bankSortCode", bankSortCode);
+    formData.set("bankAccountNumber", bankAccountNumber);
+    formData.set("invoiceFooterNote", invoiceFooterNote);
+    formData.set("invoiceDaysUntilDue", invoiceDaysUntilDue);
 
     try {
       await updateSettings(formData);
@@ -173,6 +197,22 @@ export default function SettingsPage() {
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="bookingManagerEmail">
+                Booking Manager Email
+              </Label>
+              <Input
+                id="bookingManagerEmail"
+                type="email"
+                value={bookingManagerEmail}
+                onChange={(e) => setBookingManagerEmail(e.target.value)}
+                placeholder="bookings@example.com"
+              />
+              <p className="text-xs text-muted-foreground">
+                Booking notifications are sent here. Falls back to the main email address.
+              </p>
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="postalAddress">Postal Address</Label>
               <Textarea
                 id="postalAddress"
@@ -199,6 +239,84 @@ export default function SettingsPage() {
                 value={pavilionAddress}
                 onChange={(e) => setPavilionAddress(e.target.value)}
                 rows={3}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Invoicing &amp; Bank Details</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Shown on Stripe invoices issued for manual bookings. Bank details enable
+              customers to pay by transfer.
+            </p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="legalName">Legal / trust name</Label>
+                <Input
+                  id="legalName"
+                  value={legalName}
+                  onChange={(e) => setLegalName(e.target.value)}
+                  placeholder="Loddiswell Playing Fields and Village Hall Trust"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="charityNumber">Registered charity number</Label>
+                <Input
+                  id="charityNumber"
+                  value={charityNumber}
+                  onChange={(e) => setCharityNumber(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="bankAccountName">Bank account name</Label>
+              <Input
+                id="bankAccountName"
+                value={bankAccountName}
+                onChange={(e) => setBankAccountName(e.target.value)}
+              />
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="space-y-2">
+                <Label htmlFor="bankSortCode">Sort code</Label>
+                <Input
+                  id="bankSortCode"
+                  value={bankSortCode}
+                  onChange={(e) => setBankSortCode(e.target.value)}
+                  placeholder="00-00-00"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="bankAccountNumber">Account number</Label>
+                <Input
+                  id="bankAccountNumber"
+                  value={bankAccountNumber}
+                  onChange={(e) => setBankAccountNumber(e.target.value)}
+                  placeholder="12345678"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="invoiceDaysUntilDue">Payment terms (days)</Label>
+                <Input
+                  id="invoiceDaysUntilDue"
+                  type="number"
+                  min="1"
+                  value={invoiceDaysUntilDue}
+                  onChange={(e) => setInvoiceDaysUntilDue(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="invoiceFooterNote">Invoice footer note (optional)</Label>
+              <Textarea
+                id="invoiceFooterNote"
+                value={invoiceFooterNote}
+                onChange={(e) => setInvoiceFooterNote(e.target.value)}
+                rows={2}
               />
             </div>
           </CardContent>

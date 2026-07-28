@@ -18,6 +18,7 @@ export type DrawResult = {
   rank: number;
   winner: string;
   prize: string;
+  ticketNumber?: number;
 };
 
 type Props = {

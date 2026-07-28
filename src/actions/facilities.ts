@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { logAudit } from "@/lib/audit";
+import { formatWhat3words } from "@/lib/what3words";
 
 export async function getFacilities() {
   return db.select().from(facilities).orderBy(facilities.sortOrder);
@@ -27,6 +28,7 @@ export async function updateFacility(id: string, formData: FormData) {
   const featuresRaw = formData.get("features") as string;
   const ratesRaw = formData.get("rates") as string;
   const bookingTermsRaw = formData.get("bookingTerms") as string;
+  const what3words = formatWhat3words(formData.get("what3words") as string);
 
   await db
     .update(facilities)
@@ -34,6 +36,7 @@ export async function updateFacility(id: string, formData: FormData) {
       name: formData.get("name") as string,
       description: (formData.get("description") as string) || "{}",
       address: (formData.get("address") as string) || null,
+      what3words: what3words?.label || null,
       capacity: formData.get("capacity")
         ? Number(formData.get("capacity"))
         : null,
@@ -43,6 +46,8 @@ export async function updateFacility(id: string, formData: FormData) {
       bookingInfo: (formData.get("bookingInfo") as string) || null,
       externalBookingUrl:
         (formData.get("externalBookingUrl") as string) || null,
+      accessInstructions:
+        (formData.get("accessInstructions") as string) || null,
       heroImageUrl: (formData.get("heroImageUrl") as string) || null,
       bookable: formData.get("bookable") !== "off",
       published: formData.get("published") !== "off",

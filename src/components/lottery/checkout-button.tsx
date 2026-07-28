@@ -7,9 +7,17 @@ import { cn } from "@/lib/utils";
 
 type Interval = "month" | "year";
 
-export function LotteryCheckoutButton() {
+type LotteryCheckoutButtonProps = {
+  defaultInterval?: Interval;
+  source?: "show";
+};
+
+export function LotteryCheckoutButton({
+  defaultInterval = "year",
+  source,
+}: LotteryCheckoutButtonProps) {
   const [quantity, setQuantity] = useState(1);
-  const [interval, setInterval] = useState<Interval>("year");
+  const [interval, setInterval] = useState<Interval>(defaultInterval);
   const [loading, setLoading] = useState(false);
 
   async function handleCheckout() {
@@ -18,7 +26,7 @@ export function LotteryCheckoutButton() {
       const res = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ quantity, interval }),
+        body: JSON.stringify({ quantity, interval, source }),
       });
 
       const data = await res.json();

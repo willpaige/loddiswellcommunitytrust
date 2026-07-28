@@ -1,17 +1,15 @@
 "use server";
 
-import { ServerClient } from "postmark";
-import { eq, and, isNotNull } from "drizzle-orm";
+import { desc, eq, and, isNotNull } from "drizzle-orm";
+import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { lotteryTickets } from "@/lib/db/schema";
+import { lotteryDraws, lotteryTickets } from "@/lib/db/schema";
 import { getStripe } from "@/lib/stripe";
 import { logAudit } from "@/lib/audit";
+import { auth } from "@/lib/auth";
+import { sendTemplateEmail } from "@/lib/email/send";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-function getPostmark() {
-  return new ServerClient(process.env.POSTMARK_API_KEY!);
-}
 
 export async function requestPortalLink(
   formData: FormData
@@ -50,31 +48,13 @@ export async function requestPortalLink(
       return_url: `${appUrl}/lottery`,
     });
 
-    await getPostmark().sendEmail({
-      From: process.env.EMAIL_FROM || "noreply@loddiswellcommunitytrust.org",
-      To: email,
-      Subject: "Manage your Loddiswell lottery subscription",
-      TextBody: [
-        "Hi,",
-        "",
-        "Tap the link below to manage your Loddiswell Community Lottery subscription. From here you can update your payment details, cancel, or download invoices.",
-        "",
-        session.url,
-        "",
-        "This link will expire shortly. If you didn't request it, you can ignore this email.",
-        "",
-        "— The Loddiswell Trust",
-      ].join("\n"),
-      HtmlBody: `
-        <p>Hi,</p>
-        <p>Tap the button below to manage your Loddiswell Community Lottery subscription. From here you can update your payment details, cancel, or download invoices.</p>
-        <p style="margin: 24px 0;">
-          <a href="${session.url}" style="background:#3B4830;color:#ffffff;padding:12px 20px;border-radius:6px;text-decoration:none;display:inline-block;font-weight:600;">Manage subscription</a>
-        </p>
-        <p style="color:#666;font-size:14px;">Or copy this link: <br><a href="${session.url}">${session.url}</a></p>
-        <p style="color:#666;font-size:14px;">This link will expire shortly. If you didn't request it, you can ignore this email.</p>
-        <p style="color:#666;font-size:14px;">— The Loddiswell Trust</p>
-      `,
+    await sendTemplateEmail({
+      key: "lottery_manage_link",
+      to: email,
+      variables: { manageUrl: session.url },
+      relatedEntityType: "lottery",
+      relatedEntityId: `${rows[0].id}:manage-link:${Date.now()}`,
+      dedupe: false,
     });
 
     await logAudit({
@@ -89,4 +69,95 @@ export async function requestPortalLink(
   }
 
   return { ok: true };
+}
+
+export async function getCustomerLotteryEntries() {
+  const session = await auth();
+  if (!session?.user?.email) redirect("/account/login?callbackUrl=/account/lottery");
+
+  return db
+    .select()
+    .from(lotteryTickets)
+    .where(eq(lotteryTickets.email, session.user.email.toLowerCase()))
+    .orderBy(desc(lotteryTickets.purchaseDate));
+}
+
+function normaliseMatchValue(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+export async function getCustomerLotteryWins() {
+  const session = await auth();
+  if (!session?.user?.email) redirect("/account/login?callbackUrl=/account/lottery");
+
+  const email = session.user.email.toLowerCase();
+  const [entries, draws] = await Promise.all([
+    db
+      .select({ name: lotteryTickets.name, email: lotteryTickets.email })
+      .from(lotteryTickets)
+      .where(eq(lotteryTickets.email, email)),
+    db
+      .select({
+        id: lotteryDraws.id,
+        drawDate: lotteryDraws.drawDate,
+        results: lotteryDraws.results,
+      })
+      .from(lotteryDraws)
+      .where(eq(lotteryDraws.published, true))
+      .orderBy(desc(lotteryDraws.drawDate)),
+  ]);
+
+  const matchValues = new Set([
+    normaliseMatchValue(email),
+    ...entries.map((entry) => normaliseMatchValue(entry.name)),
+  ]);
+
+  return draws.flatMap((draw) =>
+    draw.results
+      .filter((result) => matchValues.has(normaliseMatchValue(result.winner)))
+      .map((result) => ({
+        drawId: draw.id,
+        drawDate: draw.drawDate,
+        rank: result.rank,
+        winner: result.winner,
+        prize: result.prize,
+        ticketNumber: result.ticketNumber,
+      }))
+  );
+}
+
+export async function createCustomerLotteryPortalSession(formData: FormData) {
+  const session = await auth();
+  if (!session?.user?.email) redirect("/account/login?callbackUrl=/account/lottery");
+
+  const ticketId = String(formData.get("ticketId") || "");
+  const [ticket] = await db
+    .select()
+    .from(lotteryTickets)
+    .where(
+      and(
+        eq(lotteryTickets.id, ticketId),
+        eq(lotteryTickets.email, session.user.email.toLowerCase())
+      )
+    )
+    .limit(1);
+
+  if (!ticket?.stripeCustomerId) {
+    throw new Error("This lottery entry cannot be managed through Stripe.");
+  }
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const portalSession = await getStripe().billingPortal.sessions.create({
+    customer: ticket.stripeCustomerId,
+    return_url: `${appUrl}/account/lottery`,
+  });
+
+  await logAudit({
+    action: "login",
+    entity: "lottery",
+    entityId: ticket.id,
+    description: `Opened customer lottery billing portal for ${ticket.email}`,
+  });
+
+  redirect(portalSession.url);
 }

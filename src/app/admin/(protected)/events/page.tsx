@@ -75,7 +75,12 @@ export default async function AdminEventsPage() {
             <TableBody>
               {eventsList.map((event) => (
                 <TableRow key={event.id}>
-                  <TableCell className="font-medium">{event.title}</TableCell>
+                  <TableCell className="font-medium">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span>{event.title}</span>
+                      {event.seriesId && <Badge variant="outline">Recurring</Badge>}
+                    </div>
+                  </TableCell>
                   <TableCell className="hidden sm:table-cell text-muted-foreground">
                     {format(event.startDate, "d MMM yyyy")}
                   </TableCell>

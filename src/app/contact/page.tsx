@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { getPageContent } from "@/lib/cms/get-page-content";
 import { renderInline } from "@/lib/cms/render";
 import { getSettings } from "@/actions/settings";
+import { isLotteryLive } from "@/lib/lottery-launch";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { title, metaDescription } = await getPageContent("contact");
@@ -44,7 +45,7 @@ export default async function ContactPage() {
               <h2 className="font-serif text-2xl mb-6">
                 {renderInline(blocks.form_title, "Send Us a Message")}
               </h2>
-              <ContactForm />
+              <ContactForm lotteryLive={isLotteryLive()} />
             </div>
 
             <div className="space-y-8">

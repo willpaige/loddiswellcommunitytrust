@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { getSettings } from "@/actions/settings";
 
-export async function Footer() {
+export async function Footer({ lotteryLive = false }: { lotteryLive?: boolean }) {
   const settings = await getSettings();
 
   return (
@@ -86,14 +86,14 @@ export async function Footer() {
                   Events
                 </Link>
               </li>
-              <li>
+              {lotteryLive && <li>
                 <Link
                   href="/lottery"
                   className="text-sm text-sage-300 hover:text-white no-underline transition-colors"
                 >
                   Community Lottery
                 </Link>
-              </li>
+              </li>}
               <li>
                 <Link
                   href="/about"

@@ -5,6 +5,7 @@ import { CalendarDays, MapPin, Clock } from "lucide-react";
 import { format, isSameDay } from "date-fns";
 import { PageHeader } from "@/components/layout/page-header";
 import { SectionLabel } from "@/components/ui/section-label";
+import { AvailabilityCalendar } from "@/components/booking/availability-calendar";
 import { getPageContent } from "@/lib/cms/get-page-content";
 import {
   renderInline,
@@ -12,6 +13,7 @@ import {
   type TiptapJSON,
 } from "@/lib/cms/render";
 import { getUpcomingEvents } from "@/actions/events";
+import { getPublicAvailability } from "@/actions/bookings";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { title, metaDescription } = await getPageContent("events");
@@ -64,9 +66,10 @@ function formatEventTime(
 }
 
 export default async function EventsPage() {
-  const [{ blocks, heroImageUrl }, upcoming] = await Promise.all([
+  const [{ blocks, heroImageUrl }, upcoming, availability] = await Promise.all([
     getPageContent("events"),
     getUpcomingEvents(),
+    getPublicAvailability(),
   ]);
 
   return (
@@ -157,6 +160,16 @@ export default async function EventsPage() {
                         <div className="mt-3 text-muted-foreground leading-relaxed space-y-3">
                           {renderRichText(descJson)}
                         </div>
+                        {event.externalUrl && (
+                          <Link
+                            href={event.externalUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-4 inline-flex text-sm font-medium text-copper-600 underline-offset-4 hover:underline"
+                          >
+                            More information
+                          </Link>
+                        )}
                       </div>
                     </div>
                   </article>
@@ -183,6 +196,18 @@ export default async function EventsPage() {
               )}
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="bg-muted py-20 sm:py-24">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <SectionLabel>Availability</SectionLabel>
+          <AvailabilityCalendar
+            items={availability}
+            title="Venue calendar"
+            description="Published events and team/community bookings. Select a date to start a booking."
+            publicBookingHref="/booking"
+          />
         </div>
       </section>
 

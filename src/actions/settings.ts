@@ -28,6 +28,17 @@ export async function updateSettings(formData: FormData) {
     pavilionAddress: (formData.get("pavilionAddress") as string) || null,
     bookingsPhoneNumber: (formData.get("bookingsPhoneNumber") as string) || null,
     phoneNumber: (formData.get("phoneNumber") as string) || null,
+    bookingManagerEmail: (formData.get("bookingManagerEmail") as string) || null,
+    legalName: (formData.get("legalName") as string) || null,
+    charityNumber: (formData.get("charityNumber") as string) || null,
+    bankAccountName: (formData.get("bankAccountName") as string) || null,
+    bankSortCode: (formData.get("bankSortCode") as string) || null,
+    bankAccountNumber: (formData.get("bankAccountNumber") as string) || null,
+    invoiceFooterNote: (formData.get("invoiceFooterNote") as string) || null,
+    invoiceDaysUntilDue: Math.max(
+      1,
+      Math.round(Number(formData.get("invoiceDaysUntilDue")) || 14)
+    ),
     updatedAt: new Date(),
     updatedBy: session.user.id,
   };

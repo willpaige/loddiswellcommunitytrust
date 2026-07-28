@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { PageHeader } from "@/components/layout/page-header";
 import { getPageContent } from "@/lib/cms/get-page-content";
 import { renderInline, renderRichText, firstParagraphText } from "@/lib/cms/render";
 import { getFacilities } from "@/actions/facilities";
 import { facilityIcon } from "@/lib/cms/facility-icons";
+import { formatWhat3words } from "@/lib/what3words";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { title, metaDescription } = await getPageContent("facilities");
@@ -40,6 +42,7 @@ export default async function FacilitiesPage() {
           <div className="space-y-8">
             {facilities.map((facility) => {
               const Icon = facilityIcon(facility.slug);
+              const what3words = formatWhat3words(facility.what3words);
               let descJson = undefined;
               try {
                 descJson = JSON.parse(facility.description);
@@ -55,9 +58,21 @@ export default async function FacilitiesPage() {
                 >
                   <div className="flex flex-col sm:flex-row gap-6">
                     <div className="flex-shrink-0">
-                      <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-sage-100 text-sage-700 group-hover:bg-sage-200 transition-colors">
-                        <Icon className="h-8 w-8" aria-hidden="true" />
-                      </div>
+                      {facility.heroImageUrl ? (
+                        <div className="relative h-24 w-full overflow-hidden rounded-lg sm:h-28 sm:w-28">
+                          <Image
+                            src={facility.heroImageUrl}
+                            alt={`${facility.name} thumbnail`}
+                            fill
+                            sizes="(max-width: 639px) 100vw, 112px"
+                            className="object-cover transition-transform duration-300 group-hover:scale-105"
+                          />
+                        </div>
+                      ) : (
+                        <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-sage-100 text-sage-700 group-hover:bg-sage-200 transition-colors">
+                          <Icon className="h-8 w-8" aria-hidden="true" />
+                        </div>
+                      )}
                     </div>
                     <div className="flex-1">
                       <h2 className="text-xl font-semibold text-foreground group-hover:text-copper-500 transition-colors">
@@ -67,6 +82,11 @@ export default async function FacilitiesPage() {
                         <p className="mt-1 text-sm text-muted-foreground">
                           {facility.address}
                         </p>
+                      )}
+                      {what3words && (
+                        <span className="mt-1 inline-block text-sm font-medium text-copper-600">
+                          {what3words.label}
+                        </span>
                       )}
                       {lede && (
                         <p className="mt-3 text-muted-foreground">{lede}</p>

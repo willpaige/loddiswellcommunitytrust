@@ -3,7 +3,7 @@ import { auditLog } from "@/lib/db/schema";
 import { auth } from "@/lib/auth";
 
 type AuditAction = "create" | "update" | "delete" | "publish" | "unpublish" | "upload" | "login";
-type AuditEntity = "event" | "page" | "facility" | "document" | "image" | "lottery" | "user";
+type AuditEntity = "event" | "page" | "facility" | "document" | "image" | "lottery" | "user" | "booking" | "requirement_set";
 
 export async function logAudit({
   action,

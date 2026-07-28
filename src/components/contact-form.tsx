@@ -4,7 +4,7 @@ import { useState } from "react";
 import { sendContactEmail } from "@/actions/contact";
 import { Loader2, CheckCircle } from "lucide-react";
 
-export function ContactForm() {
+export function ContactForm({ lotteryLive = false }: { lotteryLive?: boolean }) {
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">(
     "idle"
   );
@@ -94,7 +94,9 @@ export function ContactForm() {
           <option value="General Enquiry">General Enquiry</option>
           <option value="Booking Enquiry">Booking Enquiry</option>
           <option value="Events">Events</option>
-          <option value="Community Lottery">Community Lottery</option>
+          {lotteryLive && (
+            <option value="Community Lottery">Community Lottery</option>
+          )}
           <option value="Volunteering">Volunteering</option>
           <option value="Other">Other</option>
         </select>

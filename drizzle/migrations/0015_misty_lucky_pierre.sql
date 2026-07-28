@@ -1,0 +1,1 @@
+ALTER TABLE "facilities" ADD COLUMN "what3words" text;
