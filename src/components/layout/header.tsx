@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { Menu, X } from "lucide-react";
 import { FiUser } from "react-icons/fi";
+import { BrandLogo } from "@/components/layout/brand-logo";
 
 const navigation = [
   { name: "About", href: "/about" },
@@ -45,14 +46,12 @@ export function Header() {
         className="mx-auto flex max-w-7xl items-center justify-between px-4 py-5 sm:px-6 lg:px-8"
         aria-label="Main navigation"
       >
-        <Link href="/" className="flex flex-col no-underline">
-          <span
-            className={`font-serif text-xl tracking-tight transition-colors ${
-              showSolid ? "text-foreground" : "text-white"
-            }`}
-          >
-            Loddiswell Community Trust
-          </span>
+        <Link
+          href="/"
+          className="w-[190px] rounded-sm bg-white/95 p-2 no-underline shadow-sm sm:w-[240px]"
+          aria-label="Loddiswell Community Trust home"
+        >
+          <BrandLogo />
         </Link>
 
         {/* Desktop navigation */}

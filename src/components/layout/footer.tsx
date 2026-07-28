@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getSettings } from "@/actions/settings";
+import { BrandLogo } from "@/components/layout/brand-logo";
 
 export async function Footer() {
   const settings = await getSettings();
@@ -10,12 +11,9 @@ export async function Footer() {
         <div className="grid grid-cols-1 gap-12 lg:grid-cols-12">
           {/* Trust info */}
           <div className="lg:col-span-5">
-            <p className="font-serif text-2xl tracking-tight text-white">
-              Loddiswell
-            </p>
-            <p className="text-[10px] font-medium uppercase tracking-[0.15em] text-sage-400 mt-1">
-              Playing Fields & Village Hall Trust
-            </p>
+            <div className="w-full max-w-[320px] rounded-sm bg-white p-3">
+              <BrandLogo />
+            </div>
             <p className="mt-6 text-sm text-sage-300 leading-relaxed max-w-sm">
               Maintaining community facilities for the benefit of Loddiswell
               Parish since 1965. The Trust is a registered Charity and

@@ -1,4 +1,5 @@
 import { AccountLoginForm } from "@/components/account/login-form";
+import { BrandLogo } from "@/components/layout/brand-logo";
 
 export default async function AccountLoginPage({
   searchParams,
@@ -15,9 +16,9 @@ export default async function AccountLoginPage({
       />
       <div className="absolute inset-0 bg-sage-900/75" aria-hidden="true" />
       <div className="relative mx-auto w-full max-w-sm">
-        <p className="mb-6 text-center font-serif text-3xl tracking-tight text-white">
-          Loddiswell Community Trust
-        </p>
+        <div className="mx-auto mb-6 w-full max-w-[320px] rounded-sm bg-white p-3">
+          <BrandLogo />
+        </div>
         <AccountLoginForm callbackUrl={params.callbackUrl || "/account"} />
       </div>
     </main>

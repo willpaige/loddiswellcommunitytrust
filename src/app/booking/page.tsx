@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { CalendarCheck, Clock, CreditCard } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
+import { BrandLogo } from "@/components/layout/brand-logo";
 import { SectionLabel } from "@/components/ui/section-label";
 import { BookingForm } from "@/components/booking/booking-form";
 import { BookingReview } from "@/components/booking/booking-review";
@@ -56,9 +57,9 @@ export default async function BookingPage({
           />
           <div className="absolute inset-0 bg-sage-900/75" aria-hidden="true" />
           <div className="relative mx-auto w-full max-w-2xl">
-            <p className="mb-6 text-center font-serif text-3xl tracking-tight text-white">
-              Loddiswell Community Trust
-            </p>
+            <div className="mx-auto mb-6 w-full max-w-[340px] rounded-sm bg-white p-3">
+              <BrandLogo />
+            </div>
             <BookingReview
               offerings={bookingData.offerings}
               pending={pending}

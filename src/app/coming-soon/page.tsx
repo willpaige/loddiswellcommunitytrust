@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { BrandLogo } from "@/components/layout/brand-logo";
 
 export const metadata: Metadata = {
   title: "Coming Soon",
@@ -17,9 +18,9 @@ export default function ComingSoonPage() {
         />
         <div className="absolute inset-0 bg-sage-950/75" aria-hidden="true" />
         <div className="relative mx-auto max-w-3xl text-white">
-          <p className="font-serif text-3xl tracking-tight sm:text-5xl">
-            Loddiswell Community Trust
-          </p>
+          <div className="mx-auto w-full max-w-[520px] rounded-sm bg-white p-4">
+            <BrandLogo />
+          </div>
           <h1 className="mt-8 text-sm font-semibold uppercase tracking-[0.24em] text-copper-200">
             Coming soon
           </h1>
