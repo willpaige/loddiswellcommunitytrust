@@ -3,7 +3,11 @@
 import { ServerClient } from "postmark";
 
 function getPostmark() {
-  return new ServerClient(process.env.POSTMARK_API_KEY!);
+  const apiKey = process.env.POSTMARK_API_KEY;
+  if (!apiKey) {
+    throw new Error("POSTMARK_API_KEY is not configured.");
+  }
+  return new ServerClient(apiKey);
 }
 
 export async function sendContactEmail(formData: FormData) {
@@ -26,7 +30,11 @@ export async function sendContactEmail(formData: FormData) {
     });
 
     return { success: true };
-  } catch {
+  } catch (error) {
+    console.error(
+      "Contact form email failed:",
+      error instanceof Error ? error.message : "Unknown Postmark error"
+    );
     return { error: "Failed to send message. Please try again or email us directly." };
   }
 }
