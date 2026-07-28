@@ -1,11 +1,23 @@
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 
-export function BrandLogo({ className }: { className?: string }) {
+export function BrandLogo({
+  className,
+  variant = "default",
+  decorative = false,
+}: {
+  className?: string;
+  variant?: "default" | "light";
+  decorative?: boolean;
+}) {
   return (
     <Image
-      src="/loddiswell-community-trust-logo.png"
-      alt="Loddiswell Community Trust"
+      src={
+        variant === "light"
+          ? "/loddiswell-community-trust-logo-light.png"
+          : "/loddiswell-community-trust-logo.png"
+      }
+      alt={decorative ? "" : "Loddiswell Community Trust"}
       width={964}
       height={207}
       priority

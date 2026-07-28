@@ -11,8 +11,8 @@ export async function Footer() {
         <div className="grid grid-cols-1 gap-12 lg:grid-cols-12">
           {/* Trust info */}
           <div className="lg:col-span-5">
-            <div className="w-full max-w-[320px] rounded-sm bg-white p-3">
-              <BrandLogo />
+            <div className="w-full max-w-[320px]">
+              <BrandLogo variant="light" />
             </div>
             <p className="mt-6 text-sm text-sage-300 leading-relaxed max-w-sm">
               Maintaining community facilities for the benefit of Loddiswell

@@ -48,10 +48,22 @@ export function Header() {
       >
         <Link
           href="/"
-          className="w-[190px] no-underline sm:w-[240px]"
+          className="relative block aspect-[964/207] w-[190px] no-underline sm:w-[240px]"
           aria-label="Loddiswell Community Trust home"
         >
-          <BrandLogo />
+          <BrandLogo
+            variant="light"
+            decorative
+            className={`absolute inset-0 transition-opacity duration-300 ${
+              showSolid ? "opacity-0" : "opacity-100"
+            }`}
+          />
+          <BrandLogo
+            decorative
+            className={`absolute inset-0 transition-opacity duration-300 ${
+              showSolid ? "opacity-100" : "opacity-0"
+            }`}
+          />
         </Link>
 
         {/* Desktop navigation */}

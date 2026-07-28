@@ -17,7 +17,7 @@ export default async function AccountLoginPage({
       <div className="absolute inset-0 bg-sage-900/75" aria-hidden="true" />
       <div className="relative mx-auto w-full max-w-sm">
         <div className="mx-auto mb-6 w-full max-w-[320px]">
-          <BrandLogo />
+          <BrandLogo variant="light" />
         </div>
         <AccountLoginForm callbackUrl={params.callbackUrl || "/account"} />
       </div>
