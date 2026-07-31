@@ -18,6 +18,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/booking",
     "/events",
     "/lottery",
+    "/lottery/terms",
     "/contact",
     "/terms",
     "/privacy",

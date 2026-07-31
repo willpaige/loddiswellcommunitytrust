@@ -57,9 +57,12 @@ export async function updatePage(slug: string, formData: FormData) {
     }
   }
 
+  // Insert rather than update when the page has never been saved — pages added
+  // to the schema after the last seed run have no row yet.
   await db
-    .update(pages)
-    .set({
+    .insert(pages)
+    .values({
+      slug,
       title,
       content: JSON.stringify(filtered),
       metaDescription,
@@ -67,7 +70,17 @@ export async function updatePage(slug: string, formData: FormData) {
       updatedAt: new Date(),
       updatedBy: session.user.id,
     })
-    .where(eq(pages.slug, slug));
+    .onConflictDoUpdate({
+      target: pages.slug,
+      set: {
+        title,
+        content: JSON.stringify(filtered),
+        metaDescription,
+        heroImageUrl,
+        updatedAt: new Date(),
+        updatedBy: session.user.id,
+      },
+    });
 
   await logAudit({
     action: "update",
@@ -76,7 +89,8 @@ export async function updatePage(slug: string, formData: FormData) {
     description: `Updated page: ${title}`,
   });
 
-  const publicPath = slug === "home" ? "/" : `/${slug}`;
+  const publicPath =
+    schema.publicPath ?? (slug === "home" ? "/" : `/${slug}`);
   revalidatePath(publicPath);
   revalidatePath("/admin/pages");
 }

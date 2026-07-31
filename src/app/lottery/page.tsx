@@ -6,6 +6,7 @@ import { LotteryCheckoutButton } from "@/components/lottery/checkout-button";
 import { getPageContent } from "@/lib/cms/get-page-content";
 import { renderInline, renderRichText } from "@/lib/cms/render";
 import { getPublishedDraws } from "@/actions/lottery-draws";
+import { LOTTERY_SMALL_PRINT } from "@/lib/lottery/small-print";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { title, metaDescription } = await getPageContent("lottery");
@@ -209,6 +210,16 @@ export default async function LotteryPage() {
                 </Link>
                 .
               </p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Tickets are sold subject to our{" "}
+                <Link
+                  href="/lottery/terms"
+                  className="text-copper-600 hover:text-copper-700 underline"
+                >
+                  lottery terms &amp; conditions
+                </Link>
+                . You must be 16 or over to take part.
+              </p>
             </div>
           </div>
         </div>
@@ -311,6 +322,37 @@ export default async function LotteryPage() {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="py-12 bg-background border-t border-border">
+        <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
+          <div className="text-xs text-muted-foreground leading-relaxed [&_p+p]:mt-3">
+            {renderRichText(
+              blocks.small_print,
+              <p>{LOTTERY_SMALL_PRINT}</p>
+            )}
+            <p className="mt-3">
+              Read the full{" "}
+              <Link
+                href="/lottery/terms"
+                className="text-copper-600 hover:text-copper-700 underline"
+              >
+                lottery terms &amp; conditions
+              </Link>
+              . Participants must be 16 or over. Please gamble responsibly —
+              free, confidential advice is available from{" "}
+              <a
+                href="https://www.begambleaware.org"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-copper-600 hover:text-copper-700 underline"
+              >
+                BeGambleAware.org
+              </a>
+              .
+            </p>
           </div>
         </div>
       </section>

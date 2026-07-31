@@ -8,6 +8,8 @@ import {
   inlineDoc,
   type TiptapJSON,
 } from "@/lib/cms/render";
+import { LOTTERY_SMALL_PRINT } from "@/lib/lottery/small-print";
+import { LOTTERY_TERMS, LOTTERY_TERMS_VERSION } from "@/lib/lottery/terms";
 
 type PageSeed = {
   slug: string;
@@ -312,6 +314,35 @@ const pageSeeds: PageSeed[] = [
           "Absolutely! You can buy as many tickets as you like. Each ticket gives you an additional entry into every monthly draw. Buying 2 tickets for £24 doubles your chances and makes an even bigger difference to the village."
         )
       ),
+      small_print: doc(paragraph(LOTTERY_SMALL_PRINT)),
+    },
+  },
+
+  // ── LOTTERY TERMS ──
+  {
+    slug: "lottery-terms",
+    title: "Lottery Terms & Conditions",
+    metaDescription:
+      "Rules and terms and conditions for the Loddiswell Community Lottery, a small society lottery promoted by the Loddiswell Playing Fields & Village Hall Trust.",
+    blocks: {
+      header_label: inlineDoc("Community Lottery"),
+      header_title: inlineDoc("Lottery Terms & Conditions"),
+      header_subtitle: doc(
+        paragraph(
+          "The rules of the Loddiswell Community Lottery, a small society lottery promoted by the Loddiswell Playing Fields & Village Hall Trust."
+        )
+      ),
+      ...Object.fromEntries(
+        LOTTERY_TERMS.map((section, i) => [
+          `section_${i + 1}`,
+          doc(
+            heading(2, `${i + 1}. ${section.heading}`),
+            ...section.paragraphs.map((text) => paragraph(text))
+          ),
+        ])
+      ),
+      small_print: doc(paragraph(LOTTERY_SMALL_PRINT)),
+      last_updated: inlineDoc(`Last updated: ${LOTTERY_TERMS_VERSION}`),
     },
   },
 

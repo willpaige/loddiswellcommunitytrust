@@ -21,7 +21,8 @@ export default async function AdminPagesPage() {
 
   const rows = Object.values(pageSchemas).map((schema) => {
     const row = dbBySlug.get(schema.slug);
-    const publicPath = schema.slug === "home" ? "/" : `/${schema.slug}`;
+    const publicPath =
+      schema.publicPath ?? (schema.slug === "home" ? "/" : `/${schema.slug}`);
     return {
       slug: schema.slug,
       title: row?.title ?? schema.title,

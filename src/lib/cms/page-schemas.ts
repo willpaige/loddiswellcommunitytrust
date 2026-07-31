@@ -12,6 +12,8 @@ export type PageSchema = {
   slug: string;
   title: string;
   blocks: BlockSchema[];
+  /** Public URL, when it differs from `/${slug}`. */
+  publicPath?: string;
 };
 
 export const pageSchemas: Record<string, PageSchema> = {
@@ -149,6 +151,31 @@ export const pageSchemas: Record<string, PageSchema> = {
       { key: "faq_a3", label: "FAQ A3", type: "richtext", group: "FAQ" },
       { key: "faq_q4", label: "FAQ Q4", type: "inline", group: "FAQ" },
       { key: "faq_a4", label: "FAQ A4", type: "richtext", group: "FAQ" },
+      { key: "small_print", label: "Small print", type: "richtext", group: "Small print", help: "Licensing statement shown at the foot of the page" },
+    ],
+  },
+  "lottery-terms": {
+    slug: "lottery-terms",
+    title: "Lottery Terms & Conditions",
+    publicPath: "/lottery/terms",
+    blocks: [
+      { key: "header_label", label: "Page header eyebrow", type: "inline", group: "Page header" },
+      { key: "header_title", label: "Page header title", type: "inline", group: "Page header" },
+      { key: "header_subtitle", label: "Page header subtitle", type: "richtext", group: "Page header" },
+      { key: "section_1", label: "Section 1", type: "richtext", group: "Sections", help: "Include the H2 heading inside the body" },
+      { key: "section_2", label: "Section 2", type: "richtext", group: "Sections" },
+      { key: "section_3", label: "Section 3", type: "richtext", group: "Sections" },
+      { key: "section_4", label: "Section 4", type: "richtext", group: "Sections" },
+      { key: "section_5", label: "Section 5", type: "richtext", group: "Sections" },
+      { key: "section_6", label: "Section 6", type: "richtext", group: "Sections" },
+      { key: "section_7", label: "Section 7", type: "richtext", group: "Sections" },
+      { key: "section_8", label: "Section 8", type: "richtext", group: "Sections" },
+      { key: "section_9", label: "Section 9", type: "richtext", group: "Sections" },
+      { key: "section_10", label: "Section 10", type: "richtext", group: "Sections" },
+      { key: "section_11", label: "Section 11", type: "richtext", group: "Sections" },
+      { key: "section_12", label: "Section 12", type: "richtext", group: "Sections" },
+      { key: "small_print", label: "Small print", type: "richtext", group: "Sections", help: "Licensing statement shown at the foot of the page" },
+      { key: "last_updated", label: "Last updated", type: "inline", group: "Sections" },
     ],
   },
   privacy: {
