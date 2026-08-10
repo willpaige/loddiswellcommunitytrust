@@ -1,7 +1,7 @@
 "use server";
 
-import { addDays, addHours, addMonths, addWeeks, addYears, differenceInHours, format } from "date-fns";
-import { and, asc, desc, eq, gt, gte, inArray, lt, lte, ne, or, sql } from "drizzle-orm";
+import { addDays, addHours, differenceInHours, format } from "date-fns";
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, lt, lte, ne, or, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createId } from "@paralleldrive/cuid2";
@@ -24,6 +24,13 @@ import {
 } from "@/lib/db/schema";
 import { getStripe } from "@/lib/stripe";
 import {
+  BOOKING_HORIZON_DAYS,
+  occurrenceDates,
+  occurrenceDatesInWindow,
+  toWatermarkDate,
+} from "@/lib/booking-recurrence";
+import {
+  capacityUnitNoun,
   customerGroups,
   recurrenceLabel,
   recurrenceOptions,
@@ -71,63 +78,8 @@ function addMinutes(date: Date, minutes: number) {
   return new Date(date.getTime() + minutes * 60_000);
 }
 
-function occurrenceDates(start: Date, end: Date, recurrence: Recurrence, repeatCount = 26) {
-  if (recurrence === "none") return [{ startDate: start, endDate: end }];
-  const addForRecurrence = {
-    weekly: (date: Date, index: number) => addWeeks(date, index),
-    bi_weekly: (date: Date, index: number) => addWeeks(date, index * 2),
-    monthly: (date: Date, index: number) => addMonths(date, index),
-    quarterly: (date: Date, index: number) => addMonths(date, index * 3),
-    yearly: (date: Date, index: number) => addYears(date, index),
-  }[recurrence];
-  return Array.from({ length: repeatCount }, (_, index) => ({
-    startDate: addForRecurrence(start, index),
-    endDate: addForRecurrence(end, index),
-  }));
-}
-
-// Rolling horizon for indefinite subscription bookings. Matches the 180-day
-// window used by getAvailableBookingSlots so other bookings can't double-book a
-// future slot this subscription will later claim.
-const SUBSCRIPTION_HORIZON_DAYS = 180;
-
-function recurrenceStep(recurrence: Recurrence, date: Date, index: number) {
-  switch (recurrence) {
-    case "weekly":
-      return addWeeks(date, index);
-    case "bi_weekly":
-      return addWeeks(date, index * 2);
-    case "monthly":
-      return addMonths(date, index);
-    case "quarterly":
-      return addMonths(date, index * 3);
-    case "yearly":
-      return addYears(date, index);
-    default:
-      return date;
-  }
-}
-
-// Generate occurrences for a recurring booking within (fromExclusive, until],
-// stepping by index from the IMMUTABLE anchor so dates never drift and the
-// result is deterministic — making top-ups idempotent.
-function occurrenceDatesInWindow(
-  anchorStart: Date,
-  anchorEnd: Date,
-  recurrence: Recurrence,
-  fromExclusive: Date | null,
-  until: Date
-) {
-  if (recurrence === "none") return [];
-  const out: Array<{ startDate: Date; endDate: Date }> = [];
-  for (let index = 0; index < 1000; index += 1) {
-    const startDate = recurrenceStep(recurrence, anchorStart, index);
-    if (startDate > until) break;
-    if (fromExclusive && startDate <= fromExclusive) continue;
-    out.push({ startDate, endDate: recurrenceStep(recurrence, anchorEnd, index) });
-  }
-  return out;
-}
+// Shared with the seed scripts so both generate identical occurrence dates.
+const SUBSCRIPTION_HORIZON_DAYS = BOOKING_HORIZON_DAYS;
 
 function defaultSubscriptionOccurrenceCount(recurrence: Recurrence) {
   switch (recurrence) {
@@ -196,33 +148,43 @@ async function isRangeAvailable(
   range: { startDate: Date; endDate: Date },
   excludeBookingId?: string
 ) {
-  const blockConflict = await db
-    .select({ id: bookingBlocks.id })
-    .from(bookingBlocks)
-    .where(
-      and(
-        eq(bookingBlocks.facilityId, facilityId),
-        lt(bookingBlocks.startDate, range.endDate),
-        gt(bookingBlocks.endDate, range.startDate)
-      )
-    )
-    .limit(1);
-  if (blockConflict.length > 0) return false;
+  // Blocks are no longer an absolute veto — a partial block just claims some of
+  // the capacity, so we need every overlapping block, not just the first.
+  const [overlappingBlocks, overlappingOccurrences] = await Promise.all([
+    db
+      .select({
+        startDate: bookingBlocks.startDate,
+        endDate: bookingBlocks.endDate,
+        capacity: bookingBlocks.capacity,
+      })
+      .from(bookingBlocks)
+      .where(
+        and(
+          eq(bookingBlocks.facilityId, facilityId),
+          lt(bookingBlocks.startDate, range.endDate),
+          gt(bookingBlocks.endDate, range.startDate)
+        )
+      ),
+    db
+      .select({ startDate: bookingOccurrences.startDate, endDate: bookingOccurrences.endDate })
+      .from(bookingOccurrences)
+      .where(
+        and(
+          eq(bookingOccurrences.facilityId, facilityId),
+          ne(bookingOccurrences.status, "cancelled"),
+          ...(excludeBookingId ? [ne(bookingOccurrences.bookingId, excludeBookingId)] : []),
+          lt(bookingOccurrences.startDate, range.endDate),
+          gt(bookingOccurrences.endDate, range.startDate)
+        )
+      ),
+  ]);
 
-  const overlappingOccurrences = await db
-    .select({ startDate: bookingOccurrences.startDate, endDate: bookingOccurrences.endDate })
-    .from(bookingOccurrences)
-    .where(
-      and(
-        eq(bookingOccurrences.facilityId, facilityId),
-        ne(bookingOccurrences.status, "cancelled"),
-        ...(excludeBookingId ? [ne(bookingOccurrences.bookingId, excludeBookingId)] : []),
-        lt(bookingOccurrences.startDate, range.endDate),
-        gt(bookingOccurrences.endDate, range.startDate)
-      )
-    );
-
-  return hasCapacity(range, overlappingOccurrences, capacity);
+  // excludeBookingId only ever applied to occurrences — blocks have no bookingId.
+  return hasCapacity(
+    range,
+    toCapacityUse(overlappingBlocks, overlappingOccurrences, capacity),
+    capacity
+  );
 }
 
 async function ensureCustomerUser() {
@@ -878,7 +840,7 @@ export async function extendSubscriptionBookingOccurrences(bookingId?: string) {
   for (const sub of subs) {
     const capacity = sub.capacity ?? 1;
     const [{ maxStart }] = await db
-      .select({ maxStart: sql<Date | null>`max(${bookingOccurrences.startDate})` })
+      .select({ maxStart: sql<string | null>`max(${bookingOccurrences.startDate})` })
       .from(bookingOccurrences)
       .where(
         and(eq(bookingOccurrences.bookingId, sub.id), ne(bookingOccurrences.status, "cancelled"))
@@ -888,7 +850,7 @@ export async function extendSubscriptionBookingOccurrences(bookingId?: string) {
       sub.startDate,
       sub.endDate,
       sub.recurrence,
-      maxStart ?? null,
+      toWatermarkDate(maxStart),
       horizonEnd
     );
 
@@ -942,21 +904,25 @@ export async function extendSubscriptionBookingOccurrences(bookingId?: string) {
 }
 
 export async function extendRecurringBookingBlocks() {
-  const horizonEnd = addDays(new Date(), SUBSCRIPTION_HORIZON_DAYS);
+  const now = new Date();
+  const horizonEnd = addDays(now, SUBSCRIPTION_HORIZON_DAYS);
   const series = await db.select().from(bookingBlockSeries).where(eq(bookingBlockSeries.indefinite, true));
   let created = 0;
   for (const item of series) {
     const [{ maxStart }] = await db
-      .select({ maxStart: sql<Date | null>`max(${bookingBlocks.startDate})` })
+      .select({ maxStart: sql<string | null>`max(${bookingBlocks.startDate})` })
       .from(bookingBlocks)
       .where(eq(bookingBlocks.seriesId, item.id));
     const ranges = occurrenceDatesInWindow(
       item.startDate,
       item.endDate,
       item.recurrence,
-      maxStart ?? null,
+      toWatermarkDate(maxStart),
       horizonEnd
-    );
+      // Without a watermark (every block of the series deleted) the generator
+      // replays from the immutable anchor, so drop anything already in the past
+      // rather than resurrecting a year of historical block-outs.
+    ).filter((range) => range.startDate >= now);
     if (ranges.length > 0) {
       await db.insert(bookingBlocks).values(ranges.map((range) => ({
         facilityId: item.facilityId,
@@ -964,9 +930,15 @@ export async function extendRecurringBookingBlocks() {
         title: item.title,
         startDate: range.startDate,
         endDate: range.endDate,
+        capacity: item.capacity,
         notes: item.notes,
         createdBy: item.createdBy,
-      })));
+      })))
+      // Belt and braces alongside the watermark: the partial unique index makes
+      // a repeated run a no-op even if the watermark is ever wrong again.
+      // Untargeted because Postgres will not match a targeted ON CONFLICT to a
+      // partial index without repeating its predicate.
+      .onConflictDoNothing();
       created += ranges.length;
     }
   }
@@ -1005,6 +977,11 @@ export async function getAvailableBookingSlots(offeringId: string) {
     date: string;
     times: string[];
     endTimesByStart: Record<string, string[]>;
+    // Free units per (start, end) pair, so the "last one left" hint reflects the
+    // duration actually chosen. Keyed the same way as endTimesByStart and only
+    // populated for end times that survived the availability filter, so it costs
+    // the same order of payload.
+    remainingByRange: Record<string, Record<string, number>>;
   }> = [];
   const tomorrow = addDays(new Date(), 1);
   tomorrow.setHours(0, 0, 0, 0);
@@ -1015,6 +992,7 @@ export async function getAvailableBookingSlots(offeringId: string) {
       .select({
         startDate: bookingBlocks.startDate,
         endDate: bookingBlocks.endDate,
+        capacity: bookingBlocks.capacity,
       })
       .from(bookingBlocks)
       .where(
@@ -1040,21 +1018,19 @@ export async function getAvailableBookingSlots(offeringId: string) {
       ),
   ]);
 
-  function overlaps(
-    a: { startDate: Date; endDate: Date },
-    b: { startDate: Date; endDate: Date }
-  ) {
-    return a.startDate < b.endDate && a.endDate > b.startDate;
-  }
-
-  function rangeAvailable(range: { startDate: Date; endDate: Date }) {
-    if (blocks.some((block) => overlaps(range, block))) return false;
-    return hasCapacity(range, occurrences, offering.capacity);
-  }
+  // Built once: the inner loop below runs ~180 days x ~15 starts x ~15 ends, so
+  // merging and sorting the facility's whole 180-day history inside it would be
+  // ruinous. We narrow to the day in question before each sweep instead.
+  const usage = toCapacityUse(blocks, occurrences, offering.capacity);
 
   for (let index = 0; index < 180; index += 1) {
     const day = addDays(tomorrow, index);
     if (!offering.allowedDays.includes(day.getDay())) continue;
+
+    const dayEnd = addDays(day, 1);
+    const dayUsage = usage.filter((item) => item.startDate < dayEnd && item.endDate > day);
+    const rangeRemaining = (range: { startDate: Date; endDate: Date }) =>
+      remainingCapacity(range, dayUsage, offering.capacity);
 
     const startTimes = offering.startTime
       ? [offering.startTime]
@@ -1066,19 +1042,24 @@ export async function getAvailableBookingSlots(offeringId: string) {
 
     const availableTimes: string[] = [];
     const endTimesByStart: Record<string, string[]> = {};
+    const remainingByRange: Record<string, Record<string, number>> = {};
     for (const time of startTimes) {
       const startDate = combineDateAndTime(format(day, "yyyy-MM-dd"), time);
       const endTimes = offering.endTime
         ? [offering.endTime]
         : bookingEndTimeRange(time, offering.bookableEndTime, offering.durationMinutes);
 
+      const remainingByEnd: Record<string, number> = {};
       endTimesByStart[time] = endTimes.filter((endTime) => {
         const endDate = combineDateAndTime(format(day, "yyyy-MM-dd"), endTime);
-        return rangeAvailable({ startDate, endDate });
+        const remaining = rangeRemaining({ startDate, endDate });
+        if (remaining > 0) remainingByEnd[endTime] = remaining;
+        return remaining > 0;
       });
 
       if (endTimesByStart[time].length > 0) {
         availableTimes.push(time);
+        remainingByRange[time] = remainingByEnd;
       }
     }
 
@@ -1087,6 +1068,7 @@ export async function getAvailableBookingSlots(offeringId: string) {
         date: format(day, "yyyy-MM-dd"),
         times: availableTimes,
         endTimesByStart,
+        remainingByRange,
       });
     }
   }
@@ -1116,26 +1098,83 @@ function bookingEndTimeRange(startTime: string, endTime: string, minimumDuration
   return times;
 }
 
-function hasCapacity(
+// A weighted claim on a facility's capacity for a time range. A booking claims
+// one unit; a block claims however many units it was created for, and a
+// whole-facility block (capacity NULL) claims all of them.
+type CapacityUse = { startDate: Date; endDate: Date; units?: number };
+
+// Lowest number of free units anywhere inside `range`. Occupancy is
+// piecewise-constant — it can only change at the range start or at an interior
+// start/end of an overlapping item — so sweeping those points is exact. Any
+// item overlapping the range is guaranteed to be sampled: if it starts at or
+// before range.startDate it covers that point, otherwise its own start is
+// interior. Can go negative if a facility is already over-subscribed.
+function remainingCapacity(
   range: { startDate: Date; endDate: Date },
-  existing: Array<{ startDate: Date; endDate: Date }>,
+  existing: CapacityUse[],
   capacity: number
 ) {
-  const boundaries = [
-    range.startDate,
-    range.endDate,
-    ...existing.flatMap((item) => [item.startDate, item.endDate]),
-  ]
+  const boundaries = existing
+    .flatMap((item) => [item.startDate, item.endDate])
     .filter((date) => date > range.startDate && date < range.endDate)
     .sort((a, b) => a.getTime() - b.getTime());
   const checks = [range.startDate, ...boundaries];
 
-  return checks.every((point) => {
-    const overlapping = existing.filter(
-      (item) => item.startDate <= point && item.endDate > point
-    ).length;
-    return overlapping < capacity;
-  });
+  return checks.reduce((lowest, point) => {
+    const used = existing.reduce(
+      (total, item) =>
+        item.startDate <= point && item.endDate > point ? total + (item.units ?? 1) : total,
+      0
+    );
+    return Math.min(lowest, capacity - used);
+  }, capacity);
+}
+
+function hasCapacity(
+  range: { startDate: Date; endDate: Date },
+  existing: CapacityUse[],
+  capacity: number
+) {
+  return remainingCapacity(range, existing, capacity) > 0;
+}
+
+// Highest number of units in use at any instant. Same boundary sweep as
+// remainingCapacity, but without a fixed range or a known ceiling — used to
+// decide whether a proposed capacity is large enough for what is already booked.
+function peakUsage(existing: CapacityUse[]) {
+  return existing.reduce((highest, item) => {
+    const used = existing.reduce(
+      (total, other) =>
+        other.startDate <= item.startDate && other.endDate > item.startDate
+          ? total + (other.units ?? 1)
+          : total,
+      0
+    );
+    return Math.max(highest, used);
+  }, 0);
+}
+
+// Blocks are stored per facility but capacity is defined per offering, so clamp:
+// a block can never claim more units than the offering being tested against has.
+// This also makes an over-large block degrade to "whole facility" rather than
+// producing a nonsense negative remainder.
+function toCapacityUse(
+  blocks: Array<{ startDate: Date; endDate: Date; capacity: number | null }>,
+  occurrences: Array<{ startDate: Date; endDate: Date }>,
+  capacity: number
+): CapacityUse[] {
+  return [
+    ...blocks.map((block) => ({
+      startDate: block.startDate,
+      endDate: block.endDate,
+      units: Math.min(block.capacity ?? capacity, capacity),
+    })),
+    ...occurrences.map((item) => ({
+      startDate: item.startDate,
+      endDate: item.endDate,
+      units: 1,
+    })),
+  ];
 }
 
 async function readBookingForm(formData: FormData) {
@@ -1907,7 +1946,11 @@ export async function getAdminBooking(id: string) {
 export async function getAdminBookingSetup() {
   await requireAdmin();
   await ensureDefaultBookingSetup();
-  const [setup, cancellationSettings, blocks] = await Promise.all([
+  // setup.offerings is active-only (it comes from the public feed and also
+  // drives the manual booking dialog), so the settings screen needs its own
+  // unfiltered list — otherwise deactivating an offering hides the very row you
+  // would use to switch it back on.
+  const [setup, cancellationSettings, blocks, offeringSettings] = await Promise.all([
     getPublicBookingData(),
     getCancellationSettings(),
     db
@@ -1917,7 +1960,9 @@ export async function getAdminBookingSetup() {
       title: bookingBlocks.title,
       startDate: bookingBlocks.startDate,
       endDate: bookingBlocks.endDate,
+      capacity: bookingBlocks.capacity,
       facilityName: facilities.name,
+      facilitySlug: facilities.slug,
       recurrence: bookingBlockSeries.recurrence,
       indefinite: bookingBlockSeries.indefinite,
       repeatCount: bookingBlockSeries.repeatCount,
@@ -1926,8 +1971,31 @@ export async function getAdminBookingSetup() {
     .innerJoin(facilities, eq(bookingBlocks.facilityId, facilities.id))
     .leftJoin(bookingBlockSeries, eq(bookingBlocks.seriesId, bookingBlockSeries.id))
     .orderBy(desc(bookingBlocks.startDate)),
+    db
+      .select({
+        offeringId: bookingOfferings.id,
+        offeringName: bookingOfferings.name,
+        facilityId: facilities.id,
+        facilityName: facilities.name,
+        facilitySlug: facilities.slug,
+        capacity: bookingOfferings.capacity,
+        active: bookingOfferings.active,
+        facilityBookableStartTime: facilities.bookableStartTime,
+        facilityBookableEndTime: facilities.bookableEndTime,
+        // Left-joined so an offering with no prices yet still gets a row, and so
+        // the settings screen never has to fall back to the active-only feed for
+        // prices — doing so showed £0.00 for deactivated offerings, one Save away
+        // from overwriting the real ones.
+        customerGroup: bookingPrices.customerGroup,
+        amount: bookingPrices.amount,
+      })
+      .from(bookingOfferings)
+      .innerJoin(facilities, eq(bookingOfferings.facilityId, facilities.id))
+      .leftJoin(bookingPrices, eq(bookingPrices.offeringId, bookingOfferings.id))
+      .where(inArray(facilities.slug, publicFacilitySlugs))
+      .orderBy(facilities.sortOrder, bookingOfferings.sortOrder, asc(bookingOfferings.name)),
   ]);
-  return { ...setup, cancellationSettings, blocks };
+  return { ...setup, cancellationSettings, blocks, offeringSettings };
 }
 
 export async function getAdminAvailability() {
@@ -1955,6 +2023,7 @@ export async function getAdminAvailability() {
         title: bookingBlocks.title,
         startDate: bookingBlocks.startDate,
         endDate: bookingBlocks.endDate,
+        capacity: bookingBlocks.capacity,
         facilityName: facilities.name,
       })
       .from(bookingBlocks)
@@ -1979,6 +2048,7 @@ export async function getAdminAvailability() {
       startDate: block.startDate,
       endDate: block.endDate,
       status: "blocked",
+      capacity: block.capacity,
       type: block.title.startsWith("Event: ") ? ("event" as const) : ("block" as const),
     })),
   ];
@@ -2080,6 +2150,106 @@ export async function updateBookingPrice(formData: FormData) {
   revalidatePath("/admin/bookings/settings");
   revalidatePath("/admin/bookings/availability");
   revalidatePath("/booking");
+}
+
+// Returns form state rather than throwing: a rejected capacity change is an
+// expected outcome the admin needs to read, and Next.js redacts thrown
+// server-action messages in production builds.
+export type BookingOfferingFormState = { error?: string; saved?: boolean };
+
+export async function updateBookingOffering(
+  _prevState: BookingOfferingFormState,
+  formData: FormData
+): Promise<BookingOfferingFormState> {
+  await requireAdmin();
+  const offeringId = String(formData.get("offeringId") || "");
+  const capacityRaw = String(formData.get("capacity") || "").trim();
+  const capacity = Math.round(Number(capacityRaw));
+  const active = formData.get("active") === "on";
+  if (!offeringId) return { error: "Booking type not found." };
+  if (capacityRaw === "" || !Number.isFinite(capacity) || capacity < 1 || capacity > 50) {
+    return { error: "Capacity must be a whole number between 1 and 50." };
+  }
+
+  const [offering] = await db
+    .select({
+      id: bookingOfferings.id,
+      name: bookingOfferings.name,
+      facilityId: bookingOfferings.facilityId,
+      facilitySlug: facilities.slug,
+      capacity: bookingOfferings.capacity,
+    })
+    .from(bookingOfferings)
+    .innerJoin(facilities, eq(bookingOfferings.facilityId, facilities.id))
+    .where(eq(bookingOfferings.id, offeringId))
+    .limit(1);
+  if (!offering) return { error: "Booking type not found." };
+
+  // Lowering capacity below what is already committed would leave existing
+  // customers double-booked, so refuse rather than silently over-subscribe.
+  if (capacity < offering.capacity) {
+    const [future, partialBlocks] = await Promise.all([
+      db
+        .select({ startDate: bookingOccurrences.startDate, endDate: bookingOccurrences.endDate })
+        .from(bookingOccurrences)
+        .where(
+          and(
+            eq(bookingOccurrences.facilityId, offering.facilityId),
+            ne(bookingOccurrences.status, "cancelled"),
+            gte(bookingOccurrences.endDate, new Date())
+          )
+        ),
+      // Only blocks with an explicit size compete for capacity here. A
+      // whole-facility block (capacity NULL) scales with whatever the offering
+      // is set to, so it can never be the thing that makes a reduction unsafe.
+      db
+        .select({
+          startDate: bookingBlocks.startDate,
+          endDate: bookingBlocks.endDate,
+          capacity: bookingBlocks.capacity,
+        })
+        .from(bookingBlocks)
+        .where(
+          and(
+            eq(bookingBlocks.facilityId, offering.facilityId),
+            isNotNull(bookingBlocks.capacity),
+            gte(bookingBlocks.endDate, new Date())
+          )
+        ),
+    ]);
+
+    const committed: CapacityUse[] = [
+      ...future.map((item) => ({ ...item, units: 1 })),
+      ...partialBlocks.map((block) => ({
+        startDate: block.startDate,
+        endDate: block.endDate,
+        units: block.capacity ?? 1,
+      })),
+    ];
+    const peak = peakUsage(committed);
+    if (peak > capacity) {
+      return {
+        error: `Capacity cannot be lowered to ${capacity}: up to ${peak} ${capacityUnitNoun(offering.facilitySlug, peak)} are already committed at this venue by existing bookings or held block-outs.`,
+      };
+    }
+  }
+
+  await db
+    .update(bookingOfferings)
+    .set({ capacity, active, updatedAt: new Date() })
+    .where(eq(bookingOfferings.id, offeringId));
+
+  await logAudit({
+    action: "update",
+    entity: "booking",
+    entityId: offeringId,
+    description: `Updated booking type: ${offering.name} (capacity ${capacity}, ${active ? "active" : "inactive"})`,
+  });
+  revalidatePath("/admin/bookings");
+  revalidatePath("/admin/bookings/settings");
+  revalidatePath("/admin/bookings/availability");
+  revalidatePath("/booking");
+  return { saved: true };
 }
 
 export async function deleteBookingBlock(id: string) {
@@ -2209,10 +2379,17 @@ export async function createBookingBlock(formData: FormData) {
   const indefinite = formData.get("indefinite") === "on";
   const repeatCount = Math.max(2, Math.min(104, Math.round(Number(formData.get("repeatCount") || 2))));
   const notes = String(formData.get("notes") || "").trim() || null;
+  // How many units of the venue's capacity this closes. Anything missing or
+  // unparseable means the whole facility, which is what single-capacity venues
+  // always post since the form omits the control for them.
+  const capacityValue = Math.round(Number(String(formData.get("capacity") || "").trim()));
+  const capacity = Number.isFinite(capacityValue) && capacityValue > 0 ? capacityValue : null;
   const createdBy = session.user?.id ?? null;
 
   if (!recurrence) {
-    await db.insert(bookingBlocks).values({ facilityId, title, startDate, endDate, notes, createdBy });
+    await db
+      .insert(bookingBlocks)
+      .values({ facilityId, title, startDate, endDate, capacity, notes, createdBy });
   } else {
     const seriesId = createId();
     await db.insert(bookingBlockSeries).values({
@@ -2224,6 +2401,7 @@ export async function createBookingBlock(formData: FormData) {
       recurrence,
       indefinite,
       repeatCount,
+      capacity,
       notes,
       createdBy,
     });
@@ -2236,6 +2414,7 @@ export async function createBookingBlock(formData: FormData) {
       title,
       startDate: range.startDate,
       endDate: range.endDate,
+      capacity,
       notes,
       createdBy,
     })));

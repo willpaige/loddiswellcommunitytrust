@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "booking_blocks_series_start_idx" ON "booking_blocks" USING btree ("series_id","start_date") WHERE "booking_blocks"."series_id" is not null;

@@ -5,6 +5,7 @@ import { Check } from "lucide-react";
 import { createBookingCheckout, getAvailableBookingSlots } from "@/actions/bookings";
 import { validateBookingDiscountCode, type DiscountCodeResult } from "@/actions/booking-discount-codes";
 import {
+  capacityUnitNoun,
   customerGroups,
   money,
   recurrenceIntervalLabel,
@@ -32,6 +33,7 @@ type OfferingRow = {
   offeringName: string;
   offeringType: string;
   durationMinutes: number;
+  capacity: number;
   startTime: string | null;
   endTime: string | null;
   customerGroup: string;
@@ -42,6 +44,7 @@ type AvailableSlot = {
   date: string;
   times: string[];
   endTimesByStart?: Record<string, string[]>;
+  remainingByRange?: Record<string, Record<string, number>>;
 };
 
 export function BookingForm({
@@ -112,6 +115,24 @@ export function BookingForm({
   const selectedDateSlot = slots.find((slot) => slot.date === date);
   const availableTimes = selectedDateSlot?.times ?? [];
   const availableEndTimes = selectedDateSlot?.endTimesByStart?.[time] ?? [];
+  const remainingByRange = selectedDateSlot?.remainingByRange ?? {};
+  // The hint has to track the duration the customer has actually picked: an hour
+  // may have both courts free while the three-hour range from it has only one.
+  // Before an end time is chosen, fall back to the shortest bookable range.
+  const remainingForStart = (startOption: string) => {
+    const byEnd = remainingByRange[startOption];
+    if (!byEnd) return undefined;
+    if (startOption === time && endTime && byEnd[endTime] !== undefined) return byEnd[endTime];
+    const shortest = selectedDateSlot?.endTimesByStart?.[startOption]?.[0];
+    return shortest ? byEnd[shortest] : undefined;
+  };
+  const remainingByStart = Object.fromEntries(
+    availableTimes.flatMap((option) => {
+      const remaining = remainingForStart(option);
+      return remaining === undefined ? [] : [[option, remaining] as const];
+    })
+  );
+  const remainingByEndTime = remainingByRange[time] ?? {};
   const hasAvailability = slots.length > 0;
   const recurring = !isKidsParty && recurrence !== "none";
   const selectedHours =
@@ -295,6 +316,9 @@ export function BookingForm({
                   name="time"
                   value={time}
                   availableTimes={availableTimes}
+                  remainingByTime={remainingByStart}
+                  capacity={selectedOffering?.capacity ?? 1}
+                  unitNoun={capacityUnitNoun(selectedFacility?.slug ?? "", 1)}
                   startTime={selectedFacility?.bookableStartTime ?? "08:00"}
                   endTime={selectedFacility?.bookableEndTime ?? "23:00"}
                   disabled={loadingSlots || availableTimes.length === 0}
@@ -312,6 +336,9 @@ export function BookingForm({
                   name="endTime"
                   value={endTime}
                   availableTimes={availableEndTimes}
+                  remainingByTime={remainingByEndTime}
+                  capacity={selectedOffering?.capacity ?? 1}
+                  unitNoun={capacityUnitNoun(selectedFacility?.slug ?? "", 1)}
                   startTime={time || selectedFacility?.bookableStartTime || "08:00"}
                   endTime={selectedFacility?.bookableEndTime ?? "23:00"}
                   disabled={loadingSlots || availableEndTimes.length === 0}

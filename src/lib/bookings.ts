@@ -20,6 +20,17 @@ export function recurrenceLabel(value: string) {
   return recurrenceOptions.find((option) => option.value === value)?.label ?? "Recurring";
 }
 
+// What one unit of a venue's capacity is called. Only venues with capacity > 1
+// ever surface this, which today means the tennis courts alone.
+const capacityUnitNouns: Record<string, { one: string; many: string }> = {
+  "tennis-courts": { one: "court", many: "courts" },
+};
+
+export function capacityUnitNoun(facilitySlug: string, count = 1) {
+  const noun = capacityUnitNouns[facilitySlug] ?? { one: "space", many: "spaces" };
+  return count === 1 ? noun.one : noun.many;
+}
+
 export function recurrenceIntervalLabel(value: string) {
   if (value === "none") return "booking";
   return recurrenceOptions.find((option) => option.value === value)?.intervalLabel ?? "period";

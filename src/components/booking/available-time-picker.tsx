@@ -19,6 +19,9 @@ export function AvailableTimePicker({
   startTime,
   endTime,
   disabled = false,
+  remainingByTime,
+  capacity,
+  unitNoun,
 }: {
   name: string;
   value: string;
@@ -27,6 +30,11 @@ export function AvailableTimePicker({
   startTime: string;
   endTime: string;
   disabled?: boolean;
+  // Free units per start time, for venues with more than one (the tennis
+  // courts). Optional so single-capacity callers stay as they are.
+  remainingByTime?: Record<string, number>;
+  capacity?: number;
+  unitNoun?: string;
 }) {
   const available = new Set(availableTimes);
   const options = timeOptions(startTime, endTime);
@@ -58,7 +66,13 @@ export function AvailableTimePicker({
               aria-pressed={selected}
             >
               <span>{option}</span>
-              {!optionAvailable && <span className="text-xs">Unavailable</span>}
+              {!optionAvailable ? (
+                <span className="text-xs">Unavailable</span>
+              ) : capacity && capacity > 1 && remainingByTime?.[option] === 1 ? (
+                <span className={cn("text-xs", !selected && "text-muted-foreground")}>
+                  1 {unitNoun ?? "space"} left
+                </span>
+              ) : null}
             </button>
           );
         })}

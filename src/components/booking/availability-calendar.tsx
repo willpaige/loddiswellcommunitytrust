@@ -23,6 +23,9 @@ export type AvailabilityCalendarItem = {
   startDate: Date;
   endDate: Date;
   status: string;
+  // Units of the venue's capacity a block closes; null/absent means all of them.
+  // Optional because the public availability feed carries no blocks at all.
+  capacity?: number | null;
   type: "booking" | "block" | "event";
 };
 
@@ -141,7 +144,9 @@ export function AvailabilityCalendar({
                           className="px-1.5"
                         >
                           {item.type === "block"
-                            ? "Block"
+                            ? item.capacity
+                              ? `Block ×${item.capacity}`
+                              : "Block"
                             : item.type === "event"
                               ? "Event"
                               : item.status}

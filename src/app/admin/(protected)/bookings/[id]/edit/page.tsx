@@ -28,7 +28,11 @@ export default async function AdminEditBookingPage({
   ]);
   if (!booking) notFound();
 
-  const uniqueOfferings = setup.offerings.filter(
+  // Unfiltered: an offering that has been switched off online still has existing
+  // bookings, and dropping it from this list leaves the select with no matching
+  // option — the form then submits no offeringId and the save throws, blocking
+  // even an unrelated edit like a phone number.
+  const uniqueOfferings = setup.offeringSettings.filter(
     (offering, index, all) =>
       all.findIndex((item) => item.offeringId === offering.offeringId) === index
   );

@@ -13,7 +13,7 @@ import {
   getAdminOfferingsForRequirements,
   getRequirementSets,
 } from "@/actions/booking-requirements";
-import { bookingHourOptions, recurrenceLabel } from "@/lib/bookings";
+import { bookingHourOptions, capacityUnitNoun, recurrenceLabel } from "@/lib/bookings";
 import { BookingBlockForm } from "@/components/admin/booking-block-form";
 import { DeleteButton } from "@/components/admin/delete-button";
 import { BookingPricesTable } from "@/components/admin/booking-prices-table";
@@ -34,10 +34,29 @@ export default async function AdminBookingSettingsPage() {
     (offering, index, all) =>
       all.findIndex((item) => item.offeringId === offering.offeringId) === index
   );
-  const facilities = uniqueOfferings.filter(
-    (offering, index, all) =>
-      all.findIndex((item) => item.facilityId === offering.facilityId) === index
-  );
+  // Derived from the UNFILTERED offering list: a venue must stay blockable even
+  // when its offerings are switched off for the season, and falling back to the
+  // active-only feed would drop it from the form and silently default the admin
+  // to a different venue. A block closes the whole venue, so its capacity
+  // ceiling is the largest any of that venue's offerings has.
+  const facilities = setup.offeringSettings
+    .filter(
+      (offering, index, all) =>
+        all.findIndex((item) => item.facilityId === offering.facilityId) === index
+    )
+    .map((facility) => ({
+      facilityId: facility.facilityId,
+      facilityName: facility.facilityName,
+      facilitySlug: facility.facilitySlug,
+      facilityBookableStartTime: facility.facilityBookableStartTime,
+      facilityBookableEndTime: facility.facilityBookableEndTime,
+      capacity: Math.max(
+        1,
+        ...setup.offeringSettings
+          .filter((item) => item.facilityId === facility.facilityId)
+          .map((item) => item.capacity)
+      ),
+    }));
   const displayedBlocks = setup.blocks.filter((block) => {
     if (!block.seriesId) return true;
     const seriesBlocks = setup.blocks.filter((item) => item.seriesId === block.seriesId);
@@ -206,6 +225,11 @@ export default async function AdminBookingSettingsPage() {
                         <p className="text-sm text-muted-foreground">
                           {block.facilityName} · {format(block.startDate, "d MMM yyyy, HH:mm")}–{format(block.endDate, "d MMM yyyy, HH:mm")}
                         </p>
+                        {block.capacity && (
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            Blocks {block.capacity} {capacityUnitNoun(block.facilitySlug, block.capacity)}
+                          </p>
+                        )}
                         {block.seriesId && block.recurrence && (
                           <p className="mt-1 text-sm text-muted-foreground">
                             Repeats {recurrenceLabel(block.recurrence).toLowerCase()}
@@ -237,7 +261,7 @@ export default async function AdminBookingSettingsPage() {
             <CardDescription>Prices are stored in pounds and used by Stripe Checkout.</CardDescription>
           </CardHeader>
           <CardContent>
-            <BookingPricesTable rows={setup.offerings} />
+            <BookingPricesTable rows={setup.offeringSettings} />
           </CardContent>
         </Card>
 

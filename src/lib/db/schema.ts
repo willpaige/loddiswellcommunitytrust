@@ -9,6 +9,7 @@ import {
   index,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 
 // ── Auth.js required tables ──
@@ -571,13 +572,25 @@ export const bookingBlocks = pgTable(
     title: text("title").notNull(),
     eventId: text("event_id").references(() => events.id, { onDelete: "cascade" }),
     seriesId: text("series_id").references(() => bookingBlockSeries.id, { onDelete: "cascade" }),
+    // Units of the offering's capacity this block consumes. NULL = the whole
+    // facility, which is how every pre-existing and event-generated block behaves.
+    capacity: integer("capacity"),
     startDate: timestamp("start_date", { mode: "date" }).notNull(),
     endDate: timestamp("end_date", { mode: "date" }).notNull(),
     notes: text("notes"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
   },
-  (table) => [index("booking_blocks_facility_start_idx").on(table.facilityId, table.startDate)]
+  (table) => [
+    index("booking_blocks_facility_start_idx").on(table.facilityId, table.startDate),
+    // One occurrence per series per start. Makes the rolling top-up idempotent
+    // at the database level rather than relying on the watermark alone — a
+    // mis-parsed watermark previously duplicated whole series nightly. Partial
+    // so that one-off and event-linked blocks (series_id NULL) are unaffected.
+    uniqueIndex("booking_blocks_series_start_idx")
+      .on(table.seriesId, table.startDate)
+      .where(sql`${table.seriesId} is not null`),
+  ]
 );
 
 export const bookingBlockSeries = pgTable("booking_block_series", {
@@ -591,6 +604,8 @@ export const bookingBlockSeries = pgTable("booking_block_series", {
   }).notNull(),
   indefinite: boolean("indefinite").notNull().default(false),
   repeatCount: integer("repeat_count").notNull().default(1),
+  // Copied onto every generated block. NULL = the whole facility.
+  capacity: integer("capacity"),
   notes: text("notes"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),

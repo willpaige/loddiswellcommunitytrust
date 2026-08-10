@@ -134,6 +134,20 @@
       "when": 1784215984470,
       "tag": "0018_sparkling_legion",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1786303241973,
+      "tag": "0019_booking_block_capacity",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1786306004956,
+      "tag": "0020_booking_blocks_series_unique",
+      "breakpoints": true
     }
   ]
 }

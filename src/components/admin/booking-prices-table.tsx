@@ -1,8 +1,10 @@
 "use client";
 
+import { useActionState } from "react";
 import { Pencil } from "lucide-react";
-import { updateBookingPrice } from "@/actions/bookings";
-import { customerGroups, money } from "@/lib/bookings";
+import { updateBookingOffering, updateBookingPrice } from "@/actions/bookings";
+import { capacityUnitNoun, customerGroups, money } from "@/lib/bookings";
+import { PendingSubmitButton } from "@/components/admin/pending-submit-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,19 +26,31 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-type BookingPriceRow = {
-  facilityName: string;
+// One row per offering x customer group, from the UNFILTERED admin query. Both
+// the offering settings and the prices must come from the same source: joining
+// prices from the active-only public feed made a deactivated offering render
+// £0.00 across the board, which the Edit dialog would then happily save.
+type OfferingSettingRow = {
   offeringId: string;
   offeringName: string;
-  customerGroup: string;
-  amount: number;
+  facilityId: string;
+  facilityName: string;
+  facilitySlug: string;
+  capacity: number;
+  active: boolean;
+  customerGroup: string | null;
+  amount: number | null;
 };
 
 type OfferingSummary = {
-  facilityName: string;
   offeringId: string;
   offeringName: string;
-  prices: BookingPriceRow[];
+  facilityId: string;
+  facilityName: string;
+  facilitySlug: string;
+  capacity: number;
+  active: boolean;
+  prices: Array<{ customerGroup: string; amount: number }>;
 };
 
 type FacilitySummary = {
@@ -44,18 +58,21 @@ type FacilitySummary = {
   offerings: OfferingSummary[];
 };
 
-function groupOfferings(rows: BookingPriceRow[]) {
+function groupOfferings(rows: OfferingSettingRow[]) {
   const map = new Map<string, OfferingSummary>();
   rows.forEach((row) => {
     if (!map.has(row.offeringId)) {
-      map.set(row.offeringId, {
-        facilityName: row.facilityName,
-        offeringId: row.offeringId,
-        offeringName: row.offeringName,
-        prices: [],
+      const { customerGroup, amount, ...offering } = row;
+      void customerGroup;
+      void amount;
+      map.set(row.offeringId, { ...offering, prices: [] });
+    }
+    if (row.customerGroup !== null && row.amount !== null) {
+      map.get(row.offeringId)?.prices.push({
+        customerGroup: row.customerGroup,
+        amount: row.amount,
       });
     }
-    map.get(row.offeringId)?.prices.push(row);
   });
   return Array.from(map.values());
 }
@@ -93,7 +110,47 @@ function overrides(offering: OfferingSummary) {
     .filter((override) => override.amount !== base);
 }
 
-export function BookingPricesTable({ rows }: { rows: BookingPriceRow[] }) {
+// Its own component so useActionState can hold per-offering form state; the
+// dialogs are rendered inside a map, where a hook could not live.
+function OfferingSettingsForm({ offering }: { offering: OfferingSummary }) {
+  const [state, formAction] = useActionState(updateBookingOffering, {});
+
+  return (
+    <form action={formAction} className="rounded-md border p-3">
+      <input type="hidden" name="offeringId" value={offering.offeringId} />
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="space-y-2">
+          <Label htmlFor={`${offering.offeringId}-capacity`}>Capacity</Label>
+          <Input
+            id={`${offering.offeringId}-capacity`}
+            name="capacity"
+            type="number"
+            min="1"
+            max="50"
+            step="1"
+            required
+            defaultValue={offering.capacity}
+            className="w-28"
+          />
+        </div>
+        <label className="flex items-center gap-2 pb-2 text-sm">
+          <input type="checkbox" name="active" defaultChecked={offering.active} />
+          Bookable online
+        </label>
+        <PendingSubmitButton idleLabel="Save settings" pendingLabel="Saving..." />
+      </div>
+      {state.error ? (
+        <p className="mt-2 text-xs text-destructive">{state.error}</p>
+      ) : (
+        <p className="mt-2 text-xs text-muted-foreground">
+          How many bookings can run at once — e.g. 2 tennis courts.
+        </p>
+      )}
+    </form>
+  );
+}
+
+export function BookingPricesTable({ rows }: { rows: OfferingSettingRow[] }) {
   const facilities = groupByFacility(groupOfferings(rows));
 
   return (
@@ -117,6 +174,17 @@ export function BookingPricesTable({ rows }: { rows: BookingPriceRow[] }) {
                   <TableRow key={offering.offeringId}>
                     <TableCell>
                       <p className="font-medium">{offering.offeringName}</p>
+                      {(offering.capacity > 1 || !offering.active) && (
+                        <div className="mt-1 flex flex-wrap gap-2">
+                          {offering.capacity > 1 && (
+                            <Badge variant="secondary">
+                              {offering.capacity}{" "}
+                              {capacityUnitNoun(offering.facilitySlug, offering.capacity)}
+                            </Badge>
+                          )}
+                          {!offering.active && <Badge variant="outline">Inactive</Badge>}
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell>{money(baseAmount(offering))}</TableCell>
                     <TableCell>
@@ -142,11 +210,13 @@ export function BookingPricesTable({ rows }: { rows: BookingPriceRow[] }) {
                         </DialogTrigger>
                         <DialogContent className="sm:max-w-2xl">
                           <DialogHeader>
-                            <DialogTitle>Edit prices</DialogTitle>
+                            <DialogTitle>Edit booking type</DialogTitle>
                             <DialogDescription>
                               {offering.facilityName} - {offering.offeringName}
                             </DialogDescription>
                           </DialogHeader>
+                          {/* Sibling of the price forms, never nested — HTML forbids nested forms. */}
+                          <OfferingSettingsForm offering={offering} />
                           <div className="grid gap-3 sm:grid-cols-2">
                             {customerGroups.map((group) => {
                               const price = amountFor(offering, group.value);

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { createBookingBlock } from "@/actions/bookings";
-import { bookingHourOptions, recurrenceOptions } from "@/lib/bookings";
+import { bookingHourOptions, capacityUnitNoun, recurrenceOptions } from "@/lib/bookings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,16 +10,24 @@ import { Label } from "@/components/ui/label";
 export function BookingBlockForm({
   facilities,
 }: {
-  facilities: Array<{ facilityId: string; facilityName: string }>;
+  facilities: Array<{
+    facilityId: string;
+    facilityName: string;
+    facilitySlug: string;
+    capacity: number;
+  }>;
 }) {
   const [recurrence, setRecurrence] = useState("none");
+  const [facilityId, setFacilityId] = useState(facilities[0]?.facilityId ?? "");
   const repeating = recurrence !== "none";
+  const selectedFacility = facilities.find((facility) => facility.facilityId === facilityId);
+  const maxCapacity = selectedFacility?.capacity ?? 1;
 
   return (
     <form action={createBookingBlock} className="grid gap-4 lg:grid-cols-6">
       <div className="space-y-2">
         <Label htmlFor="blockFacility">Venue</Label>
-        <select id="blockFacility" name="facilityId" className="h-10 w-full rounded-md border bg-background px-3 text-sm">
+        <select id="blockFacility" name="facilityId" value={facilityId} onChange={(event) => setFacilityId(event.target.value)} className="h-10 w-full rounded-md border bg-background px-3 text-sm">
           {facilities.map((facility) => <option key={facility.facilityId} value={facility.facilityId}>{facility.facilityName}</option>)}
         </select>
       </div>
@@ -47,6 +55,22 @@ export function BookingBlockForm({
           {bookingHourOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
       </div>
+      {maxCapacity > 1 && selectedFacility && (
+        <div className="space-y-2">
+          <Label htmlFor="blockCapacity" className="capitalize">
+            {capacityUnitNoun(selectedFacility.facilitySlug, 2)} blocked
+          </Label>
+          <select id="blockCapacity" name="capacity" defaultValue="" className="h-10 w-full rounded-md border bg-background px-3 text-sm">
+            <option value="">All ({maxCapacity})</option>
+            {Array.from({ length: maxCapacity - 1 }, (_, index) => index + 1).map((count) => (
+              <option key={count} value={count}>{count} of {maxCapacity}</option>
+            ))}
+          </select>
+          <p className="text-xs text-muted-foreground">
+            Reserves a number of {capacityUnitNoun(selectedFacility.facilitySlug, 2)}, not a specific one.
+          </p>
+        </div>
+      )}
       <div className="space-y-2">
         <Label htmlFor="blockRecurrence">Repeat</Label>
         <select id="blockRecurrence" name="recurrence" value={recurrence} onChange={(event) => setRecurrence(event.target.value)} className="h-10 w-full rounded-md border bg-background px-3 text-sm">
