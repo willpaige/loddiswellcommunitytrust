@@ -409,7 +409,7 @@ function ordinal(n: number): string {
 
 export async function sendDrawNotifications(
   drawId: string
-): Promise<{ sent: number; alreadySent?: boolean }> {
+): Promise<{ sent: number; failed: number; alreadySent?: boolean }> {
   const session = await auth();
   if (!session?.user) throw new Error("Unauthorized");
 
@@ -421,7 +421,7 @@ export async function sendDrawNotifications(
   const draw = drawRows[0];
   if (!draw) throw new Error("Draw not found");
   if (draw.notifiedAt) {
-    return { sent: 0, alreadySent: true };
+    return { sent: 0, failed: 0, alreadySent: true };
   }
 
   // Active subscribers, de-duped by lowercase email
@@ -444,7 +444,7 @@ export async function sendDrawNotifications(
   );
 
   if (recipients.length === 0) {
-    return { sent: 0 };
+    return { sent: 0, failed: 0 };
   }
 
   const winnersText = draw.results
@@ -454,19 +454,26 @@ export async function sendDrawNotifications(
     })
     .join("\n");
   let sent = 0;
+  let failed = 0;
   for (const recipient of recipients) {
-    const result = await sendTemplateEmail({
-      key: "lottery_draw_results",
-      to: recipient.email,
-      variables: {
-        drawDate: format(draw.drawDate, "MMMM yyyy"),
-        winners: winnersText,
-        notes: draw.notes || "",
-      },
-      relatedEntityType: "lottery_draw",
-      relatedEntityId: `${drawId}:${recipient.email}`,
-    });
-    if (result.sent) sent += 1;
+    try {
+      const result = await sendTemplateEmail({
+        key: "lottery_draw_results",
+        to: recipient.email,
+        variables: {
+          drawDate: format(draw.drawDate, "MMMM yyyy"),
+          winners: winnersText,
+          notes: draw.notes || "",
+        },
+        relatedEntityType: "lottery_draw",
+        relatedEntityId: `${drawId}:${recipient.email}`,
+      });
+      if (result.sent) sent += 1;
+    } catch {
+      // Failure is recorded in email_logs by sendTemplateEmail;
+      // a bad address (e.g. Postmark suppression) must not abort the run.
+      failed += 1;
+    }
   }
 
   await db
@@ -478,11 +485,11 @@ export async function sendDrawNotifications(
     action: "update",
     entity: "lottery",
     entityId: drawId,
-    description: `Sent draw notifications to ${sent} subscribers`,
+    description: `Sent draw notifications to ${sent} subscribers${failed ? ` (${failed} failed)` : ""}`,
   });
 
   revalidatePath("/admin/lottery");
   revalidatePath(`/admin/lottery/draws/${drawId}/edit`);
 
-  return { sent };
+  return { sent, failed };
 }

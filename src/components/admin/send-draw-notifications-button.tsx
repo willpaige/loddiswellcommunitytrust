@@ -40,6 +40,10 @@ export function SendDrawNotificationsButton({
       const r = await sendDrawNotifications(drawId);
       if (r.alreadySent) {
         setResult("This draw was already notified.");
+      } else if (r.failed > 0) {
+        setResult(
+          `Sent to ${r.sent} subscriber${r.sent === 1 ? "" : "s"}; ${r.failed} address${r.failed === 1 ? "" : "es"} could not be delivered to (see email log).`
+        );
       } else {
         setResult(`Sent to ${r.sent} subscriber${r.sent === 1 ? "" : "s"}.`);
       }
