@@ -3,7 +3,8 @@
 import { desc, eq, and, isNotNull } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { lotteryDraws, lotteryTickets } from "@/lib/db/schema";
+import { lotteryDraws, lotteryTicketNumbers, lotteryTickets } from "@/lib/db/schema";
+import { getTicketHoldersForTickets } from "@/actions/lottery-ticket-holders";
 import { getStripe } from "@/lib/stripe";
 import { logAudit } from "@/lib/audit";
 import { auth } from "@/lib/auth";
@@ -75,11 +76,19 @@ export async function getCustomerLotteryEntries() {
   const session = await auth();
   if (!session?.user?.email) redirect("/account/login?callbackUrl=/account/lottery");
 
-  return db
+  const tickets = await db
     .select()
     .from(lotteryTickets)
     .where(eq(lotteryTickets.email, session.user.email.toLowerCase()))
     .orderBy(desc(lotteryTickets.purchaseDate));
+  const holdersByTicket = await getTicketHoldersForTickets(
+    tickets.map((t) => t.id)
+  );
+
+  return tickets.map((ticket) => ({
+    ...ticket,
+    holders: holdersByTicket.get(ticket.id) ?? [],
+  }));
 }
 
 function normaliseMatchValue(value: string) {
@@ -91,10 +100,18 @@ export async function getCustomerLotteryWins() {
   if (!session?.user?.email) redirect("/account/login?callbackUrl=/account/lottery");
 
   const email = session.user.email.toLowerCase();
-  const [entries, draws] = await Promise.all([
+  const [entries, numbers, draws] = await Promise.all([
     db
       .select({ name: lotteryTickets.name, email: lotteryTickets.email })
       .from(lotteryTickets)
+      .where(eq(lotteryTickets.email, email)),
+    db
+      .select({
+        ticketNumber: lotteryTicketNumbers.ticketNumber,
+        holderName: lotteryTicketNumbers.holderName,
+      })
+      .from(lotteryTicketNumbers)
+      .innerJoin(lotteryTickets, eq(lotteryTicketNumbers.ticketId, lotteryTickets.id))
       .where(eq(lotteryTickets.email, email)),
     db
       .select({
@@ -110,11 +127,23 @@ export async function getCustomerLotteryWins() {
   const matchValues = new Set([
     normaliseMatchValue(email),
     ...entries.map((entry) => normaliseMatchValue(entry.name)),
+    ...numbers
+      .map((n) => n.holderName)
+      .filter((n): n is string => Boolean(n))
+      .map(normaliseMatchValue),
   ]);
+  // Ticket numbers are global and never reissued, so a past win on a number
+  // this account has held is theirs even if the winner name was edited.
+  const ownedNumbers = new Set(numbers.map((n) => n.ticketNumber));
 
   return draws.flatMap((draw) =>
     draw.results
-      .filter((result) => matchValues.has(normaliseMatchValue(result.winner)))
+      .filter(
+        (result) =>
+          matchValues.has(normaliseMatchValue(result.winner)) ||
+          (typeof result.ticketNumber === "number" &&
+            ownedNumbers.has(result.ticketNumber))
+      )
       .map((result) => ({
         drawId: draw.id,
         drawDate: draw.drawDate,

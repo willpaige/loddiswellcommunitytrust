@@ -2,7 +2,7 @@
 
 import Papa from "papaparse";
 import { addYears, format } from "date-fns";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { lotteryTicketNumbers, lotteryTickets, lotteryDraws } from "@/lib/db/schema";
 import { auth } from "@/lib/auth";
@@ -364,7 +364,7 @@ export async function drawRandomWinners(
 
   const rows = await db
     .select({
-      name: lotteryTicketNumbers.name,
+      name: sql<string>`coalesce(${lotteryTicketNumbers.holderName}, ${lotteryTicketNumbers.name})`,
       email: lotteryTicketNumbers.email,
       ticketNumber: lotteryTicketNumbers.ticketNumber,
     })
@@ -384,12 +384,17 @@ export async function drawRandomWinners(
     [pool[i], pool[j]] = [pool[j], pool[i]];
   }
 
-  // Walk shuffled list picking unique-by-email winners
+  // Walk shuffled list picking one prize per ticket holder. A holder is a
+  // (payer email, holder name) pair, so a family sharing one email can win
+  // more than once in a draw if they hold separately named tickets.
+  const holderKey = (entry: DrawWinner) =>
+    `${entry.email}|${entry.name.trim().toLowerCase().replace(/\s+/g, " ")}`;
   const winners: DrawWinner[] = [];
   const seen = new Set<string>();
   for (const entry of pool) {
-    if (seen.has(entry.email)) continue;
-    seen.add(entry.email);
+    const key = holderKey(entry);
+    if (seen.has(key)) continue;
+    seen.add(key);
     winners.push(entry);
     if (winners.length >= prizeCount) break;
   }

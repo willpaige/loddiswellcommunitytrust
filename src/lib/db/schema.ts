@@ -296,6 +296,8 @@ export const lotteryTicketNumbers = pgTable(
     ticketNumber: integer("ticket_number").notNull(),
     email: text("email").notNull(),
     name: text("name").notNull(),
+    // Optional per-number holder. null = same person as the paying subscriber.
+    holderName: text("holder_name"),
     active: boolean("active").notNull().default(true),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },

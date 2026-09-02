@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
       custom_fields: [
         {
           key: "full_name",
-          label: { type: "custom", custom: "Full Name" },
+          label: { type: "custom", custom: "Your name (the person paying)" },
           type: "text",
         },
         {

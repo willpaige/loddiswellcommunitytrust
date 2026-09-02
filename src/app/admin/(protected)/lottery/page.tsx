@@ -36,6 +36,7 @@ import {
   type SubscriberRow,
 } from "@/components/admin/lottery-subscribers-table";
 import { getDraws, deleteDraw } from "@/actions/lottery-draws";
+import { getTicketHoldersForTickets } from "@/actions/lottery-ticket-holders";
 
 async function getLotteryStats() {
   const tickets = await db
@@ -43,15 +44,19 @@ async function getLotteryStats() {
     .from(lotteryTickets)
     .orderBy(desc(lotteryTickets.createdAt));
 
+  const holdersByTicket = await getTicketHoldersForTickets(
+    tickets.map((t) => t.id)
+  );
+
   const active = tickets.filter((t) => t.status === "active");
   const totalRevenue = tickets.reduce((sum, t) => sum + t.amount, 0);
   const totalTickets = tickets.reduce((sum, t) => sum + t.quantity, 0);
 
-  return { tickets, active, totalRevenue, totalTickets };
+  return { tickets, holdersByTicket, active, totalRevenue, totalTickets };
 }
 
 export default async function AdminLotteryPage() {
-  const [{ tickets, active, totalRevenue, totalTickets }, draws] =
+  const [{ tickets, holdersByTicket, active, totalRevenue, totalTickets }, draws] =
     await Promise.all([getLotteryStats(), getDraws()]);
 
   const subscriberRows: SubscriberRow[] = tickets.map((t) => {
@@ -85,6 +90,7 @@ export default async function AdminLotteryPage() {
       canCancel: Boolean(
         t.stripeSubscriptionId && t.status === "active" && !t.cancelAtPeriodEnd
       ),
+      holders: holdersByTicket.get(t.id) ?? [],
     };
   });
 

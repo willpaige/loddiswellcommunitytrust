@@ -45,6 +45,8 @@ export async function ensureLotteryTicketNumbers(ticketId: string) {
     await db.insert(lotteryTicketNumbers).values(values);
   }
 
+  // Keep payer name/email in sync. holderName is deliberately untouched so
+  // per-number holder assignments survive webhooks, imports and draws.
   await db
     .update(lotteryTicketNumbers)
     .set({ email: ticket.email, name: ticket.name })

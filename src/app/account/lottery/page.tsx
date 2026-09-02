@@ -7,6 +7,8 @@ import {
   getCustomerLotteryWins,
 } from "@/actions/lottery-portal";
 import { money } from "@/lib/bookings";
+import { customerUpdateTicketHolders } from "@/actions/lottery-ticket-holders";
+import { TicketHoldersDialog } from "@/components/lottery/ticket-holders-dialog";
 import { AccountPortalShell } from "@/components/account/portal-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -107,8 +109,28 @@ export default async function AccountLotteryPage() {
                       Cancellation scheduled at the end of the current period.
                     </p>
                   )}
+                  {entry.holders.length > 0 && (
+                    <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                      {entry.holders.map((h) => (
+                        <li key={h.id}>
+                          <span className="font-mono text-muted-foreground">
+                            #{h.ticketNumber}
+                          </span>{" "}
+                          {h.holderName ?? entry.name}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
                 <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+                  {entry.holders.length > 0 && entry.status === "active" && (
+                    <TicketHoldersDialog
+                      ticketId={entry.id}
+                      payerName={entry.name}
+                      holders={entry.holders}
+                      action={customerUpdateTicketHolders}
+                    />
+                  )}
                   {entry.stripeCustomerId ? (
                     <form action={createCustomerLotteryPortalSession}>
                       <input type="hidden" name="ticketId" value={entry.id} />

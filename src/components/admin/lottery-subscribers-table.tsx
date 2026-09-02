@@ -25,6 +25,11 @@ import {
 import { DeleteButton } from "@/components/admin/delete-button";
 import { CancelSubscriptionButton } from "@/components/admin/cancel-subscription-button";
 import { deleteManualSubscriber } from "@/actions/lottery-admin";
+import {
+  adminUpdateTicketHolders,
+  type TicketHolder,
+} from "@/actions/lottery-ticket-holders";
+import { TicketHoldersDialog } from "@/components/lottery/ticket-holders-dialog";
 
 export type SubscriberRow = {
   id: string;
@@ -38,7 +43,15 @@ export type SubscriberRow = {
   cancelAtPeriodEnd: boolean;
   status: string;
   canCancel: boolean;
+  holders: TicketHolder[];
 };
+
+function holderNames(row: SubscriberRow) {
+  const names = row.holders
+    .map((h) => h.holderName)
+    .filter((n): n is string => Boolean(n));
+  return Array.from(new Set(names));
+}
 
 const statusVariant: Record<
   string,
@@ -78,7 +91,12 @@ export function LotterySubscribersTable({ rows }: Props) {
     return rows.filter((r) => {
       if (status !== "all" && r.status !== status) return false;
       if (plan !== "all" && r.planKey !== plan) return false;
-      if (q && !r.name.toLowerCase().includes(q) && !r.email.toLowerCase().includes(q))
+      if (
+        q &&
+        !r.name.toLowerCase().includes(q) &&
+        !r.email.toLowerCase().includes(q) &&
+        !holderNames(r).some((n) => n.toLowerCase().includes(q))
+      )
         return false;
       return true;
     });
@@ -96,7 +114,7 @@ export function LotterySubscribersTable({ rows }: Props) {
           />
           <Input
             type="search"
-            placeholder="Search by name or email..."
+            placeholder="Search by name, ticket holder or email..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="pl-9"
@@ -172,7 +190,14 @@ export function LotterySubscribersTable({ rows }: Props) {
           <TableBody>
             {filtered.map((t) => (
               <TableRow key={t.id}>
-                <TableCell className="font-medium">{t.name}</TableCell>
+                <TableCell className="font-medium">
+                  {t.name}
+                  {holderNames(t).length > 0 && (
+                    <p className="mt-0.5 text-xs font-normal text-muted-foreground">
+                      Holders: {holderNames(t).join(", ")}
+                    </p>
+                  )}
+                </TableCell>
                 <TableCell className="hidden sm:table-cell text-muted-foreground">
                   {t.email}
                 </TableCell>
@@ -197,6 +222,14 @@ export function LotterySubscribersTable({ rows }: Props) {
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-1">
+                    <TicketHoldersDialog
+                      ticketId={t.id}
+                      payerName={t.name}
+                      holders={t.holders}
+                      action={adminUpdateTicketHolders}
+                      triggerVariant="icon"
+                      triggerLabel="Ticket holders"
+                    />
                     {t.source === "manual" ? (
                       <>
                         <Button

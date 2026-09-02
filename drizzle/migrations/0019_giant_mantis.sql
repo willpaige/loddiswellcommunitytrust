@@ -1,0 +1,1 @@
+ALTER TABLE "lottery_ticket_numbers" ADD COLUMN "holder_name" text;
