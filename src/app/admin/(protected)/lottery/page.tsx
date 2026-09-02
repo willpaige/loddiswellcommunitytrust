@@ -30,10 +30,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { DeleteButton } from "@/components/admin/delete-button";
-import { CancelSubscriptionButton } from "@/components/admin/cancel-subscription-button";
 import { LotteryImportDialog } from "@/components/admin/lottery-import-dialog";
+import {
+  LotterySubscribersTable,
+  type SubscriberRow,
+} from "@/components/admin/lottery-subscribers-table";
 import { getDraws, deleteDraw } from "@/actions/lottery-draws";
-import { deleteManualSubscriber } from "@/actions/lottery-admin";
 
 async function getLotteryStats() {
   const tickets = await db
@@ -48,28 +50,43 @@ async function getLotteryStats() {
   return { tickets, active, totalRevenue, totalTickets };
 }
 
-const statusVariant: Record<
-  string,
-  "default" | "secondary" | "destructive" | "outline"
-> = {
-  active: "default",
-  past_due: "destructive",
-  canceled: "secondary",
-  expired: "secondary",
-  refunded: "outline",
-};
-
-const statusLabel: Record<string, string> = {
-  active: "Active",
-  past_due: "Past due",
-  canceled: "Canceled",
-  expired: "Expired",
-  refunded: "Refunded",
-};
-
 export default async function AdminLotteryPage() {
   const [{ tickets, active, totalRevenue, totalTickets }, draws] =
     await Promise.all([getLotteryStats(), getDraws()]);
+
+  const subscriberRows: SubscriberRow[] = tickets.map((t) => {
+    const planLabel =
+      t.source === "manual"
+        ? "Manual"
+        : t.billingInterval === "month"
+          ? "Monthly"
+          : t.billingInterval === "year"
+            ? "Yearly"
+            : "—";
+    const planKey =
+      t.source === "manual" ? "manual" : (t.billingInterval ?? "unknown");
+    const renews =
+      t.source === "stripe" && t.currentPeriodEnd
+        ? format(t.currentPeriodEnd, "d MMM yyyy")
+        : t.expiryDate
+          ? format(t.expiryDate, "d MMM yyyy")
+          : "—";
+    return {
+      id: t.id,
+      name: t.name,
+      email: t.email,
+      quantity: t.quantity,
+      source: t.source,
+      planLabel,
+      planKey,
+      renews,
+      cancelAtPeriodEnd: t.cancelAtPeriodEnd ?? false,
+      status: t.status,
+      canCancel: Boolean(
+        t.stripeSubscriptionId && t.status === "active" && !t.cancelAtPeriodEnd
+      ),
+    };
+  });
 
   return (
     <div>
@@ -247,113 +264,7 @@ export default async function AdminLotteryPage() {
             </p>
           </CardContent>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead className="hidden sm:table-cell">Email</TableHead>
-                <TableHead>Qty</TableHead>
-                <TableHead>Plan</TableHead>
-                <TableHead className="hidden md:table-cell">Renews</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {tickets.map((t) => {
-                const planLabel =
-                  t.source === "manual"
-                    ? "Manual"
-                    : t.billingInterval === "month"
-                      ? "Monthly"
-                      : t.billingInterval === "year"
-                        ? "Yearly"
-                        : "—";
-                const renews =
-                  t.source === "stripe" && t.currentPeriodEnd
-                    ? format(t.currentPeriodEnd, "d MMM yyyy")
-                    : t.expiryDate
-                      ? format(t.expiryDate, "d MMM yyyy")
-                      : "—";
-                return (
-                  <TableRow key={t.id}>
-                    <TableCell className="font-medium">{t.name}</TableCell>
-                    <TableCell className="hidden sm:table-cell text-muted-foreground">
-                      {t.email}
-                    </TableCell>
-                    <TableCell>{t.quantity}</TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          t.source === "manual" ? "outline" : "secondary"
-                        }
-                      >
-                        {planLabel}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell text-muted-foreground">
-                      {renews}
-                      {t.cancelAtPeriodEnd && (
-                        <p className="text-xs text-copper-600">
-                          Cancels {renews}
-                        </p>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={statusVariant[t.status] ?? "outline"}
-                      >
-                        {statusLabel[t.status] ?? t.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        {t.source === "manual" ? (
-                          <>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              asChild
-                              className="h-8 w-8"
-                            >
-                              <Link
-                                href={`/admin/lottery/manual/${t.id}/edit`}
-                                title="Edit subscriber"
-                              >
-                                <Pencil
-                                  className="h-4 w-4"
-                                  aria-hidden="true"
-                                />
-                              </Link>
-                            </Button>
-                            <DeleteButton
-                              id={t.id}
-                              action={deleteManualSubscriber}
-                              label="Delete subscriber"
-                            />
-                          </>
-                        ) : (
-                          t.stripeSubscriptionId &&
-                          t.status === "active" &&
-                          !t.cancelAtPeriodEnd && (
-                            <CancelSubscriptionButton
-                              id={t.id}
-                              subscriberLabel={t.name}
-                              periodEnd={
-                                t.currentPeriodEnd
-                                  ? format(t.currentPeriodEnd, "d MMM yyyy")
-                                  : undefined
-                              }
-                            />
-                          )
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+          <LotterySubscribersTable rows={subscriberRows} />
         )}
       </Card>
     </div>
