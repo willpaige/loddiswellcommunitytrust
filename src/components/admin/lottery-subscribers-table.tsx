@@ -30,11 +30,14 @@ import {
   type TicketHolder,
 } from "@/actions/lottery-ticket-holders";
 import { TicketHoldersDialog } from "@/components/lottery/ticket-holders-dialog";
+import { EditSubscriberDialog } from "@/components/admin/edit-subscriber-dialog";
 
 export type SubscriberRow = {
   id: string;
   name: string;
   email: string;
+  phone: string;
+  notes: string;
   quantity: number;
   source: string;
   planLabel: string;
@@ -252,13 +255,21 @@ export function LotterySubscribersTable({ rows }: Props) {
                         />
                       </>
                     ) : (
-                      t.canCancel && (
-                        <CancelSubscriptionButton
+                      <>
+                        <EditSubscriberDialog
                           id={t.id}
-                          subscriberLabel={t.name}
-                          periodEnd={t.renews !== "—" ? t.renews : undefined}
+                          name={t.name}
+                          phone={t.phone}
+                          notes={t.notes}
                         />
-                      )
+                        {t.canCancel && (
+                          <CancelSubscriptionButton
+                            id={t.id}
+                            subscriberLabel={t.name}
+                            periodEnd={t.renews !== "—" ? t.renews : undefined}
+                          />
+                        )}
+                      </>
                     )}
                   </div>
                 </TableCell>

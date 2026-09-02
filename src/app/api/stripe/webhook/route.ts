@@ -126,8 +126,9 @@ async function upsertFromSubscription(
         canceledAt: sub.canceled_at ? new Date(sub.canceled_at * 1000) : null,
         ...(status ? { status } : {}),
         ...(email ? { email: email.toLowerCase() } : {}),
-        ...(name ? { name } : {}),
-        ...(phone !== undefined ? { phone } : {}),
+        // name/phone are set from checkout on insert only. After that they
+        // are owned by the admin (see updateStripeSubscriberDetails) so a
+        // subscription update from Stripe must not clobber local edits.
       },
     });
 

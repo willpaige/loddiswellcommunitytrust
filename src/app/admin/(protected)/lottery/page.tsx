@@ -80,6 +80,8 @@ export default async function AdminLotteryPage() {
       id: t.id,
       name: t.name,
       email: t.email,
+      phone: t.phone ?? "",
+      notes: t.notes ?? "",
       quantity: t.quantity,
       source: t.source,
       planLabel,

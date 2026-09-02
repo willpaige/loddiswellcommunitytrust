@@ -161,6 +161,54 @@ export async function updateManualSubscriber(id: string, formData: FormData) {
   redirect("/admin/lottery");
 }
 
+export type SubscriberDetailsInput = {
+  name: string;
+  phone: string;
+  notes: string;
+};
+
+/**
+ * Edit the details we hold locally for a Stripe-backed subscriber. Quantity,
+ * billing and email stay owned by Stripe; the webhook no longer overwrites
+ * name/phone on existing rows, so admin edits stick.
+ */
+export async function updateStripeSubscriberDetails(
+  id: string,
+  input: SubscriberDetailsInput
+) {
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized");
+
+  const name = String(input?.name ?? "").trim().replace(/\s+/g, " ").slice(0, 200);
+  const phone = String(input?.phone ?? "").trim().slice(0, 50) || null;
+  const notes = String(input?.notes ?? "").trim().slice(0, 2000) || null;
+  if (!name) throw new Error("Name is required");
+
+  const [ticket] = await db
+    .select({ id: lotteryTickets.id, email: lotteryTickets.email })
+    .from(lotteryTickets)
+    .where(and(eq(lotteryTickets.id, id), eq(lotteryTickets.source, "stripe")))
+    .limit(1);
+  if (!ticket) throw new Error("Subscriber not found");
+
+  await db
+    .update(lotteryTickets)
+    .set({ name, phone, notes })
+    .where(eq(lotteryTickets.id, id));
+  await upsertCustomerRecord({ email: ticket.email, name, phone });
+  await ensureLotteryTicketNumbers(id);
+
+  await logAudit({
+    action: "update",
+    entity: "lottery",
+    entityId: id,
+    description: `Updated subscriber details: ${name}`,
+  });
+
+  revalidatePath("/admin/lottery");
+  revalidatePath("/account/lottery");
+}
+
 export async function deleteManualSubscriber(id: string) {
   const session = await auth();
   if (!session?.user) throw new Error("Unauthorized");
