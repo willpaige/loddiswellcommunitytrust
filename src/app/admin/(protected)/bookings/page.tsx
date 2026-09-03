@@ -62,15 +62,15 @@ export default async function AdminBookingsPage() {
           <CardTitle>All bookings</CardTitle>
           <CardDescription>Newest bookings first.</CardDescription>
         </CardHeader>
-        <Table className="min-w-[64rem] table-fixed">
+        <Table className="min-w-[60rem] table-fixed">
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[28%] pl-6">Booking</TableHead>
-              <TableHead className="w-[19%]">Customer</TableHead>
-              <TableHead className="w-[11%]">Org / event</TableHead>
+              <TableHead className="w-[30%] pl-6">Booking</TableHead>
+              <TableHead className="w-[20%]">Customer</TableHead>
+              <TableHead className="w-[12%]">Org / event</TableHead>
               <TableHead className="w-[13%]">Payment</TableHead>
               <TableHead className="w-[13%]">Status</TableHead>
-              <TableHead className="w-[16%] pr-6 text-right">Actions</TableHead>
+              <TableHead className="w-[12%] pr-6 text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -141,7 +141,11 @@ export default async function AdminBookingsPage() {
                 <TableCell className="pr-6 text-right align-top">
                   <div className="flex flex-nowrap items-center justify-end gap-1">
                     <Button variant="ghost" size="icon" asChild className="h-8 w-8">
-                      <Link href={`/admin/bookings/${booking.id}/edit`} title="Edit booking">
+                      <Link
+                        href={`/admin/bookings/${booking.id}/edit`}
+                        title="Edit booking"
+                        aria-label={`Edit booking for ${booking.customerName}`}
+                      >
                         <Pencil className="h-4 w-4" aria-hidden="true" />
                       </Link>
                     </Button>

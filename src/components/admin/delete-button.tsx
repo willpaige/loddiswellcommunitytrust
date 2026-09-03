@@ -47,6 +47,7 @@ export function DeleteButton({
           size="icon"
           className="h-8 w-8 text-muted-foreground hover:text-destructive"
           aria-label={label}
+          title={label}
         >
           {loading ? (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -61,7 +62,7 @@ export function DeleteButton({
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>Go back</AlertDialogCancel>
           <AlertDialogAction
             onClick={handleDelete}
             className="bg-destructive text-white hover:bg-destructive/90"
