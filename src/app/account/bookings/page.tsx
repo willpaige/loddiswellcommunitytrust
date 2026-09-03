@@ -73,7 +73,19 @@ export default async function AccountBookingsPage() {
             const canCancel = canCancelWithoutRefund || canCancelWithRefund;
             // Same notice window as cancelling, and only for single bookings paid
             // outright -- series and subscriptions are settled with the Trust.
+            // cancelCustomerBooking only refunds a one-off card payment. Anything
+            // else -- a bank transfer, an invoice, a subscription -- has to be
+            // settled by hand, so the dialog must not promise otherwise.
+            const refundKind: "card" | "manual" | "subscription" | "none" =
+              booking.paidAmount <= 0
+                ? "none"
+                : booking.paymentType === "subscription"
+                  ? "subscription"
+                  : booking.paymentType === "one_off" && booking.stripePaymentIntentId
+                    ? "card"
+                    : "manual";
             const canChange =
+              Boolean(booking.offeringId) &&
               (booking.status === "confirmed" || booking.status === "pending_payment") &&
               booking.paymentType !== "subscription" &&
               booking.recurrence === "none" &&
@@ -108,7 +120,7 @@ export default async function AccountBookingsPage() {
                     )}
                     {bookingBalance(booking) > 0 && booking.status === "confirmed" && (
                       <p className="mt-1 text-sm font-medium text-destructive">
-                        {money(bookingBalance(booking))} still to pay after your change
+                        {money(bookingBalance(booking))} still to pay
                       </p>
                     )}
                     <p className="mt-1 text-sm text-muted-foreground">
@@ -152,11 +164,8 @@ export default async function AccountBookingsPage() {
                         bookingId={booking.id}
                         facilityName={booking.facilityName}
                         schedule={`${formatBookingDate(booking.startDate, "d MMM yyyy, HH:mm")}–${formatBookingDate(booking.endDate, "HH:mm")}`}
-                        refundText={
-                          canCancelWithRefund
-                            ? `${money(booking.paidAmount)} will be refunded to your card.`
-                            : "No payment has been taken, so there is nothing to refund."
-                        }
+                        refundKind={refundKind}
+                        paidAmount={money(booking.paidAmount)}
                       />
                     ) : (
                       <p className="max-w-48 text-sm text-muted-foreground">

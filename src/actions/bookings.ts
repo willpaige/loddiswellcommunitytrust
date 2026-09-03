@@ -322,7 +322,8 @@ async function sendBookingChangedEmail(
 
   const settlementLine = {
     balanced: "Nothing further to pay.",
-    charged: "We have sent a separate email with a link to pay the difference.",
+    charged:
+      "We have emailed you a link for the difference, in case you have not settled it already.",
     invoiced: "We have reissued your invoice for the new total.",
     refunded:
       context.settlement.outcome === "refunded"
@@ -1818,6 +1819,8 @@ export async function getCustomerBookings() {
       paymentType: bookings.paymentType,
       amount: bookings.amount,
       paidAmount: bookings.paidAmount,
+      offeringId: bookings.offeringId,
+      stripePaymentIntentId: bookings.stripePaymentIntentId,
       scheduleType: bookings.scheduleType,
       organisationName: bookings.organisationName,
       startDate: bookings.startDate,
@@ -1950,8 +1953,13 @@ async function loadChangeableBooking(bookingId: string) {
       facilityId: bookings.facilityId,
       facilityName: facilities.name,
       offeringName: bookingOfferings.name,
+      offeringStartTime: bookingOfferings.startTime,
       offeringEndTime: bookingOfferings.endTime,
       offeringCapacity: bookingOfferings.capacity,
+      offeringDurationMinutes: bookingOfferings.durationMinutes,
+      offeringAllowedDays: bookingOfferings.allowedDays,
+      bookableStartTime: facilities.bookableStartTime,
+      bookableEndTime: facilities.bookableEndTime,
     })
     .from(bookings)
     .innerJoin(facilities, eq(bookings.facilityId, facilities.id))
@@ -1995,9 +2003,16 @@ async function quoteBookingChange(booking: ChangeableBooking, start: Date, end: 
       )
     )
     .limit(1);
+  const rate = booking.unitAmount || price?.amount;
+  // A booking with no recorded rate and no surviving price row cannot be priced.
+  // Falling through to zero would refund the customer everything they paid and
+  // leave the booking standing.
+  if (rate === undefined) {
+    throw new Error("This booking has no price set. Please contact the Trust.");
+  }
   const repeatDiscount = await getRepeatDiscountSettings();
   const amount = bookingAmount(
-    booking.unitAmount || price?.amount || 0,
+    rate,
     start,
     end,
     "none",
@@ -2010,6 +2025,51 @@ async function quoteBookingChange(booking: ChangeableBooking, start: Date, end: 
   return { amount, balance: amount - booking.paidAmount };
 }
 
+// The same rules readBookingForm applies to a new booking. The picker only
+// offers valid slots, but this is a public server action: whatever is posted has
+// to satisfy the venue's hours, the offering's days, and its fixed times.
+function validateBookingChange(
+  booking: ChangeableBooking,
+  date: string,
+  time: string,
+  requestedEndTime: string
+) {
+  const start = combineDateAndTime(date, booking.offeringStartTime || time);
+  const end = booking.offeringEndTime
+    ? combineDateAndTime(date, booking.offeringEndTime)
+    : requestedEndTime
+      ? combineDateAndTime(date, requestedEndTime)
+      : addMinutes(start, booking.offeringDurationMinutes ?? 60);
+
+  if (end <= start) throw new Error("The end time must be after the start time.");
+  if (
+    !booking.offeringEndTime &&
+    differenceInHours(end, start) * 60 < (booking.offeringDurationMinutes ?? 60)
+  ) {
+    throw new Error("That booking would be too short.");
+  }
+  const startLimit = timeToMinutes(booking.bookableStartTime);
+  const endLimit = timeToMinutes(booking.bookableEndTime);
+  const sameDay = start.toDateString() === end.toDateString();
+  if (!sameDay || bookingMinuteOfDay(start) < startLimit || bookingMinuteOfDay(end) > endLimit) {
+    throw new Error(
+      `This venue can only be booked between ${booking.bookableStartTime} and ${booking.bookableEndTime}.`
+    );
+  }
+  const allowedDays = booking.offeringAllowedDays ?? [0, 1, 2, 3, 4, 5, 6];
+  if (!allowedDays.includes(start.getUTCDay())) {
+    throw new Error("That booking is not available on that day.");
+  }
+  // Matches getAvailableBookingSlots, which offers from the start of the next
+  // day: an exact now+24h would reject tomorrow-morning slots the picker shows.
+  const earliest = addDays(new Date(), 1);
+  earliest.setHours(0, 0, 0, 0);
+  if (start < earliest) {
+    throw new Error("Bookings must start at least a day from now.");
+  }
+  return { start, end };
+}
+
 export async function previewCustomerBookingChange(
   bookingId: string,
   date: string,
@@ -2017,9 +2077,7 @@ export async function previewCustomerBookingChange(
   endTime: string
 ) {
   const booking = await loadChangeableBooking(bookingId);
-  const start = combineDateAndTime(date, time);
-  const end = combineDateAndTime(date, endTime);
-  if (end <= start) throw new Error("The end time must be after the start time.");
+  const { start, end } = validateBookingChange(booking, date, time, endTime);
   const quote = await quoteBookingChange(booking, start, end);
   return { ...quote, currentAmount: booking.amount, paidAmount: booking.paidAmount };
 }
@@ -2027,15 +2085,12 @@ export async function previewCustomerBookingChange(
 export async function changeCustomerBooking(formData: FormData) {
   const bookingId = String(formData.get("bookingId") || "");
   const booking = await loadChangeableBooking(bookingId);
-  const date = String(formData.get("date") || "");
-  const start = combineDateAndTime(date, String(formData.get("time") || ""));
-  const end = combineDateAndTime(date, String(formData.get("endTime") || ""));
-  if (end <= start) throw new Error("The end time must be after the start time.");
-
-  const earliest = addDays(new Date(), 1);
-  if (start < earliest) {
-    throw new Error("Bookings must start at least a day from now.");
-  }
+  const { start, end } = validateBookingChange(
+    booking,
+    String(formData.get("date") || ""),
+    String(formData.get("time") || ""),
+    String(formData.get("endTime") || "")
+  );
   const previousStart = booking.startDate;
   const previousEnd = booking.endDate;
   if (previousStart.getTime() === start.getTime() && previousEnd.getTime() === end.getTime()) {
@@ -2062,10 +2117,30 @@ export async function changeCustomerBooking(formData: FormData) {
       updatedAt: new Date(),
     })
     .where(eq(bookings.id, bookingId));
-  await db
+  const [movedOccurrence] = await db
     .update(bookingOccurrences)
     .set({ startDate: start, endDate: end, allocatedAmount: amount })
-    .where(eq(bookingOccurrences.bookingId, bookingId));
+    .where(eq(bookingOccurrences.bookingId, bookingId))
+    .returning({ promotionEventId: bookingOccurrences.promotionEventId });
+  // A promoted booking has an events row on the public calendar. Move it too, or
+  // the site keeps advertising the old slot.
+  if (movedOccurrence?.promotionEventId) {
+    await db
+      .update(events)
+      .set({ startDate: start, endDate: end })
+      .where(eq(events.id, movedOccurrence.promotionEventId));
+  }
+  const [bookingEvent] = await db
+    .select({ promotionEventId: bookings.promotionEventId })
+    .from(bookings)
+    .where(eq(bookings.id, bookingId))
+    .limit(1);
+  if (bookingEvent?.promotionEventId && bookingEvent.promotionEventId !== movedOccurrence?.promotionEventId) {
+    await db
+      .update(events)
+      .set({ startDate: start, endDate: end })
+      .where(eq(events.id, bookingEvent.promotionEventId));
+  }
 
   const settlement =
     amount === booking.amount
@@ -2104,6 +2179,10 @@ export async function changeCustomerBooking(formData: FormData) {
   revalidatePath("/account/bookings");
   revalidatePath("/admin/bookings");
   revalidatePath("/booking");
+  // Straight to checkout when the change costs more, rather than asking them to
+  // go and find an email. It is the same Stripe session the email carries, so
+  // abandoning here and paying from the email later cannot charge them twice.
+  if (settlement.outcome === "charged") redirect(settlement.paymentUrl);
   redirect("/account/bookings");
 }
 
@@ -2118,6 +2197,9 @@ export async function payCustomerBookingBalance(formData: FormData) {
       customerEmail: bookings.customerEmail,
       amount: bookings.amount,
       paidAmount: bookings.paidAmount,
+      status: bookings.status,
+      paymentType: bookings.paymentType,
+      invoiceStatus: bookings.invoiceStatus,
     })
     .from(bookings)
     .where(eq(bookings.id, bookingId))
@@ -2127,6 +2209,14 @@ export async function payCustomerBookingBalance(formData: FormData) {
   }
   const balance = booking.amount - booking.paidAmount;
   if (balance <= 0) redirect("/account/bookings");
+  // A card top-up would not touch a Stripe subscription's price, and paying one
+  // alongside an open invoice collects the same money twice.
+  if (booking.status !== "confirmed" || booking.paymentType === "subscription") {
+    throw new Error("Please contact the Trust to settle this booking.");
+  }
+  if (booking.invoiceStatus === "open") {
+    throw new Error("Please pay the invoice we sent you, or contact the Trust.");
+  }
 
   const paymentUrl = await createBookingTopUpCheckoutSession(bookingId, balance);
   redirect(paymentUrl);

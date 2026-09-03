@@ -164,7 +164,7 @@ export function BookingChangeForm({
           </p>
           <p className="mt-2 font-medium">
             {quote.balance > 0
-              ? `${money(quote.balance)} to pay — we will email you a secure payment link.`
+              ? `${money(quote.balance)} to pay — you go straight to checkout when you confirm.`
               : quote.balance < 0
                 ? `${money(-quote.balance)} back to your card, refunded automatically.`
                 : "Nothing further to pay."}
@@ -174,7 +174,7 @@ export function BookingChangeForm({
 
       <div className="flex flex-wrap gap-3">
         <Button type="submit" disabled={unchanged || !date || !time || !endTime}>
-          Confirm change
+          {quote && quote.balance > 0 ? `Confirm and pay ${money(quote.balance)}` : "Confirm change"}
         </Button>
         <Button type="button" variant="outline" asChild>
           <a href="/account/bookings">Back to my bookings</a>
