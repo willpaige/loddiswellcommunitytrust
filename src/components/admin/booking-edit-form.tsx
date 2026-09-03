@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { format } from "date-fns";
+import { bookingDateKey, formatBookingDate } from "@/lib/booking-time";
 import {
   createBookingInvoice,
   getAvailableBookingSlots,
@@ -74,9 +74,9 @@ export function BookingEditForm({
   const router = useRouter();
   const [offeringId, setOfferingId] = useState(booking.offeringId ?? offerings[0]?.offeringId ?? "");
   const [slots, setSlots] = useState<AvailableSlot[]>([]);
-  const [date, setDate] = useState(format(booking.startDate, "yyyy-MM-dd"));
-  const [time, setTime] = useState(format(booking.startDate, "HH:00"));
-  const [endTime, setEndTime] = useState(format(booking.endDate, "HH:00"));
+  const [date, setDate] = useState(bookingDateKey(booking.startDate));
+  const [time, setTime] = useState(formatBookingDate(booking.startDate, "HH:00"));
+  const [endTime, setEndTime] = useState(formatBookingDate(booking.endDate, "HH:00"));
   const [recurrence, setRecurrence] = useState<Recurrence>(booking.recurrence);
   const [repeatCount, setRepeatCount] = useState(booking.repeatCount || 1);
   const [customerGroup, setCustomerGroup] =
@@ -91,12 +91,12 @@ export function BookingEditForm({
   const selectedOffering = offerings.find((offering) => offering.offeringId === offeringId);
   const selectedDateSlot = slots.find((slot) => slot.date === date);
   const availableTimes = useMemo(() => {
-    const current = format(booking.startDate, "yyyy-MM-dd") === date ? [format(booking.startDate, "HH:00")] : [];
+    const current = bookingDateKey(booking.startDate) === date ? [formatBookingDate(booking.startDate, "HH:00")] : [];
     return Array.from(new Set([...(selectedDateSlot?.times ?? []), ...current])).sort();
   }, [booking.startDate, date, selectedDateSlot?.times]);
   const availableEndTimes = useMemo(() => {
-    const current = format(booking.startDate, "yyyy-MM-dd") === date && time === format(booking.startDate, "HH:00")
-      ? [format(booking.endDate, "HH:00")]
+    const current = bookingDateKey(booking.startDate) === date && time === formatBookingDate(booking.startDate, "HH:00")
+      ? [formatBookingDate(booking.endDate, "HH:00")]
       : [];
     return Array.from(new Set([...(selectedDateSlot?.endTimesByStart?.[time] ?? []), ...current])).sort();
   }, [booking.endDate, booking.startDate, date, selectedDateSlot?.endTimesByStart, time]);

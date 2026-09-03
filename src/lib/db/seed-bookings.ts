@@ -2,7 +2,9 @@ import { and, gte, inArray, like, lt, ne, notInArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { bookingOccurrences, bookings, facilities } from "./schema";
 
-process.env.TZ = "Europe/London";
+// Booking times are UK wall-clock values stored as UTC (see src/lib/booking-time.ts),
+// so seed in UTC to match what the app writes.
+process.env.TZ = "UTC";
 
 const CUSTOMER_EMAIL = "hello@loddiswellcommunitytrust.org";
 const SEED_PREFIX = "seed-2026-27";

@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BookingOccurrenceActions } from "@/components/admin/booking-occurrence-actions";
-import { format } from "date-fns";
+import { formatBookingDate } from "@/lib/booking-time";
 import { money } from "@/lib/bookings";
 import { CustomBookingScheduleEditor } from "@/components/admin/custom-booking-schedule-editor";
 
@@ -65,7 +65,7 @@ export default async function AdminEditBookingPage({
                 <li key={occurrence.id} className="flex flex-wrap items-center justify-between gap-3 p-3">
                   <div>
                     <p className={occurrence.status === "cancelled" ? "line-through text-muted-foreground" : "font-medium"}>
-                      {format(occurrence.startDate, "d MMMM yyyy, HH:mm")}–{format(occurrence.endDate, "HH:mm")}
+                      {formatBookingDate(occurrence.startDate, "d MMMM yyyy, HH:mm")}–{formatBookingDate(occurrence.endDate, "HH:mm")}
                     </p>
                     <p className="text-sm text-muted-foreground">
                       {money(occurrence.allocatedAmount)} · {occurrence.status}

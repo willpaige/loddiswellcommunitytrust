@@ -1,4 +1,4 @@
-import { format } from "date-fns";
+import { formatBookingDate } from "@/lib/booking-time";
 import { Ban, Pencil } from "lucide-react";
 import {
   deleteBookingBlock,
@@ -204,7 +204,7 @@ export default async function AdminBookingSettingsPage() {
                       <div>
                         <p className="font-medium">{block.title}</p>
                         <p className="text-sm text-muted-foreground">
-                          {block.facilityName} · {format(block.startDate, "d MMM yyyy, HH:mm")}–{format(block.endDate, "d MMM yyyy, HH:mm")}
+                          {block.facilityName} · {formatBookingDate(block.startDate, "d MMM yyyy, HH:mm")}–{formatBookingDate(block.endDate, "d MMM yyyy, HH:mm")}
                         </p>
                         {block.seriesId && block.recurrence && (
                           <p className="mt-1 text-sm text-muted-foreground">

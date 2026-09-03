@@ -1,6 +1,7 @@
 "use server";
 
-import { addDays, format, startOfDay } from "date-fns";
+import { addDays, startOfDay } from "date-fns";
+import { formatBookingDate } from "@/lib/booking-time";
 import { and, asc, desc, eq, gte, inArray, isNotNull, lt } from "drizzle-orm";
 import { put, del } from "@vercel/blob";
 import { revalidatePath } from "next/cache";
@@ -456,7 +457,7 @@ export async function sendDueRequirementReminders() {
         .filter((q) => !q.answered || (q.needsDocument && q.documents.length === 0))
         .map((q) => (!q.answered ? `- ${q.label}` : `- ${q.documentLabel || q.label} (document needed)`))
         .join("\n");
-      const startDate = format(booking.startDate, "d MMM yyyy, HH:mm");
+      const startDate = formatBookingDate(booking.startDate, "d MMM yyyy, HH:mm");
       const bookingUrl = `${appUrl}/account/bookings/${booking.id}/requirements`;
 
       const customerResult = await sendTemplateEmail({

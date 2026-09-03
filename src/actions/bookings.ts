@@ -34,6 +34,11 @@ import {
 import { sendTemplateEmail } from "@/lib/email/send";
 import { upsertCustomerRecord } from "@/actions/customer-records";
 import { validateBookingDiscountCode } from "@/actions/booking-discount-codes";
+import {
+  bookingMinuteOfDay,
+  formatBookingDate,
+  parseBookingDateTime,
+} from "@/lib/booking-time";
 
 const publicFacilitySlugs = ["village-hall", "pavilion", "tennis-courts"];
 const defaultRepeatDiscount = {
@@ -42,17 +47,11 @@ const defaultRepeatDiscount = {
 };
 const defaultCancellationNoticeHours = 48;
 
-function parseLocalDateTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) throw new Error("Invalid date");
-  return date;
-}
-
 function combineDateAndTime(dateValue: string, timeValue: string) {
   if (!/^(?:[01]\d|2[0-3]):00$/.test(timeValue)) {
     throw new Error("Start times must be on the hour.");
   }
-  return parseLocalDateTime(`${dateValue}T${timeValue}`);
+  return parseBookingDateTime(dateValue, timeValue);
 }
 
 function timeToMinutes(timeValue: string) {
@@ -61,10 +60,6 @@ function timeToMinutes(timeValue: string) {
   }
   const [hours] = timeValue.split(":").map(Number);
   return hours * 60;
-}
-
-function dateMinutes(date: Date) {
-  return date.getHours() * 60 + date.getMinutes();
 }
 
 function addMinutes(date: Date, minutes: number) {
@@ -298,7 +293,7 @@ async function bookingScheduleText(bookingId: string) {
     .where(and(eq(bookingOccurrences.bookingId, bookingId), ne(bookingOccurrences.status, "cancelled")))
     .orderBy(asc(bookingOccurrences.startDate));
   return rows
-    .map((row) => `${format(row.startDate, "d MMM yyyy, HH:mm")}–${format(row.endDate, "HH:mm")}`)
+    .map((row) => `${formatBookingDate(row.startDate, "d MMM yyyy, HH:mm")}–${formatBookingDate(row.endDate, "HH:mm")}`)
     .join("; ");
 }
 
@@ -346,8 +341,8 @@ async function getBookingEmailData(bookingId: string) {
       customerPhone: booking.customerPhone || "Not provided",
       notes: booking.notes || "None",
       amount: moneyText(booking.amount),
-      startDate: format(booking.startDate, "d MMM yyyy, HH:mm"),
-      endTime: format(booking.endDate, "HH:mm"),
+      startDate: formatBookingDate(booking.startDate, "d MMM yyyy, HH:mm"),
+      endTime: formatBookingDate(booking.endDate, "HH:mm"),
       schedule,
       facilityName: booking.facilityName,
       offeringName: booking.offeringName || "Booking",
@@ -396,8 +391,8 @@ async function createBookingStripeCheckoutSession(bookingId: string) {
             name: `${booking.facilityName} - ${booking.offeringName || "Booking"}`,
             description:
               booking.paymentType === "subscription"
-                ? `${recurrenceLabel(booking.recurrence)} session, billed ${recurrenceLabel(billingInterval).toLowerCase()}, from ${format(booking.startDate, "d MMM yyyy")}`
-                : schedule || format(booking.startDate, "d MMM yyyy, HH:mm"),
+                ? `${recurrenceLabel(booking.recurrence)} session, billed ${recurrenceLabel(billingInterval).toLowerCase()}, from ${formatBookingDate(booking.startDate, "d MMM yyyy")}`
+                : schedule || formatBookingDate(booking.startDate, "d MMM yyyy, HH:mm"),
           },
           ...(booking.paymentType === "subscription"
             ? { recurring: stripeRecurringPriceData(billingInterval) }
@@ -547,7 +542,7 @@ export async function createBookingInvoice(bookingId: string) {
     customer: customerId,
     currency: "gbp",
     amount: booking.amount,
-    description: `${booking.facilityName} - ${booking.offeringName || "Booking"} · ${schedule || format(booking.startDate, "d MMM yyyy, HH:mm")}`,
+    description: `${booking.facilityName} - ${booking.offeringName || "Booking"} · ${schedule || formatBookingDate(booking.startDate, "d MMM yyyy, HH:mm")}`,
   });
 
   const invoice = await stripe.invoices.create(
@@ -900,7 +895,7 @@ export async function extendSubscriptionBookingOccurrences(bookingId?: string) {
         conflicts.push({
           booking: sub.customerName,
           facility: sub.facilityName,
-          date: format(range.startDate, "d MMM yyyy, HH:mm"),
+          date: formatBookingDate(range.startDate, "d MMM yyyy, HH:mm"),
         });
       }
     }
@@ -1223,8 +1218,8 @@ async function readBookingForm(formData: FormData) {
 
   const startLimit = timeToMinutes(facility.bookableStartTime);
   const endLimit = timeToMinutes(facility.bookableEndTime);
-  const startMinutes = dateMinutes(start);
-  const endMinutes = dateMinutes(end);
+  const startMinutes = bookingMinuteOfDay(start);
+  const endMinutes = bookingMinuteOfDay(end);
   const sameDay = start.toDateString() === end.toDateString();
   if (!sameDay || startMinutes < startLimit || endMinutes > endLimit) {
     throw new Error(
@@ -1608,10 +1603,10 @@ export async function createBookingCheckout(formData: FormData) {
             name: `${facility[0]?.name || "Facility"} - ${offering.name}`,
             description:
               recurrence !== "none" && repeatPaymentMode === "subscription"
-                ? `${recurrenceLabel(recurrence)} booking from ${format(start, "d MMM yyyy")}`
+                ? `${recurrenceLabel(recurrence)} booking from ${formatBookingDate(start, "d MMM yyyy")}`
                 : recurrence !== "none"
-                  ? `${repeatCount} ${recurrenceLabel(recurrence).toLowerCase()} bookings from ${format(start, "d MMM yyyy")}`
-                : format(start, "d MMM yyyy, HH:mm"),
+                  ? `${repeatCount} ${recurrenceLabel(recurrence).toLowerCase()} bookings from ${formatBookingDate(start, "d MMM yyyy")}`
+                : formatBookingDate(start, "d MMM yyyy, HH:mm"),
           },
           ...(recurrence !== "none" && repeatPaymentMode === "subscription"
             ? { recurring: stripeRecurringPriceData(recurrence) }
@@ -2798,7 +2793,7 @@ export async function cancelAdminBookingOccurrence(formData: FormData) {
     action: "delete",
     entity: "booking",
     entityId: row.bookingId,
-    description: `Cancelled booking session on ${format(row.occurrence.startDate, "d MMM yyyy, HH:mm")}`,
+    description: `Cancelled booking session on ${formatBookingDate(row.occurrence.startDate, "d MMM yyyy, HH:mm")}`,
     metadata: { occurrenceId, refundStatus, refundAmount: row.occurrence.allocatedAmount },
   });
   revalidatePath("/admin/bookings");

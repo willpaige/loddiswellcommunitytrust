@@ -6,11 +6,11 @@ import {
   eachDayOfInterval,
   endOfMonth,
   format,
-  isSameDay,
   startOfMonth,
   startOfWeek,
   endOfWeek,
 } from "date-fns";
+import { bookingDateKey, formatBookingDate } from "@/lib/booking-time";
 import { Plus } from "lucide-react";
 import { ManualBookingDialog } from "@/components/admin/manual-booking-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -95,7 +95,8 @@ export function AvailabilityCalendar({
         </div>
         <div className="grid grid-cols-7 border-l">
           {days.map((day) => {
-            const dayItems = items.filter((item) => isSameDay(item.startDate, day));
+            const dayKey = format(day, "yyyy-MM-dd");
+            const dayItems = items.filter((item) => bookingDateKey(item.startDate) === dayKey);
             const outsideMonth = day.getMonth() !== monthStart.getMonth();
             return (
               <button
@@ -148,7 +149,7 @@ export function AvailabilityCalendar({
                         </Badge>
                       </div>
                       <div className="mt-1 truncate text-muted-foreground">
-                        {format(item.startDate, "HH:mm")} - {format(item.endDate, "HH:mm")} · {item.title}
+                        {formatBookingDate(item.startDate, "HH:mm")} - {formatBookingDate(item.endDate, "HH:mm")} · {item.title}
                       </div>
                     </div>
                   ))}

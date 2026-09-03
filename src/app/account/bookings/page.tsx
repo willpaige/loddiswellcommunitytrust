@@ -1,4 +1,5 @@
-import { differenceInHours, format } from "date-fns";
+import { differenceInHours } from "date-fns";
+import { formatBookingDate } from "@/lib/booking-time";
 import Link from "next/link";
 import { CalendarDays } from "lucide-react";
 import {
@@ -84,8 +85,8 @@ export default async function AccountBookingsPage() {
                       {needsInfo && <Badge variant="destructive">Action needed</Badge>}
                     </div>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      {booking.offeringName || "Booking"} · {format(booking.startDate, "d MMM yyyy, HH:mm")} to{" "}
-                      {format(booking.endDate, "HH:mm")}
+                      {booking.offeringName || "Booking"} · {formatBookingDate(booking.startDate, "d MMM yyyy, HH:mm")} to{" "}
+                      {formatBookingDate(booking.endDate, "HH:mm")}
                     </p>
                     {booking.organisationName && (
                       <p className="mt-1 text-sm text-muted-foreground">{booking.organisationName}</p>

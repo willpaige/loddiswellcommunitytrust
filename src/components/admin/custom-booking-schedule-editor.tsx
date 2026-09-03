@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { format } from "date-fns";
+import { bookingDateKey, formatBookingDate } from "@/lib/booking-time";
 import { getAvailableBookingSlots, saveCustomBookingOccurrence } from "@/actions/bookings";
 import { AvailableDatePicker } from "@/components/booking/available-date-picker";
 import { AvailableTimePicker } from "@/components/booking/available-time-picker";
@@ -114,12 +114,12 @@ export function CustomBookingScheduleEditor({
               variant="outline"
               onClick={() => {
                 setOccurrenceId(item.id);
-                setDate(format(item.startDate, "yyyy-MM-dd"));
-                setTime(format(item.startDate, "HH:mm"));
-                setEndTime(format(item.endDate, "HH:mm"));
+                setDate(bookingDateKey(item.startDate));
+                setTime(formatBookingDate(item.startDate, "HH:mm"));
+                setEndTime(formatBookingDate(item.endDate, "HH:mm"));
               }}
             >
-              {format(item.startDate, "d MMM, HH:mm")}
+              {formatBookingDate(item.startDate, "d MMM, HH:mm")}
             </Button>
           ))}
         </div>

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { format } from "date-fns";
+import { formatBookingDate } from "@/lib/booking-time";
 import { CalendarDays, Ticket } from "lucide-react";
 import { getCustomerBookings } from "@/actions/bookings";
 import { getCustomerLotteryEntries } from "@/actions/lottery-portal";
@@ -45,8 +45,8 @@ export default async function AccountOverviewPage() {
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {nextBooking.offeringName || "Booking"} ·{" "}
-                  {format(nextBooking.startDate, "d MMM yyyy, HH:mm")} to{" "}
-                  {format(nextBooking.endDate, "HH:mm")}
+                  {formatBookingDate(nextBooking.startDate, "d MMM yyyy, HH:mm")} to{" "}
+                  {formatBookingDate(nextBooking.endDate, "HH:mm")}
                 </p>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {money(nextBooking.amount)}

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { format } from "date-fns";
+import { formatBookingDate } from "@/lib/booking-time";
 import { ArrowLeft } from "lucide-react";
 import { getCustomerBookingRequirements } from "@/actions/booking-requirements";
 import { Button } from "@/components/ui/button";
@@ -38,7 +38,7 @@ export default async function BookingRequirementsPage({
       <div className="mb-6">
         <h2 className="font-serif text-2xl">{data.booking.facilityName}</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          {format(data.booking.startDate, "d MMM yyyy, HH:mm")}
+          {formatBookingDate(data.booking.startDate, "d MMM yyyy, HH:mm")}
         </p>
       </div>
 

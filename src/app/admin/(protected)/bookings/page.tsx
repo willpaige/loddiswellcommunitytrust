@@ -1,4 +1,5 @@
-import { differenceInHours, format } from "date-fns";
+import { differenceInHours } from "date-fns";
+import { formatBookingDate } from "@/lib/booking-time";
 import Link from "next/link";
 import { Pencil } from "lucide-react";
 import { deleteAdminBooking, getAdminBookingOccurrences, getAdminBookingSetup, getAdminBookings } from "@/actions/bookings";
@@ -78,14 +79,14 @@ export default async function AdminBookingsPage() {
                 <TableCell className="pl-6">
                   <p className="font-medium">{booking.facilityName}</p>
                   <p className="text-sm text-muted-foreground">
-                    {booking.offeringName || "Booking"} · {format(booking.startDate, "d MMM yyyy, HH:mm")}
+                    {booking.offeringName || "Booking"} · {formatBookingDate(booking.startDate, "d MMM yyyy, HH:mm")}
                   </p>
                   {booking.scheduleType === "custom" && (
                     <ul className="mt-2 space-y-1 border-l-2 border-copper-200 pl-3">
                       {occurrencesByBooking.get(booking.id)?.map((occurrence) => (
                         <li key={occurrence.id} className="flex items-center gap-2 text-xs">
                           <span className={occurrence.status === "cancelled" ? "line-through text-muted-foreground" : ""}>
-                            {format(occurrence.startDate, "d MMM, HH:mm")}–{format(occurrence.endDate, "HH:mm")}
+                            {formatBookingDate(occurrence.startDate, "d MMM, HH:mm")}–{formatBookingDate(occurrence.endDate, "HH:mm")}
                             {occurrence.allocatedAmount > 0 && ` · ${money(occurrence.allocatedAmount)}`}
                           </span>
                           {occurrence.refundStatus === "due" && <Badge variant="destructive">Refund due</Badge>}
