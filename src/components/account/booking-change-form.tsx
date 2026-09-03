@@ -164,7 +164,7 @@ export function BookingChangeForm({
           </p>
           <p className="mt-2 font-medium">
             {quote.balance > 0
-              ? `${money(quote.balance)} to pay — you go straight to checkout when you confirm.`
+              ? `${money(quote.balance)} to pay. Your new time is confirmed as soon as the payment goes through — until then you keep the booking you have.`
               : quote.balance < 0
                 ? `${money(-quote.balance)} back to your card, refunded automatically.`
                 : "Nothing further to pay."}

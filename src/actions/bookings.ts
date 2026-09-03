@@ -1747,7 +1747,28 @@ export async function confirmStripeBooking(sessionId: string) {
     .from(bookings)
     .where(eq(bookings.stripeCheckoutSessionId, sessionId))
     .limit(1);
-  if (!booking) return null;
+  if (!booking) {
+    // A change or top-up session belongs to no booking by checkout id. The
+    // webhook is what applies it; this is the backstop for when the customer
+    // lands back before it arrives. Both paths are idempotent.
+    const session = await getStripe().checkout.sessions.retrieve(sessionId);
+    if (
+      session.payment_status === "paid" &&
+      session.metadata?.type === "booking_change" &&
+      session.metadata.bookingId
+    ) {
+      await applyPaidBookingChange(
+        session.metadata.bookingId,
+        {
+          start: new Date(session.metadata.startIso),
+          end: new Date(session.metadata.endIso),
+          amount: Number(session.metadata.newAmount),
+        },
+        session.amount_total ?? 0
+      );
+    }
+    return null;
+  }
 
   const checkoutSession = await getStripe().checkout.sessions.retrieve(sessionId);
   if (
@@ -2107,6 +2128,19 @@ export async function changeCustomerBooking(formData: FormData) {
   );
 
   const { amount } = await quoteBookingChange(booking, start, end);
+
+  // A change that costs more than has been paid is applied only once it is paid
+  // for. Holding the bigger slot on an unpaid balance would let a customer
+  // shorten a booking, take the refund, and stretch it straight back out again.
+  if (booking.status === "confirmed" && amount > booking.paidAmount) {
+    const paymentUrl = await createBookingChangeCheckoutSession(
+      bookingId,
+      amount - booking.paidAmount,
+      { start, end, amount }
+    );
+    redirect(paymentUrl);
+  }
+
   await db
     .update(bookings)
     .set({
@@ -2117,30 +2151,11 @@ export async function changeCustomerBooking(formData: FormData) {
       updatedAt: new Date(),
     })
     .where(eq(bookings.id, bookingId));
-  const [movedOccurrence] = await db
+  await db
     .update(bookingOccurrences)
     .set({ startDate: start, endDate: end, allocatedAmount: amount })
-    .where(eq(bookingOccurrences.bookingId, bookingId))
-    .returning({ promotionEventId: bookingOccurrences.promotionEventId });
-  // A promoted booking has an events row on the public calendar. Move it too, or
-  // the site keeps advertising the old slot.
-  if (movedOccurrence?.promotionEventId) {
-    await db
-      .update(events)
-      .set({ startDate: start, endDate: end })
-      .where(eq(events.id, movedOccurrence.promotionEventId));
-  }
-  const [bookingEvent] = await db
-    .select({ promotionEventId: bookings.promotionEventId })
-    .from(bookings)
-    .where(eq(bookings.id, bookingId))
-    .limit(1);
-  if (bookingEvent?.promotionEventId && bookingEvent.promotionEventId !== movedOccurrence?.promotionEventId) {
-    await db
-      .update(events)
-      .set({ startDate: start, endDate: end })
-      .where(eq(events.id, bookingEvent.promotionEventId));
-  }
+    .where(eq(bookingOccurrences.bookingId, bookingId));
+  await moveBookingPromotionEvent(bookingId, start, end);
 
   const settlement =
     amount === booking.amount
@@ -3092,6 +3107,172 @@ async function createBookingTopUpCheckoutSession(bookingId: string, amount: numb
   });
   if (!checkoutSession.url) throw new Error("Stripe did not return a checkout URL.");
   return checkoutSession.url;
+}
+
+async function createBookingChangeCheckoutSession(
+  bookingId: string,
+  balance: number,
+  target: { start: Date; end: Date; amount: number }
+) {
+  const [booking] = await db
+    .select({
+      customerEmail: bookings.customerEmail,
+      facilityName: facilities.name,
+    })
+    .from(bookings)
+    .innerJoin(facilities, eq(bookings.facilityId, facilities.id))
+    .where(eq(bookings.id, bookingId))
+    .limit(1);
+  if (!booking) throw new Error("Booking not found.");
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+  const checkoutSession = await getStripe().checkout.sessions.create({
+    mode: "payment",
+    payment_method_types: ["card"],
+    customer_email: booking.customerEmail,
+    line_items: [
+      {
+        quantity: 1,
+        price_data: {
+          currency: "gbp",
+          unit_amount: balance,
+          product_data: {
+            name: `${booking.facilityName} - booking change`,
+            description: `${formatBookingDate(target.start, "d MMM yyyy, HH:mm")}–${formatBookingDate(target.end, "HH:mm")}`,
+          },
+        },
+      },
+    ],
+    metadata: {
+      type: "booking_change",
+      bookingId,
+      startIso: target.start.toISOString(),
+      endIso: target.end.toISOString(),
+      newAmount: String(target.amount),
+    },
+    success_url: `${appUrl}/booking/success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${appUrl}/account/bookings`,
+  });
+  if (!checkoutSession.url) throw new Error("Stripe did not return a checkout URL.");
+  return checkoutSession.url;
+}
+
+// Applies a change the customer has just paid for. Idempotent: a webhook retry,
+// or the success page racing the webhook, finds the booking already moved and
+// does nothing. If the slot went while they were paying, the booking stays put
+// and the payment shows in admin as refundable rather than vanishing.
+export async function applyPaidBookingChange(
+  bookingId: string,
+  target: { start: Date; end: Date; amount: number },
+  amountPaid: number
+) {
+  const [booking] = await db
+    .select({
+      id: bookings.id,
+      startDate: bookings.startDate,
+      endDate: bookings.endDate,
+      amount: bookings.amount,
+      facilityId: bookings.facilityId,
+      offeringId: bookings.offeringId,
+      status: bookings.status,
+    })
+    .from(bookings)
+    .where(eq(bookings.id, bookingId))
+    .limit(1);
+  if (!booking || booking.status === "cancelled") return;
+  if (
+    booking.startDate.getTime() === target.start.getTime() &&
+    booking.endDate.getTime() === target.end.getTime() &&
+    booking.amount === target.amount
+  ) {
+    return;
+  }
+
+  await db
+    .update(bookings)
+    .set({
+      paidAmount: sql`${bookings.paidAmount} + ${amountPaid}`,
+      updatedAt: new Date(),
+    })
+    .where(eq(bookings.id, bookingId));
+
+  const [offering] = await db
+    .select({ capacity: bookingOfferings.capacity })
+    .from(bookingOfferings)
+    .where(eq(bookingOfferings.id, booking.offeringId ?? ""))
+    .limit(1);
+  try {
+    await assertAvailable(
+      booking.facilityId,
+      offering?.capacity ?? 1,
+      [{ startDate: target.start, endDate: target.end }],
+      bookingId
+    );
+  } catch {
+    await logAudit({
+      action: "update",
+      entity: "booking",
+      entityId: bookingId,
+      description: `Paid change to ${formatBookingDate(target.start, "d MMM yyyy, HH:mm")} could not be applied — the slot was taken. ${moneyText(amountPaid)} is refundable.`,
+    });
+    revalidatePath("/admin/bookings");
+    return;
+  }
+
+  const previousStart = booking.startDate;
+  const previousEnd = booking.endDate;
+  await db
+    .update(bookings)
+    .set({
+      startDate: target.start,
+      endDate: target.end,
+      amount: target.amount,
+      changeSeq: sql`${bookings.changeSeq} + 1`,
+      updatedAt: new Date(),
+    })
+    .where(eq(bookings.id, bookingId));
+  await db
+    .update(bookingOccurrences)
+    .set({ startDate: target.start, endDate: target.end, allocatedAmount: target.amount })
+    .where(eq(bookingOccurrences.bookingId, bookingId));
+  await moveBookingPromotionEvent(bookingId, target.start, target.end);
+  await sendBookingChangedEmail(bookingId, {
+    previousStart,
+    previousEnd,
+    settlement: { outcome: "balanced" },
+  });
+  await logAudit({
+    action: "update",
+    entity: "booking",
+    entityId: bookingId,
+    description: `Customer paid ${moneyText(amountPaid)} and changed booking to ${formatBookingDate(target.start, "d MMM yyyy, HH:mm")}–${formatBookingDate(target.end, "HH:mm")}`,
+  });
+  revalidatePath("/account/bookings");
+  revalidatePath("/admin/bookings");
+  revalidatePath("/booking");
+  revalidatePath("/events");
+}
+
+// A promoted booking appears on the public calendar. When it moves, the event
+// moves with it, or the site keeps advertising the old slot.
+async function moveBookingPromotionEvent(bookingId: string, start: Date, end: Date) {
+  const [booking] = await db
+    .select({ promotionEventId: bookings.promotionEventId })
+    .from(bookings)
+    .where(eq(bookings.id, bookingId))
+    .limit(1);
+  const occurrences = await db
+    .select({ promotionEventId: bookingOccurrences.promotionEventId })
+    .from(bookingOccurrences)
+    .where(eq(bookingOccurrences.bookingId, bookingId));
+  const eventIds = new Set(
+    [booking?.promotionEventId, ...occurrences.map((row) => row.promotionEventId)].filter(
+      (id): id is string => Boolean(id)
+    )
+  );
+  for (const eventId of eventIds) {
+    await db.update(events).set({ startDate: start, endDate: end }).where(eq(events.id, eventId));
+  }
 }
 
 export type BookingSettlement =

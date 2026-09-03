@@ -3,6 +3,7 @@ import { getStripe } from "@/lib/stripe";
 import { db } from "@/lib/db";
 import { bookingOccurrences, bookings, lotteryTickets } from "@/lib/db/schema";
 import {
+  applyPaidBookingChange,
   createPromotionEventForBooking,
   extendSubscriptionBookingOccurrences,
   sendBookingConfirmedEmails,
@@ -182,6 +183,18 @@ export async function POST(req: NextRequest) {
         // A top-up settles the difference after a booking changed, so it adds to
         // what has been paid rather than replacing it, and leaves the booking's
         // original payment references alone.
+        if (session.metadata?.type === "booking_change" && session.metadata.bookingId) {
+          await applyPaidBookingChange(
+            session.metadata.bookingId,
+            {
+              start: new Date(session.metadata.startIso),
+              end: new Date(session.metadata.endIso),
+              amount: Number(session.metadata.newAmount),
+            },
+            session.amount_total ?? 0
+          );
+          break;
+        }
         if (session.metadata?.type === "booking_topup" && session.metadata.bookingId) {
           await db
             .update(bookings)
