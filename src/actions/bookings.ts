@@ -25,6 +25,7 @@ import {
 } from "@/lib/db/schema";
 import { getStripe } from "@/lib/stripe";
 import {
+  bookingBalance,
   customerGroups,
   recurrenceLabel,
   recurrenceOptions,
@@ -3490,17 +3491,27 @@ export async function recordBookingSettlement(formData: FormData) {
   await requireAdmin();
   const id = String(formData.get("bookingId") || "");
   const [booking] = await db
-    .select({ amount: bookings.amount, paidAmount: bookings.paidAmount })
+    .select({
+      amount: bookings.amount,
+      paidAmount: bookings.paidAmount,
+      status: bookings.status,
+    })
     .from(bookings)
     .where(eq(bookings.id, id))
     .limit(1);
   if (!booking) throw new Error("Booking not found.");
-  const balance = booking.amount - booking.paidAmount;
+  const balance = bookingBalance(booking);
   if (balance === 0) return;
 
+  // Clearing the balance means matching what has been paid to what is owed. A
+  // cancelled booking owes nothing, so settling it means the money has gone
+  // back; anything else is settled by the price being covered.
   await db
     .update(bookings)
-    .set({ paidAmount: booking.amount, updatedAt: new Date() })
+    .set({
+      paidAmount: booking.status === "cancelled" ? 0 : booking.amount,
+      updatedAt: new Date(),
+    })
     .where(eq(bookings.id, id));
   await logAudit({
     action: "update",
