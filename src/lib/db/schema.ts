@@ -398,6 +398,16 @@ export const bookings = pgTable(
     discountCode: text("discount_code"),
     discountPercent: integer("discount_percent").notNull().default(0),
     discountAmount: integer("discount_amount").notNull().default(0),
+    // `amount` is what the booking costs, `paidAmount` what has actually been
+    // settled. They only differ once a booking is changed after payment: a
+    // positive balance is owed by the customer, a negative one is refundable.
+    paidAmount: integer("paid_amount").notNull().default(0),
+    // The rate this booking was sold at, so rescheduling reprices against the
+    // price the customer agreed to rather than the current price list.
+    unitAmount: integer("unit_amount").notNull().default(0),
+    pricingPercent: integer("pricing_percent").notNull().default(0),
+    // Bumped per applied change; keys the Stripe idempotency of its settlement.
+    changeSeq: integer("change_seq").notNull().default(0),
     startDate: timestamp("start_date", { mode: "date" }).notNull(),
     endDate: timestamp("end_date", { mode: "date" }).notNull(),
     recurrence: text("recurrence", {

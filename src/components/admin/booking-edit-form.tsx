@@ -88,6 +88,26 @@ export function BookingEditForm({
   const [invoiceBusy, setInvoiceBusy] = useState(false);
   const [invoiceError, setInvoiceError] = useState<string | null>(null);
 
+  // Changing the date or start time used to drop the end time to the earliest
+  // one on offer, quietly shortening the booking. Keep the length the customer
+  // booked whenever that end is still free, and only fall back when it is not.
+  function keepDuration(
+    slot: AvailableSlot | undefined,
+    nextTime: string,
+    currentTime: string,
+    currentEndTime: string
+  ) {
+    const options = slot?.endTimesByStart?.[nextTime] ?? [];
+    const hours = (time: string) => Number(time.slice(0, 2));
+    const duration = hours(currentEndTime) - hours(currentTime);
+    if (duration > 0) {
+      const wanted = `${String(hours(nextTime) + duration).padStart(2, "0")}:00`;
+      if (options.includes(wanted)) return wanted;
+    }
+    if (options.includes(currentEndTime)) return currentEndTime;
+    return options[0] ?? "";
+  }
+
   const selectedOffering = offerings.find((offering) => offering.offeringId === offeringId);
   const selectedDateSlot = slots.find((slot) => slot.date === date);
   const availableTimes = useMemo(() => {
@@ -207,10 +227,12 @@ export function BookingEditForm({
               disabled={customSchedule || loadingSlots}
               onChange={(nextDate) => {
                 const nextSlot = slots.find((slot) => slot.date === nextDate);
-                const nextTime = nextSlot?.times[0] ?? "";
+                const nextTime = nextSlot?.times.includes(time)
+                  ? time
+                  : nextSlot?.times[0] ?? "";
                 setDate(nextDate);
                 setTime(nextTime);
-                setEndTime(nextSlot?.endTimesByStart?.[nextTime]?.[0] ?? "");
+                setEndTime(keepDuration(nextSlot, nextTime, time, endTime));
               }}
             />
           </div>
@@ -225,8 +247,8 @@ export function BookingEditForm({
               endTime={selectedOffering?.facilityBookableEndTime ?? "23:00"}
               disabled={customSchedule || loadingSlots || availableTimes.length === 0}
               onChange={(nextTime) => {
+                setEndTime(keepDuration(selectedDateSlot, nextTime, time, endTime));
                 setTime(nextTime);
-                setEndTime(selectedDateSlot?.endTimesByStart?.[nextTime]?.[0] ?? "");
               }}
             />
           </div>
