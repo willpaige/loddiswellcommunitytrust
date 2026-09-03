@@ -3,17 +3,23 @@ import { formatBookingDate } from "@/lib/booking-time";
 import Link from "next/link";
 import { CalendarDays } from "lucide-react";
 import {
-  cancelCustomerBooking,
   getCustomerBookingCancellationSettings,
   getCustomerBookings,
+  payCustomerBookingBalance,
   retryCustomerBookingPayment,
 } from "@/actions/bookings";
-import { money, recurrenceIntervalLabel, recurrenceLabel } from "@/lib/bookings";
+import {
+  bookingBalance,
+  money,
+  recurrenceIntervalLabel,
+  recurrenceLabel,
+} from "@/lib/bookings";
 import { getBookingRequirementStatuses } from "@/lib/booking-requirements";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AccountPortalShell } from "@/components/account/portal-shell";
+import { CustomerCancelBookingButton } from "@/components/account/cancel-booking-button";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +71,15 @@ export default async function AccountBookingsPage() {
               differenceInHours(booking.startDate, new Date()) >=
                 cancellationSettings.noticeHours;
             const canCancel = canCancelWithoutRefund || canCancelWithRefund;
+            // Same notice window as cancelling, and only for single bookings paid
+            // outright -- series and subscriptions are settled with the Trust.
+            const canChange =
+              (booking.status === "confirmed" || booking.status === "pending_payment") &&
+              booking.paymentType !== "subscription" &&
+              booking.recurrence === "none" &&
+              booking.scheduleType === "regular" &&
+              differenceInHours(booking.startDate, new Date()) >=
+                cancellationSettings.noticeHours;
             const requirement = requirementStatuses.get(booking.id);
             const needsInfo =
               booking.status !== "cancelled" &&
@@ -91,6 +106,11 @@ export default async function AccountBookingsPage() {
                     {booking.organisationName && (
                       <p className="mt-1 text-sm text-muted-foreground">{booking.organisationName}</p>
                     )}
+                    {bookingBalance(booking) > 0 && booking.status === "confirmed" && (
+                      <p className="mt-1 text-sm font-medium text-destructive">
+                        {money(bookingBalance(booking))} still to pay after your change
+                      </p>
+                    )}
                     <p className="mt-1 text-sm text-muted-foreground">
                       {money(booking.amount)} ·{" "}
                       {booking.paymentType === "subscription"
@@ -106,19 +126,38 @@ export default async function AccountBookingsPage() {
                         </Link>
                       </Button>
                     )}
+                    {bookingBalance(booking) > 0 && booking.status === "confirmed" && (
+                      <form action={payCustomerBookingBalance}>
+                        <input type="hidden" name="bookingId" value={booking.id} />
+                        <Button type="submit">
+                          Pay {money(bookingBalance(booking))}
+                        </Button>
+                      </form>
+                    )}
                     {canRetryPayment && (
                       <form action={retryCustomerBookingPayment}>
                         <input type="hidden" name="bookingId" value={booking.id} />
                         <Button type="submit">Pay now</Button>
                       </form>
                     )}
+                    {canChange && (
+                      <Button asChild variant="outline">
+                        <Link href={`/account/bookings/${booking.id}/change`}>
+                          Change date or time
+                        </Link>
+                      </Button>
+                    )}
                     {canCancel ? (
-                      <form action={cancelCustomerBooking}>
-                        <input type="hidden" name="bookingId" value={booking.id} />
-                        <Button type="submit" variant="outline">
-                          {canCancelWithRefund ? "Cancel and refund" : "Cancel booking"}
-                        </Button>
-                      </form>
+                      <CustomerCancelBookingButton
+                        bookingId={booking.id}
+                        facilityName={booking.facilityName}
+                        schedule={`${formatBookingDate(booking.startDate, "d MMM yyyy, HH:mm")}–${formatBookingDate(booking.endDate, "HH:mm")}`}
+                        refundText={
+                          canCancelWithRefund
+                            ? `${money(booking.paidAmount)} will be refunded to your card.`
+                            : "No payment has been taken, so there is nothing to refund."
+                        }
+                      />
                     ) : (
                       <p className="max-w-48 text-sm text-muted-foreground">
                         {booking.status === "cancelled"

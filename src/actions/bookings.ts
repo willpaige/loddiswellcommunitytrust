@@ -1817,6 +1817,8 @@ export async function getCustomerBookings() {
       status: bookings.status,
       paymentType: bookings.paymentType,
       amount: bookings.amount,
+      paidAmount: bookings.paidAmount,
+      scheduleType: bookings.scheduleType,
       organisationName: bookings.organisationName,
       startDate: bookings.startDate,
       endDate: bookings.endDate,
@@ -1917,6 +1919,234 @@ export async function cancelCustomerBooking(formData: FormData) {
   await sendBookingCancellationEmails(id);
 
   revalidatePath("/account/bookings");
+}
+
+type ChangeableBooking = Awaited<ReturnType<typeof loadChangeableBooking>>;
+
+// A booking a customer is allowed to move themselves. Everything else -- someone
+// else's booking, a subscription, a series, a booking inside the notice window --
+// is refused here rather than in the UI, so the rules hold whatever is posted.
+async function loadChangeableBooking(bookingId: string) {
+  const session = await auth();
+  if (!session?.user?.email) throw new Error("Unauthorized");
+
+  const [booking] = await db
+    .select({
+      id: bookings.id,
+      status: bookings.status,
+      paymentType: bookings.paymentType,
+      recurrence: bookings.recurrence,
+      scheduleType: bookings.scheduleType,
+      customerEmail: bookings.customerEmail,
+      customerGroup: bookings.customerGroup,
+      customerName: bookings.customerName,
+      amount: bookings.amount,
+      paidAmount: bookings.paidAmount,
+      unitAmount: bookings.unitAmount,
+      pricingPercent: bookings.pricingPercent,
+      startDate: bookings.startDate,
+      endDate: bookings.endDate,
+      offeringId: bookings.offeringId,
+      facilityId: bookings.facilityId,
+      facilityName: facilities.name,
+      offeringName: bookingOfferings.name,
+      offeringEndTime: bookingOfferings.endTime,
+      offeringCapacity: bookingOfferings.capacity,
+    })
+    .from(bookings)
+    .innerJoin(facilities, eq(bookings.facilityId, facilities.id))
+    .leftJoin(bookingOfferings, eq(bookings.offeringId, bookingOfferings.id))
+    .where(eq(bookings.id, bookingId))
+    .limit(1);
+
+  if (!booking || booking.customerEmail !== session.user.email.toLowerCase()) {
+    throw new Error("Booking not found.");
+  }
+  if (!booking.offeringId) throw new Error("This booking cannot be changed online.");
+  if (booking.status !== "confirmed" && booking.status !== "pending_payment") {
+    throw new Error("This booking cannot be changed online.");
+  }
+  if (booking.paymentType === "subscription") {
+    throw new Error("Please contact the Trust to change a subscription booking.");
+  }
+  if (booking.recurrence !== "none" || booking.scheduleType !== "regular") {
+    throw new Error("Please contact the Trust to change a repeating booking.");
+  }
+
+  const cancellationSettings = await getCancellationSettings();
+  if (differenceInHours(booking.startDate, new Date()) < cancellationSettings.noticeHours) {
+    throw new Error(
+      `Bookings can only be changed online at least ${cancellationSettings.noticeHours} hours before the start time.`
+    );
+  }
+  return booking;
+}
+
+// Reprices a move on the rate the booking was sold at. Bookings taken before
+// rates were recorded fall back to the current list.
+async function quoteBookingChange(booking: ChangeableBooking, start: Date, end: Date) {
+  const [price] = await db
+    .select({ amount: bookingPrices.amount })
+    .from(bookingPrices)
+    .where(
+      and(
+        eq(bookingPrices.offeringId, booking.offeringId!),
+        eq(bookingPrices.customerGroup, booking.customerGroup)
+      )
+    )
+    .limit(1);
+  const repeatDiscount = await getRepeatDiscountSettings();
+  const amount = bookingAmount(
+    booking.unitAmount || price?.amount || 0,
+    start,
+    end,
+    "none",
+    !booking.offeringEndTime,
+    repeatDiscount,
+    "upfront",
+    1,
+    booking.unitAmount ? booking.pricingPercent : 0
+  );
+  return { amount, balance: amount - booking.paidAmount };
+}
+
+export async function previewCustomerBookingChange(
+  bookingId: string,
+  date: string,
+  time: string,
+  endTime: string
+) {
+  const booking = await loadChangeableBooking(bookingId);
+  const start = combineDateAndTime(date, time);
+  const end = combineDateAndTime(date, endTime);
+  if (end <= start) throw new Error("The end time must be after the start time.");
+  const quote = await quoteBookingChange(booking, start, end);
+  return { ...quote, currentAmount: booking.amount, paidAmount: booking.paidAmount };
+}
+
+export async function changeCustomerBooking(formData: FormData) {
+  const bookingId = String(formData.get("bookingId") || "");
+  const booking = await loadChangeableBooking(bookingId);
+  const date = String(formData.get("date") || "");
+  const start = combineDateAndTime(date, String(formData.get("time") || ""));
+  const end = combineDateAndTime(date, String(formData.get("endTime") || ""));
+  if (end <= start) throw new Error("The end time must be after the start time.");
+
+  const earliest = addDays(new Date(), 1);
+  if (start < earliest) {
+    throw new Error("Bookings must start at least a day from now.");
+  }
+  const previousStart = booking.startDate;
+  const previousEnd = booking.endDate;
+  if (previousStart.getTime() === start.getTime() && previousEnd.getTime() === end.getTime()) {
+    redirect("/account/bookings");
+  }
+
+  // The booking's own hours are excluded, so it can move within the time it
+  // already holds; anything else on the facility still blocks it.
+  await assertAvailable(
+    booking.facilityId,
+    booking.offeringCapacity ?? 1,
+    [{ startDate: start, endDate: end }],
+    bookingId
+  );
+
+  const { amount } = await quoteBookingChange(booking, start, end);
+  await db
+    .update(bookings)
+    .set({
+      startDate: start,
+      endDate: end,
+      amount,
+      changeSeq: sql`${bookings.changeSeq} + 1`,
+      updatedAt: new Date(),
+    })
+    .where(eq(bookings.id, bookingId));
+  await db
+    .update(bookingOccurrences)
+    .set({ startDate: start, endDate: end, allocatedAmount: amount })
+    .where(eq(bookingOccurrences.bookingId, bookingId));
+
+  const settlement =
+    amount === booking.amount
+      ? ({ outcome: "balanced" } as BookingSettlement)
+      : await settleBookingBalance(bookingId);
+  await sendBookingChangedEmail(bookingId, { previousStart, previousEnd, settlement });
+
+  const managerEmail = await getBookingManagerEmail();
+  if (managerEmail) {
+    await sendTemplateEmail({
+      key: "booking_manager_notification",
+      to: managerEmail,
+      variables: {
+        customerName: booking.customerName,
+        customerEmail: booking.customerEmail,
+        customerPhone: "",
+        facilityName: booking.facilityName,
+        offeringName: booking.offeringName || "Booking",
+        startDate: formatBookingDate(start, "d MMM yyyy, HH:mm"),
+        endTime: formatBookingDate(end, "HH:mm"),
+        schedule: `Changed by the customer from ${formatBookingDate(previousStart, "d MMM yyyy, HH:mm")}–${formatBookingDate(previousEnd, "HH:mm")}`,
+        amount: moneyText(amount),
+        notes: "",
+      },
+      relatedEntityType: "booking",
+      relatedEntityId: bookingId,
+    });
+  }
+
+  await logAudit({
+    action: "update",
+    entity: "booking",
+    entityId: bookingId,
+    description: `Customer changed booking to ${formatBookingDate(start, "d MMM yyyy, HH:mm")}–${formatBookingDate(end, "HH:mm")}`,
+  });
+  revalidatePath("/account/bookings");
+  revalidatePath("/admin/bookings");
+  revalidatePath("/booking");
+  redirect("/account/bookings");
+}
+
+// Lets a customer settle what a change left owing without hunting for the email.
+export async function payCustomerBookingBalance(formData: FormData) {
+  const session = await auth();
+  if (!session?.user?.email) throw new Error("Unauthorized");
+  const bookingId = String(formData.get("bookingId") || "");
+  const [booking] = await db
+    .select({
+      id: bookings.id,
+      customerEmail: bookings.customerEmail,
+      amount: bookings.amount,
+      paidAmount: bookings.paidAmount,
+    })
+    .from(bookings)
+    .where(eq(bookings.id, bookingId))
+    .limit(1);
+  if (!booking || booking.customerEmail !== session.user.email.toLowerCase()) {
+    throw new Error("Booking not found.");
+  }
+  const balance = booking.amount - booking.paidAmount;
+  if (balance <= 0) redirect("/account/bookings");
+
+  const paymentUrl = await createBookingTopUpCheckoutSession(bookingId, balance);
+  redirect(paymentUrl);
+}
+
+export async function getCustomerBookingChange(bookingId: string) {
+  const booking = await loadChangeableBooking(bookingId);
+  const slots = await getAvailableBookingSlots(booking.offeringId!, bookingId);
+  return {
+    booking: {
+      id: booking.id,
+      facilityName: booking.facilityName,
+      offeringName: booking.offeringName,
+      startDate: booking.startDate,
+      endDate: booking.endDate,
+      amount: booking.amount,
+      paidAmount: booking.paidAmount,
+    },
+    slots,
+  };
 }
 
 export async function getAdminBookings() {

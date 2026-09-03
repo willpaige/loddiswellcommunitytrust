@@ -71,6 +71,25 @@ export function bookingBalance(booking: { amount: number; paidAmount: number }) 
   return booking.amount - booking.paidAmount;
 }
 
+// Picking a new start should keep the length the customer booked, not collapse
+// it to the shortest slot on offer. Falls back to the current end, then to the
+// earliest available.
+export function keepBookingDuration(
+  endTimeOptions: string[],
+  nextTime: string,
+  currentTime: string,
+  currentEndTime: string
+) {
+  const hour = (time: string) => Number(time.slice(0, 2));
+  const duration = hour(currentEndTime) - hour(currentTime);
+  if (duration > 0) {
+    const wanted = `${String(hour(nextTime) + duration).padStart(2, "0")}:00`;
+    if (endTimeOptions.includes(wanted)) return wanted;
+  }
+  if (endTimeOptions.includes(currentEndTime)) return currentEndTime;
+  return endTimeOptions[0] ?? "";
+}
+
 export function money(amount: number) {
   return new Intl.NumberFormat("en-GB", {
     style: "currency",

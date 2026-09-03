@@ -10,7 +10,14 @@ import {
   recordBookingSettlement,
   updateAdminBooking,
 } from "@/actions/bookings";
-import { bookingBalance, customerGroups, money, recurrenceOptions, type Recurrence } from "@/lib/bookings";
+import {
+  bookingBalance,
+  customerGroups,
+  keepBookingDuration,
+  money,
+  recurrenceOptions,
+  type Recurrence,
+} from "@/lib/bookings";
 import { AvailableDatePicker } from "@/components/booking/available-date-picker";
 import { AvailableTimePicker } from "@/components/booking/available-time-picker";
 import { Button } from "@/components/ui/button";
@@ -100,15 +107,12 @@ export function BookingEditForm({
     currentTime: string,
     currentEndTime: string
   ) {
-    const options = slot?.endTimesByStart?.[nextTime] ?? [];
-    const hours = (time: string) => Number(time.slice(0, 2));
-    const duration = hours(currentEndTime) - hours(currentTime);
-    if (duration > 0) {
-      const wanted = `${String(hours(nextTime) + duration).padStart(2, "0")}:00`;
-      if (options.includes(wanted)) return wanted;
-    }
-    if (options.includes(currentEndTime)) return currentEndTime;
-    return options[0] ?? "";
+    return keepBookingDuration(
+      slot?.endTimesByStart?.[nextTime] ?? [],
+      nextTime,
+      currentTime,
+      currentEndTime
+    );
   }
 
   const balance = bookingBalance(booking);
