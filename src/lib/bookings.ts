@@ -65,6 +65,12 @@ export const bookingHourOptions = Array.from({ length: 17 }, (_, index) => {
   };
 });
 
+// Positive means the customer still owes it, negative means it is refundable.
+// Only ever non-zero once a booking has been changed after it was paid for.
+export function bookingBalance(booking: { amount: number; paidAmount: number }) {
+  return booking.amount - booking.paidAmount;
+}
+
 export function money(amount: number) {
   return new Intl.NumberFormat("en-GB", {
     style: "currency",

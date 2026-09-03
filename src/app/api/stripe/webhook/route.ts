@@ -184,6 +184,9 @@ export async function POST(req: NextRequest) {
             .update(bookings)
             .set({
               status: "confirmed",
+              // What Stripe actually collected, so a later change to the booking
+              // has a real balance to settle against.
+              paidAmount: session.amount_total ?? undefined,
               stripeCheckoutSessionId: session.id,
               stripePaymentIntentId:
                 typeof session.payment_intent === "string"
@@ -290,6 +293,7 @@ export async function POST(req: NextRequest) {
             .set({
               status: "confirmed",
               invoiceStatus: "paid",
+              paidAmount: invoice.amount_paid ?? undefined,
               stripePaymentIntentId:
                 typeof paymentIntent === "string"
                   ? paymentIntent

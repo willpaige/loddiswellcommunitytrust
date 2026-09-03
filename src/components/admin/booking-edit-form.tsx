@@ -9,7 +9,7 @@ import {
   markBookingInvoicePaidOutOfBand,
   updateAdminBooking,
 } from "@/actions/bookings";
-import { customerGroups, recurrenceOptions, type Recurrence } from "@/lib/bookings";
+import { bookingBalance, customerGroups, money, recurrenceOptions, type Recurrence } from "@/lib/bookings";
 import { AvailableDatePicker } from "@/components/booking/available-date-picker";
 import { AvailableTimePicker } from "@/components/booking/available-time-picker";
 import { Button } from "@/components/ui/button";
@@ -45,6 +45,8 @@ type Booking = {
   billingLine2: string | null;
   billingCity: string | null;
   billingPostcode: string | null;
+  amount: number;
+  paidAmount: number;
   stripeInvoiceId: string | null;
   invoiceStatus: "draft" | "open" | "paid" | "uncollectible" | "void" | null;
   invoiceHostedUrl: string | null;
@@ -108,6 +110,7 @@ export function BookingEditForm({
     return options[0] ?? "";
   }
 
+  const balance = bookingBalance(booking);
   const selectedOffering = offerings.find((offering) => offering.offeringId === offeringId);
   const selectedDateSlot = slots.find((slot) => slot.date === date);
   const availableTimes = useMemo(() => {
@@ -390,6 +393,32 @@ export function BookingEditForm({
         </Button>
       </div>
     </form>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Payment</CardTitle>
+          <CardDescription>
+            What this booking costs against what has actually been collected.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
+          <p>
+            <span className="text-muted-foreground">Price </span>
+            {money(booking.amount)}
+          </p>
+          <p>
+            <span className="text-muted-foreground">Paid </span>
+            {money(booking.paidAmount)}
+          </p>
+          {balance !== 0 && (
+            <p className={balance > 0 ? "font-medium text-destructive" : "font-medium text-primary"}>
+              {balance > 0
+                ? `${money(balance)} outstanding`
+                : `${money(-balance)} to refund`}
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

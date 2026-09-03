@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Pencil } from "lucide-react";
 import { deleteAdminBooking, getAdminBookingOccurrences, getAdminBookingSetup, getAdminBookings } from "@/actions/bookings";
 import { getBookingRequirementStatuses } from "@/lib/booking-requirements";
-import { money } from "@/lib/bookings";
+import { bookingBalance, money } from "@/lib/bookings";
 import { ManualBookingDialog } from "@/components/admin/manual-booking-dialog";
 import { CancelBookingButton } from "@/components/admin/cancel-booking-button";
 import { BookingOccurrenceActions } from "@/components/admin/booking-occurrence-actions";
@@ -111,6 +111,17 @@ export default async function AdminBookingsPage() {
                 <TableCell>
                   <p>{money(booking.amount)}</p>
                   <p className="text-sm text-muted-foreground">{booking.paymentType}</p>
+                  {bookingBalance(booking) !== 0 && (
+                    <p
+                      className={`text-sm font-medium ${
+                        bookingBalance(booking) > 0 ? "text-destructive" : "text-primary"
+                      }`}
+                    >
+                      {bookingBalance(booking) > 0
+                        ? `${money(bookingBalance(booking))} outstanding`
+                        : `${money(-bookingBalance(booking))} to refund`}
+                    </p>
+                  )}
                   {booking.invoiceStatus && (
                     <Badge
                       variant={booking.invoiceStatus === "paid" ? "default" : "outline"}

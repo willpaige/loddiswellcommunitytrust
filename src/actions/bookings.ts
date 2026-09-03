@@ -604,7 +604,7 @@ export async function markBookingInvoicePaidOutOfBand(bookingId: string) {
   await getStripe().invoices.pay(booking.stripeInvoiceId, { paid_out_of_band: true });
   await db
     .update(bookings)
-    .set({ invoiceStatus: "paid", updatedAt: new Date() })
+    .set({ invoiceStatus: "paid", paidAmount: sql`${bookings.amount}`, updatedAt: new Date() })
     .where(eq(bookings.id, bookingId));
 
   await logAudit({
@@ -1253,6 +1253,33 @@ async function readBookingForm(formData: FormData) {
   };
 }
 
+// The percentage bookingAmount will actually apply. Persisted on the booking so
+// a later change reprices on the deal the customer agreed to, not today's list.
+function bookingPricingPercent(
+  recurrence: Recurrence,
+  repeatDiscount: { threshold: number; percent: number },
+  repeatPaymentMode: "subscription" | "upfront",
+  repeatCount: number,
+  customerDiscountPercent = 0
+) {
+  const repeatEligible =
+    recurrence !== "none" &&
+    repeatPaymentMode === "upfront" &&
+    repeatCount >= repeatDiscount.threshold &&
+    repeatDiscount.percent > 0;
+  return Math.max(customerDiscountPercent, repeatEligible ? repeatDiscount.percent : 0);
+}
+
+// Splits a booking's total across its sessions so cancelling one refunds its
+// share. Any rounding remainder lands on the first session.
+function allocateAcrossOccurrences(total: number, count: number) {
+  if (count <= 0) return [];
+  const each = Math.floor(total / count);
+  return Array.from({ length: count }, (_, index) =>
+    index === 0 ? total - each * (count - 1) : each
+  );
+}
+
 function bookingAmount(
   baseAmount: number,
   start: Date,
@@ -1568,6 +1595,14 @@ export async function createBookingCheckout(formData: FormData) {
     discountCode: codeResult?.code ?? null,
     discountPercent: appliedDiscountPercent,
     discountAmount: Math.max(0, undiscountedAmount - amount),
+    unitAmount: price.amount,
+    pricingPercent: bookingPricingPercent(
+      recurrence,
+      repeatDiscount,
+      repeatPaymentMode,
+      repeatCount,
+      effectiveDiscountPercent
+    ),
     startDate: start,
     endDate: end,
     recurrence,
@@ -1576,13 +1611,15 @@ export async function createBookingCheckout(formData: FormData) {
     promotionUrl,
     requirementSetId: offering.requirementSetId ?? null,
   });
+  const allocations = allocateAcrossOccurrences(amount, dates.length);
   await db.insert(bookingOccurrences).values(
-    dates.map((date) => ({
+    dates.map((date, index) => ({
       bookingId,
       facilityId: offering.facilityId,
       startDate: date.startDate,
       endDate: date.endDate,
       status: isFree ? ("confirmed" as const) : ("pending_payment" as const),
+      allocatedAmount: allocations[index] ?? 0,
     }))
   );
 
@@ -1670,6 +1707,7 @@ export async function confirmStripeBooking(sessionId: string) {
       .update(bookings)
       .set({
         status: "confirmed",
+        paidAmount: checkoutSession.amount_total ?? booking.amount,
         stripePaymentIntentId:
           typeof checkoutSession.payment_intent === "string"
             ? checkoutSession.payment_intent
@@ -1806,6 +1844,7 @@ export async function cancelCustomerBooking(formData: FormData) {
 
     if (booking.paymentType === "one_off" && booking.stripePaymentIntentId) {
       await getStripe().refunds.create({ payment_intent: booking.stripePaymentIntentId });
+      await db.update(bookings).set({ paidAmount: 0 }).where(eq(bookings.id, id));
     }
     if (booking.paymentType === "subscription" && booking.stripeSubscriptionId) {
       await getStripe().subscriptions.cancel(booking.stripeSubscriptionId);
@@ -1836,6 +1875,7 @@ export async function getAdminBookings() {
       stripePaymentIntentId: bookings.stripePaymentIntentId,
       invoiceStatus: bookings.invoiceStatus,
       amount: bookings.amount,
+      paidAmount: bookings.paidAmount,
       customerName: bookings.customerName,
       organisationName: bookings.organisationName,
       customerEmail: bookings.customerEmail,
@@ -1872,6 +1912,7 @@ export async function getAdminBooking(id: string) {
       status: bookings.status,
       paymentType: bookings.paymentType,
       amount: bookings.amount,
+      paidAmount: bookings.paidAmount,
       customerGroup: bookings.customerGroup,
       customerName: bookings.customerName,
       organisationName: bookings.organisationName,
@@ -2430,6 +2471,10 @@ export async function createManualBooking(formData: FormData) {
         ? repeatDiscount.percent : 0
     ),
     discountAmount: Math.max(0, manualSubtotal - finalAmount),
+    unitAmount: customPriceRaw ?? price.amount,
+    pricingPercent: regularEffectivePercent,
+    // Nothing to collect means it is settled the moment it is created.
+    paidAmount: willCharge ? 0 : finalAmount,
     startDate: dates[0].startDate,
     endDate: dates[0].endDate,
     recurrence,
@@ -2447,7 +2492,10 @@ export async function createManualBooking(formData: FormData) {
       startDate: date.startDate,
       endDate: date.endDate,
       status: willCharge ? ("pending_payment" as const) : ("confirmed" as const),
-      allocatedAmount: customAmounts?.allocations[index] ?? 0,
+      allocatedAmount:
+        customAmounts?.allocations[index] ??
+        allocateAcrossOccurrences(finalAmount, dates.length)[index] ??
+        0,
     }))
   );
 
@@ -2468,7 +2516,11 @@ export async function createManualBooking(formData: FormData) {
 export async function updateAdminBooking(id: string, formData: FormData) {
   await requireAdmin();
   const [currentBooking] = await db
-    .select({ scheduleType: bookings.scheduleType })
+    .select({
+      scheduleType: bookings.scheduleType,
+      unitAmount: bookings.unitAmount,
+      pricingPercent: bookings.pricingPercent,
+    })
     .from(bookings)
     .where(eq(bookings.id, id))
     .limit(1);
@@ -2538,8 +2590,11 @@ export async function updateAdminBooking(id: string, formData: FormData) {
       billingCity: String(formData.get("billingCity") || "").trim() || null,
       billingPostcode: String(formData.get("billingPostcode") || "").trim() || null,
       notes: String(formData.get("notes") || "").trim() || null,
+      // Reprice on the rate this booking was sold at, so a later change to the
+      // price list never rewrites what an existing customer agreed to pay. Only
+      // bookings taken before rates were recorded fall back to the list.
       amount: bookingAmount(
-        price.amount,
+        currentBooking.unitAmount || price.amount,
         start,
         end,
         recurrence,
@@ -2547,7 +2602,7 @@ export async function updateAdminBooking(id: string, formData: FormData) {
         repeatDiscount,
         repeatPaymentMode,
         repeatCount,
-        customerDiscountPercent
+        currentBooking.unitAmount ? currentBooking.pricingPercent : customerDiscountPercent
       ),
       startDate: start,
       endDate: end,
@@ -2558,18 +2613,38 @@ export async function updateAdminBooking(id: string, formData: FormData) {
     })
     .where(eq(bookings.id, id));
 
+  const [repriced] = await db
+    .select({ amount: bookings.amount, paidAmount: bookings.paidAmount })
+    .from(bookings)
+    .where(eq(bookings.id, id))
+    .limit(1);
+  const newAllocations = allocateAcrossOccurrences(repriced?.amount ?? 0, dates.length);
   await db.delete(bookingOccurrences).where(eq(bookingOccurrences.bookingId, id));
   await db.insert(bookingOccurrences).values(
-    dates.map((date) => ({
+    dates.map((date, index) => ({
       bookingId: id,
       facilityId: offering.facilityId,
       startDate: date.startDate,
       endDate: date.endDate,
       status: "confirmed" as const,
+      allocatedAmount: newAllocations[index] ?? 0,
     }))
   );
+  await db
+    .update(bookings)
+    .set({ changeSeq: sql`${bookings.changeSeq} + 1` })
+    .where(eq(bookings.id, id));
 
-  await logAudit({ action: "update", entity: "booking", entityId: id, description: "Updated booking" });
+  const balance = (repriced?.amount ?? 0) - (repriced?.paidAmount ?? 0);
+  await logAudit({
+    action: "update",
+    entity: "booking",
+    entityId: id,
+    description:
+      balance === 0
+        ? "Updated booking"
+        : `Updated booking · ${balance > 0 ? "outstanding" : "refundable"} ${moneyText(Math.abs(balance))}`,
+  });
   revalidatePath("/admin/bookings");
   revalidatePath(`/admin/bookings/${id}/edit`);
   revalidatePath("/booking");
@@ -2602,6 +2677,7 @@ export async function cancelAdminBooking(formData: FormData) {
       { payment_intent: booking.stripePaymentIntentId },
       { idempotencyKey: `admin-booking-refund-${id}` }
     );
+    await db.update(bookings).set({ paidAmount: 0 }).where(eq(bookings.id, id));
   }
   if (booking?.paymentType === "subscription" && booking.stripeSubscriptionId) {
     await getStripe().subscriptions.cancel(booking.stripeSubscriptionId);
@@ -2775,6 +2851,10 @@ export async function cancelAdminBookingOccurrence(formData: FormData) {
       cancelledAt: remaining.length === 0 ? new Date() : null,
       repeatCount: remaining.length,
       amount: Math.max(0, row.amount - row.occurrence.allocatedAmount),
+      paidAmount:
+        refundStatus === "refunded"
+          ? sql`greatest(0, ${bookings.paidAmount} - ${row.occurrence.allocatedAmount})`
+          : undefined,
       startDate: remaining[0]?.startDate ?? row.occurrence.startDate,
       endDate: remaining[0]?.endDate ?? row.occurrence.endDate,
       stripeCheckoutSessionId: row.bookingStatus === "pending_payment" ? null : undefined,
