@@ -109,7 +109,7 @@ export function BookingEditForm({
     if (!offeringId) return;
     let cancelled = false;
     setLoadingSlots(true);
-    getAvailableBookingSlots(offeringId)
+    getAvailableBookingSlots(offeringId, booking.id)
       .then((nextSlots) => {
         if (!cancelled) setSlots(nextSlots);
       })
@@ -119,7 +119,7 @@ export function BookingEditForm({
     return () => {
       cancelled = true;
     };
-  }, [offeringId]);
+  }, [booking.id, offeringId]);
 
   async function handleGenerateInvoice() {
     setInvoiceBusy(true);

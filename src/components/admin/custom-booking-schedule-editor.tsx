@@ -41,7 +41,7 @@ export function CustomBookingScheduleEditor({
   }, [endTime, occurrenceId, selectedSlot?.endTimesByStart, time]);
 
   useEffect(() => {
-    getAvailableBookingSlots(offeringId).then((next) => {
+    getAvailableBookingSlots(offeringId, bookingId).then((next) => {
       setSlots(next);
       const first = next[0];
       const firstTime = first?.times[0] ?? "";
@@ -49,7 +49,7 @@ export function CustomBookingScheduleEditor({
       setTime(firstTime);
       setEndTime(first?.endTimesByStart?.[firstTime]?.[0] ?? "");
     });
-  }, [offeringId]);
+  }, [bookingId, offeringId]);
 
   function reset() {
     setOccurrenceId("");

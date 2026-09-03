@@ -62,15 +62,15 @@ export default async function AdminBookingsPage() {
           <CardTitle>All bookings</CardTitle>
           <CardDescription>Newest bookings first.</CardDescription>
         </CardHeader>
-        <Table className="min-w-[54rem] table-fixed">
+        <Table className="min-w-[64rem] table-fixed">
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[30%] pl-6">Booking</TableHead>
-              <TableHead className="w-[21%]">Customer</TableHead>
-              <TableHead className="w-[14%]">Org / event</TableHead>
-              <TableHead className="w-[14%]">Payment</TableHead>
+              <TableHead className="w-[28%] pl-6">Booking</TableHead>
+              <TableHead className="w-[19%]">Customer</TableHead>
+              <TableHead className="w-[11%]">Org / event</TableHead>
+              <TableHead className="w-[13%]">Payment</TableHead>
               <TableHead className="w-[13%]">Status</TableHead>
-              <TableHead className="w-[8%] pr-6 text-right">Actions</TableHead>
+              <TableHead className="w-[16%] pr-6 text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -114,27 +114,32 @@ export default async function AdminBookingsPage() {
                   {booking.invoiceStatus && (
                     <Badge
                       variant={booking.invoiceStatus === "paid" ? "default" : "outline"}
-                      className="mt-1"
+                      className="mt-1 max-w-full"
                     >
                       Invoice: {booking.invoiceStatus === "open" ? "unpaid" : booking.invoiceStatus}
                     </Badge>
                   )}
                 </TableCell>
                 <TableCell>
-                  <Badge variant={booking.status === "confirmed" ? "default" : "secondary"}>
-                    {booking.status.replace("_", " ")}
-                  </Badge>
-                  {requirementStatuses.get(booking.id)?.hasRequirements && (
+                  <div className="flex max-w-full flex-col items-start gap-1">
                     <Badge
-                      variant={requirementStatuses.get(booking.id)?.complete ? "outline" : "destructive"}
-                      className="mt-1"
+                      variant={booking.status === "confirmed" ? "default" : "secondary"}
+                      className="max-w-full"
                     >
-                      Info: {requirementStatuses.get(booking.id)?.complete ? "complete" : "outstanding"}
+                      {booking.status.replace("_", " ")}
                     </Badge>
-                  )}
+                    {requirementStatuses.get(booking.id)?.hasRequirements && (
+                      <Badge
+                        variant={requirementStatuses.get(booking.id)?.complete ? "outline" : "destructive"}
+                        className="max-w-full"
+                      >
+                        Info: {requirementStatuses.get(booking.id)?.complete ? "complete" : "outstanding"}
+                      </Badge>
+                    )}
+                  </div>
                 </TableCell>
-                <TableCell className="pr-6 text-right">
-                  <div className="flex justify-end gap-1">
+                <TableCell className="pr-6 text-right align-top">
+                  <div className="flex flex-nowrap items-center justify-end gap-1">
                     <Button variant="ghost" size="icon" asChild className="h-8 w-8">
                       <Link href={`/admin/bookings/${booking.id}/edit`} title="Edit booking">
                         <Pencil className="h-4 w-4" aria-hidden="true" />

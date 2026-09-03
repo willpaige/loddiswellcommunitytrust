@@ -976,7 +976,10 @@ export async function extendIndefiniteBookingSchedules() {
   return { bookings: bookingsResult, blocks: blocksResult };
 }
 
-export async function getAvailableBookingSlots(offeringId: string) {
+// `excludeBookingId` drops a booking's own occurrences from the conflict check,
+// so editing one can move it onto the hours it already holds. The save path
+// applies the same exclusion in assertAvailable.
+export async function getAvailableBookingSlots(offeringId: string, excludeBookingId?: string) {
   const [offering] = await db
     .select({
       id: bookingOfferings.id,
@@ -1029,6 +1032,7 @@ export async function getAvailableBookingSlots(offeringId: string) {
         and(
           eq(bookingOccurrences.facilityId, offering.facilityId),
           ne(bookingOccurrences.status, "cancelled"),
+          ...(excludeBookingId ? [ne(bookingOccurrences.bookingId, excludeBookingId)] : []),
           lt(bookingOccurrences.startDate, rangeEnd),
           gt(bookingOccurrences.endDate, tomorrow)
         )
