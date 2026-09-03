@@ -13,6 +13,7 @@ import {
   bookingBlocks,
   bookingBlockSeries,
   bookingOccurrences,
+  bookingPayments,
   bookingOfferings,
   bookingPrices,
   bookingRequirementDocuments,
@@ -1803,6 +1804,13 @@ export async function confirmStripeBooking(sessionId: string) {
       .update(bookingOccurrences)
       .set({ status: "confirmed" })
       .where(eq(bookingOccurrences.bookingId, booking.id));
+    await recordBookingPayment(
+      booking.id,
+      typeof checkoutSession.payment_intent === "string"
+        ? checkoutSession.payment_intent
+        : checkoutSession.payment_intent?.id,
+      checkoutSession.amount_total ?? booking.amount
+    );
     await createPromotionEventForBooking(booking.id);
     await sendBookingConfirmedEmails(booking.id);
   } else if (!booking.stripePaymentIntentId || !booking.stripeSubscriptionId || !booking.stripeCustomerId) {
@@ -1923,8 +1931,9 @@ export async function cancelCustomerBooking(formData: FormData) {
     }
 
     if (booking.paymentType === "one_off" && booking.stripePaymentIntentId) {
-      await getStripe().refunds.create({ payment_intent: booking.stripePaymentIntentId });
-      await db.update(bookings).set({ paidAmount: 0 }).where(eq(bookings.id, id));
+      // Everything taken, not just the first payment: an extended booking has a
+      // top-up behind it, and refunding only the original keeps the difference.
+      await refundBookingPayments(id, booking.paidAmount, "booking cancelled");
     }
     if (booking.paymentType === "subscription" && booking.stripeSubscriptionId) {
       await getStripe().subscriptions.cancel(booking.stripeSubscriptionId);
@@ -3164,7 +3173,8 @@ async function createBookingChangeCheckoutSession(
 export async function applyPaidBookingChange(
   bookingId: string,
   target: { start: Date; end: Date; amount: number },
-  amountPaid: number
+  amountPaid: number,
+  paymentIntentId?: string | null
 ) {
   const [booking] = await db
     .select({
@@ -3195,6 +3205,7 @@ export async function applyPaidBookingChange(
       updatedAt: new Date(),
     })
     .where(eq(bookings.id, bookingId));
+  await recordBookingPayment(bookingId, paymentIntentId, amountPaid);
 
   const [offering] = await db
     .select({ capacity: bookingOfferings.capacity })
@@ -3275,6 +3286,81 @@ async function moveBookingPromotionEvent(bookingId: string, start: Date, end: Da
   }
 }
 
+export async function recordBookingTopUpPayment(
+  bookingId: string,
+  paymentIntentId: string | null | undefined,
+  amount: number
+) {
+  await recordBookingPayment(bookingId, paymentIntentId, amount);
+}
+
+// Every payment taken against a booking, so a refund can find money paid after
+// the original one. Idempotent: Stripe redelivers, and a payment intent only
+// ever belongs to one booking.
+async function recordBookingPayment(
+  bookingId: string,
+  paymentIntentId: string | null | undefined,
+  amount: number
+) {
+  if (!paymentIntentId || amount <= 0) return;
+  await db
+    .insert(bookingPayments)
+    .values({ bookingId, stripePaymentIntentId: paymentIntentId, amount })
+    .onConflictDoNothing({ target: bookingPayments.stripePaymentIntentId });
+}
+
+// Refunds up to `amount` across a booking's payments, most recent first, and
+// reports what it managed. A booking extended and then cancelled has to give
+// back the top-up as well as the original payment.
+async function refundBookingPayments(bookingId: string, amount: number, reason: string) {
+  if (amount <= 0) return 0;
+  const payments = await db
+    .select()
+    .from(bookingPayments)
+    .where(eq(bookingPayments.bookingId, bookingId))
+    .orderBy(desc(bookingPayments.createdAt));
+
+  let outstanding = amount;
+  let refunded = 0;
+  for (const payment of payments) {
+    if (outstanding <= 0) break;
+    const available = payment.amount - payment.refundedAmount;
+    if (available <= 0) continue;
+    const take = Math.min(available, outstanding);
+    try {
+      await getStripe().refunds.create(
+        { payment_intent: payment.stripePaymentIntentId, amount: take },
+        { idempotencyKey: `booking-refund-${payment.id}-${payment.refundedAmount + take}` }
+      );
+    } catch {
+      // Leave it on the booking's balance rather than pretending it went out.
+      continue;
+    }
+    await db
+      .update(bookingPayments)
+      .set({ refundedAmount: payment.refundedAmount + take })
+      .where(eq(bookingPayments.id, payment.id));
+    outstanding -= take;
+    refunded += take;
+  }
+  if (refunded > 0) {
+    await db
+      .update(bookings)
+      .set({
+        paidAmount: sql`greatest(0, ${bookings.paidAmount} - ${refunded})`,
+        updatedAt: new Date(),
+      })
+      .where(eq(bookings.id, bookingId));
+    await logAudit({
+      action: "update",
+      entity: "booking",
+      entityId: bookingId,
+      description: `Refunded ${moneyText(refunded)} — ${reason}`,
+    });
+  }
+  return refunded;
+}
+
 export type BookingSettlement =
   | { outcome: "balanced" }
   | { outcome: "charged"; amount: number; paymentUrl: string }
@@ -3327,37 +3413,19 @@ export async function settleBookingBalance(bookingId: string): Promise<BookingSe
 
   if (balance < 0) {
     const refundAmount = -balance;
-    if (!booking.stripePaymentIntentId) {
+    const refunded = await refundBookingPayments(bookingId, refundAmount, "booking change");
+    if (refunded === 0) {
       return { outcome: "manual", amount: balance, reason: "No card payment to refund against." };
     }
-    try {
-      await getStripe().refunds.create(
-        { payment_intent: booking.stripePaymentIntentId, amount: refundAmount },
-        { idempotencyKey: `booking-change-refund-${bookingId}-${booking.changeSeq}` }
-      );
-    } catch (error) {
-      // Most often the original payment is too small to cover it, because part
-      // of the booking was paid through a separate top-up. Leave it visible.
+    if (refunded < refundAmount) {
+      // Part of it went back; the rest stays on the balance to be settled by hand.
       return {
         outcome: "manual",
-        amount: balance,
-        reason: error instanceof Error ? error.message : "Stripe refused the refund.",
+        amount: -(refundAmount - refunded),
+        reason: `Only ${moneyText(refunded)} could be refunded to the card.`,
       };
     }
-    await db
-      .update(bookings)
-      .set({
-        paidAmount: sql`greatest(0, ${bookings.paidAmount} - ${refundAmount})`,
-        updatedAt: new Date(),
-      })
-      .where(eq(bookings.id, bookingId));
-    await logAudit({
-      action: "update",
-      entity: "booking",
-      entityId: bookingId,
-      description: `Refunded ${moneyText(refundAmount)} after a booking change`,
-    });
-    return { outcome: "refunded", amount: refundAmount };
+    return { outcome: "refunded", amount: refunded };
   }
 
   // An unpaid invoice or checkout link is reissued for the new total rather than
@@ -3457,6 +3525,7 @@ export async function cancelAdminBooking(formData: FormData) {
     .select({
       paymentType: bookings.paymentType,
       status: bookings.status,
+      paidAmount: bookings.paidAmount,
       stripePaymentIntentId: bookings.stripePaymentIntentId,
       stripeSubscriptionId: bookings.stripeSubscriptionId,
     })
@@ -3470,11 +3539,7 @@ export async function cancelAdminBooking(formData: FormData) {
     if (booking.paymentType !== "one_off" || !booking.stripePaymentIntentId) {
       throw new Error("This booking does not have a refundable card payment.");
     }
-    await getStripe().refunds.create(
-      { payment_intent: booking.stripePaymentIntentId },
-      { idempotencyKey: `admin-booking-refund-${id}` }
-    );
-    await db.update(bookings).set({ paidAmount: 0 }).where(eq(bookings.id, id));
+    await refundBookingPayments(id, booking.paidAmount, "booking cancelled");
   }
   if (booking?.paymentType === "subscription" && booking.stripeSubscriptionId) {
     await getStripe().subscriptions.cancel(booking.stripeSubscriptionId);
@@ -3599,13 +3664,14 @@ export async function cancelAdminBookingOccurrence(formData: FormData) {
   let refundedBy: string | null = null;
   if (row.bookingStatus === "confirmed" && row.occurrence.allocatedAmount > 0) {
     if (row.paymentType === "one_off" && row.stripePaymentIntentId) {
-      await getStripe().refunds.create(
-        { payment_intent: row.stripePaymentIntentId, amount: row.occurrence.allocatedAmount },
-        { idempotencyKey: `booking-occurrence-refund-${occurrenceId}` }
+      const refunded = await refundBookingPayments(
+        row.bookingId,
+        row.occurrence.allocatedAmount,
+        "session cancelled"
       );
-      refundStatus = "refunded";
-      refundedAt = new Date();
-      refundedBy = session.user?.id ?? null;
+      refundStatus = refunded > 0 ? "refunded" : "due";
+      refundedAt = refunded > 0 ? new Date() : null;
+      refundedBy = refunded > 0 ? session.user?.id ?? null : null;
     } else if (row.invoiceStatus === "paid") {
       refundStatus = "due";
     }
@@ -3648,10 +3714,6 @@ export async function cancelAdminBookingOccurrence(formData: FormData) {
       cancelledAt: remaining.length === 0 ? new Date() : null,
       repeatCount: remaining.length,
       amount: Math.max(0, row.amount - row.occurrence.allocatedAmount),
-      paidAmount:
-        refundStatus === "refunded"
-          ? sql`greatest(0, ${bookings.paidAmount} - ${row.occurrence.allocatedAmount})`
-          : undefined,
       startDate: remaining[0]?.startDate ?? row.occurrence.startDate,
       endDate: remaining[0]?.endDate ?? row.occurrence.endDate,
       stripeCheckoutSessionId: row.bookingStatus === "pending_payment" ? null : undefined,

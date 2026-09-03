@@ -5,6 +5,7 @@ import { bookingOccurrences, bookings, lotteryTickets } from "@/lib/db/schema";
 import {
   applyPaidBookingChange,
   createPromotionEventForBooking,
+  recordBookingTopUpPayment,
   extendSubscriptionBookingOccurrences,
   sendBookingConfirmedEmails,
   sendBookingPaymentFailedEmail,
@@ -191,7 +192,10 @@ export async function POST(req: NextRequest) {
               end: new Date(session.metadata.endIso),
               amount: Number(session.metadata.newAmount),
             },
-            session.amount_total ?? 0
+            session.amount_total ?? 0,
+            typeof session.payment_intent === "string"
+              ? session.payment_intent
+              : session.payment_intent?.id
           );
           break;
         }
@@ -203,6 +207,13 @@ export async function POST(req: NextRequest) {
               updatedAt: new Date(),
             })
             .where(eq(bookings.id, session.metadata.bookingId));
+          await recordBookingTopUpPayment(
+            session.metadata.bookingId,
+            typeof session.payment_intent === "string"
+              ? session.payment_intent
+              : session.payment_intent?.id,
+            session.amount_total ?? 0
+          );
           break;
         }
         if (session.metadata?.type === "booking" && session.metadata.bookingId) {
@@ -233,6 +244,13 @@ export async function POST(req: NextRequest) {
             .update(bookingOccurrences)
             .set({ status: "confirmed" })
             .where(eq(bookingOccurrences.bookingId, session.metadata.bookingId));
+          await recordBookingTopUpPayment(
+            session.metadata.bookingId,
+            typeof session.payment_intent === "string"
+              ? session.payment_intent
+              : session.payment_intent?.id,
+            session.amount_total ?? 0
+          );
           await createPromotionEventForBooking(session.metadata.bookingId);
           await sendBookingConfirmedEmails(session.metadata.bookingId);
           break;
@@ -331,6 +349,11 @@ export async function POST(req: NextRequest) {
             .update(bookingOccurrences)
             .set({ status: "confirmed" })
             .where(eq(bookingOccurrences.bookingId, bookingId));
+          await recordBookingTopUpPayment(
+            bookingId,
+            typeof paymentIntent === "string" ? paymentIntent : paymentIntent?.id,
+            invoice.amount_paid ?? 0
+          );
           await createPromotionEventForBooking(bookingId);
           await sendBookingConfirmedEmails(bookingId, true);
           break;

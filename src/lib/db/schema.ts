@@ -453,6 +453,29 @@ export const bookings = pgTable(
   ]
 );
 
+// A booking can be paid more than once: the original payment, then a top-up for
+// every change that cost more. Refunds have to walk all of them, or money paid
+// on a later payment is silently kept.
+export const bookingPayments = pgTable(
+  "booking_payments",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    bookingId: text("booking_id")
+      .notNull()
+      .references(() => bookings.id, { onDelete: "cascade" }),
+    stripePaymentIntentId: text("stripe_payment_intent_id").notNull(),
+    amount: integer("amount").notNull(),
+    refundedAmount: integer("refunded_amount").notNull().default(0),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("booking_payments_intent_idx").on(table.stripePaymentIntentId),
+    index("booking_payments_booking_idx").on(table.bookingId),
+  ]
+);
+
 export const bookingOccurrences = pgTable(
   "booking_occurrences",
   {
