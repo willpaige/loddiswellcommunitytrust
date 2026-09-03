@@ -8,7 +8,7 @@ import {
   sendBookingConfirmedEmails,
   sendBookingPaymentFailedEmail,
 } from "@/actions/bookings";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { addYears } from "date-fns";
 import Stripe from "stripe";
 import { ensureLotteryTicketNumbers, ticketNumbersText } from "@/actions/lottery-ticket-numbers";
@@ -179,6 +179,19 @@ export async function POST(req: NextRequest) {
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
+        // A top-up settles the difference after a booking changed, so it adds to
+        // what has been paid rather than replacing it, and leaves the booking's
+        // original payment references alone.
+        if (session.metadata?.type === "booking_topup" && session.metadata.bookingId) {
+          await db
+            .update(bookings)
+            .set({
+              paidAmount: sql`${bookings.paidAmount} + ${session.amount_total ?? 0}`,
+              updatedAt: new Date(),
+            })
+            .where(eq(bookings.id, session.metadata.bookingId));
+          break;
+        }
         if (session.metadata?.type === "booking" && session.metadata.bookingId) {
           await db
             .update(bookings)

@@ -297,6 +297,60 @@ async function bookingScheduleText(bookingId: string) {
     .join("; ");
 }
 
+// Tells the customer what moved and what it means for their money. The wording
+// comes from the settlement so the email never promises a refund that Stripe
+// refused, or asks for money that was taken automatically.
+async function sendBookingChangedEmail(
+  bookingId: string,
+  context: { previousStart: Date; previousEnd: Date; settlement: BookingSettlement }
+) {
+  const [booking] = await db
+    .select({
+      customerName: bookings.customerName,
+      customerEmail: bookings.customerEmail,
+      amount: bookings.amount,
+      startDate: bookings.startDate,
+      facilityName: facilities.name,
+      offeringName: bookingOfferings.name,
+    })
+    .from(bookings)
+    .innerJoin(facilities, eq(bookings.facilityId, facilities.id))
+    .leftJoin(bookingOfferings, eq(bookings.offeringId, bookingOfferings.id))
+    .where(eq(bookings.id, bookingId))
+    .limit(1);
+  if (!booking) return;
+
+  const settlementLine = {
+    balanced: "Nothing further to pay.",
+    charged: "We have sent a separate email with a link to pay the difference.",
+    invoiced: "We have reissued your invoice for the new total.",
+    refunded:
+      context.settlement.outcome === "refunded"
+        ? `We have refunded ${moneyText(context.settlement.amount)} to your card. It usually clears within a few days.`
+        : "",
+    manual: "We will be in touch about the difference.",
+  }[context.settlement.outcome];
+
+  await sendTemplateEmail({
+    key: "booking_changed",
+    to: booking.customerEmail,
+    variables: {
+      customerName: booking.customerName,
+      facilityName: booking.facilityName,
+      offeringName: booking.offeringName || "Booking",
+      previousSchedule: `${formatBookingDate(context.previousStart, "d MMM yyyy, HH:mm")}–${formatBookingDate(context.previousEnd, "HH:mm")}`,
+      schedule:
+        (await bookingScheduleText(bookingId)) ||
+        formatBookingDate(booking.startDate, "d MMM yyyy, HH:mm"),
+      amount: moneyText(booking.amount),
+      settlementLine,
+      bookingUrl: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/account/bookings`,
+    },
+    relatedEntityType: "booking",
+    relatedEntityId: bookingId,
+  });
+}
+
 async function getBookingManagerEmail() {
   const [settings] = await db
     .select({
@@ -2520,6 +2574,11 @@ export async function updateAdminBooking(id: string, formData: FormData) {
       scheduleType: bookings.scheduleType,
       unitAmount: bookings.unitAmount,
       pricingPercent: bookings.pricingPercent,
+      amount: bookings.amount,
+      startDate: bookings.startDate,
+      endDate: bookings.endDate,
+      customerName: bookings.customerName,
+      customerEmail: bookings.customerEmail,
     })
     .from(bookings)
     .where(eq(bookings.id, id))
@@ -2645,9 +2704,246 @@ export async function updateAdminBooking(id: string, formData: FormData) {
         ? "Updated booking"
         : `Updated booking · ${balance > 0 ? "outstanding" : "refundable"} ${moneyText(Math.abs(balance))}`,
   });
+
+  const timesChanged =
+    currentBooking.startDate.getTime() !== start.getTime() ||
+    currentBooking.endDate.getTime() !== end.getTime();
+  // Only reach for Stripe when the price actually moved. Editing a phone number
+  // on an unpaid booking should not expire its checkout link and chase the
+  // customer for money they were already asked for.
+  const settlement: BookingSettlement =
+    (repriced?.amount ?? 0) === currentBooking.amount
+      ? { outcome: "balanced" }
+      : await settleBookingBalance(id);
+  if (timesChanged) {
+    await sendBookingChangedEmail(id, {
+      previousStart: currentBooking.startDate,
+      previousEnd: currentBooking.endDate,
+      settlement,
+    });
+  }
   revalidatePath("/admin/bookings");
   revalidatePath(`/admin/bookings/${id}/edit`);
   revalidatePath("/booking");
+}
+
+// A top-up is its own Stripe payment, separate from the booking's original one,
+// so it carries its own metadata and the webhook adds to paid_amount rather than
+// replacing it. The booking's checkout session id is left alone: it still points
+// at the payment that confirmed the booking.
+async function createBookingTopUpCheckoutSession(bookingId: string, amount: number) {
+  const [booking] = await db
+    .select({
+      id: bookings.id,
+      customerEmail: bookings.customerEmail,
+      startDate: bookings.startDate,
+      facilityName: facilities.name,
+      offeringName: bookingOfferings.name,
+    })
+    .from(bookings)
+    .innerJoin(facilities, eq(bookings.facilityId, facilities.id))
+    .leftJoin(bookingOfferings, eq(bookings.offeringId, bookingOfferings.id))
+    .where(eq(bookings.id, bookingId))
+    .limit(1);
+  if (!booking) throw new Error("Booking not found.");
+  const schedule = await bookingScheduleText(bookingId);
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+  const checkoutSession = await getStripe().checkout.sessions.create({
+    mode: "payment",
+    payment_method_types: ["card"],
+    customer_email: booking.customerEmail,
+    line_items: [
+      {
+        quantity: 1,
+        price_data: {
+          currency: "gbp",
+          unit_amount: amount,
+          product_data: {
+            name: `${booking.facilityName} - booking change`,
+            description: schedule || formatBookingDate(booking.startDate, "d MMM yyyy, HH:mm"),
+          },
+        },
+      },
+    ],
+    metadata: { type: "booking_topup", bookingId: booking.id },
+    success_url: `${appUrl}/booking/success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${appUrl}/account/bookings`,
+  });
+  if (!checkoutSession.url) throw new Error("Stripe did not return a checkout URL.");
+  return checkoutSession.url;
+}
+
+export type BookingSettlement =
+  | { outcome: "balanced" }
+  | { outcome: "charged"; amount: number; paymentUrl: string }
+  | { outcome: "invoiced"; amount: number }
+  | { outcome: "refunded"; amount: number }
+  | { outcome: "manual"; amount: number; reason: string };
+
+// Brings the money in line with what a booking now costs. Positive balance is
+// collected, negative is refunded, and anything that cannot be settled on its
+// own is left standing as a visible balance for an admin to clear by hand.
+export async function settleBookingBalance(bookingId: string): Promise<BookingSettlement> {
+  const [booking] = await db
+    .select({
+      id: bookings.id,
+      status: bookings.status,
+      paymentType: bookings.paymentType,
+      amount: bookings.amount,
+      paidAmount: bookings.paidAmount,
+      changeSeq: bookings.changeSeq,
+      customerName: bookings.customerName,
+      customerEmail: bookings.customerEmail,
+      stripePaymentIntentId: bookings.stripePaymentIntentId,
+      stripeCheckoutSessionId: bookings.stripeCheckoutSessionId,
+      stripeInvoiceId: bookings.stripeInvoiceId,
+      invoiceStatus: bookings.invoiceStatus,
+      startDate: bookings.startDate,
+      facilityName: facilities.name,
+      offeringName: bookingOfferings.name,
+    })
+    .from(bookings)
+    .innerJoin(facilities, eq(bookings.facilityId, facilities.id))
+    .leftJoin(bookingOfferings, eq(bookings.offeringId, bookingOfferings.id))
+    .where(eq(bookings.id, bookingId))
+    .limit(1);
+  if (!booking) throw new Error("Booking not found.");
+
+  const balance = booking.amount - booking.paidAmount;
+  if (balance === 0) return { outcome: "balanced" };
+  if (booking.status === "cancelled") {
+    return { outcome: "manual", amount: balance, reason: "The booking is cancelled." };
+  }
+  // Changing a subscription means changing its Stripe price mid-cycle, which is
+  // out of scope: leave the balance showing so it is settled deliberately.
+  if (booking.paymentType === "subscription") {
+    return { outcome: "manual", amount: balance, reason: "Subscription bookings are settled by hand." };
+  }
+
+  const schedule = (await bookingScheduleText(bookingId)) ||
+    formatBookingDate(booking.startDate, "d MMM yyyy, HH:mm");
+
+  if (balance < 0) {
+    const refundAmount = -balance;
+    if (!booking.stripePaymentIntentId) {
+      return { outcome: "manual", amount: balance, reason: "No card payment to refund against." };
+    }
+    try {
+      await getStripe().refunds.create(
+        { payment_intent: booking.stripePaymentIntentId, amount: refundAmount },
+        { idempotencyKey: `booking-change-refund-${bookingId}-${booking.changeSeq}` }
+      );
+    } catch (error) {
+      // Most often the original payment is too small to cover it, because part
+      // of the booking was paid through a separate top-up. Leave it visible.
+      return {
+        outcome: "manual",
+        amount: balance,
+        reason: error instanceof Error ? error.message : "Stripe refused the refund.",
+      };
+    }
+    await db
+      .update(bookings)
+      .set({
+        paidAmount: sql`greatest(0, ${bookings.paidAmount} - ${refundAmount})`,
+        updatedAt: new Date(),
+      })
+      .where(eq(bookings.id, bookingId));
+    await logAudit({
+      action: "update",
+      entity: "booking",
+      entityId: bookingId,
+      description: `Refunded ${moneyText(refundAmount)} after a booking change`,
+    });
+    return { outcome: "refunded", amount: refundAmount };
+  }
+
+  // An unpaid invoice or checkout link is reissued for the new total rather than
+  // topped up, or the customer would be asked for the money twice.
+  if (booking.invoiceStatus === "open" && booking.stripeInvoiceId) {
+    await getStripe().invoices.voidInvoice(booking.stripeInvoiceId);
+    await db
+      .update(bookings)
+      .set({
+        stripeInvoiceId: null,
+        invoiceStatus: null,
+        invoiceHostedUrl: null,
+        invoicePdfUrl: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(bookings.id, bookingId));
+    await createBookingInvoice(bookingId);
+    return { outcome: "invoiced", amount: balance };
+  }
+  if (booking.status === "pending_payment") {
+    if (booking.stripeCheckoutSessionId) {
+      try {
+        await getStripe().checkout.sessions.expire(booking.stripeCheckoutSessionId);
+      } catch {
+        // Already completed or expired — nothing to expire.
+      }
+    }
+    const paymentUrl = await createBookingStripeCheckoutSession(bookingId);
+    await sendManualBookingPaymentLinkEmail(bookingId, paymentUrl);
+    return { outcome: "charged", amount: balance, paymentUrl };
+  }
+
+  const paymentUrl = await createBookingTopUpCheckoutSession(bookingId, balance);
+  await sendTemplateEmail({
+    key: "booking_change_payment_link",
+    to: booking.customerEmail,
+    variables: {
+      customerName: booking.customerName,
+      facilityName: booking.facilityName,
+      offeringName: booking.offeringName || "Booking",
+      schedule,
+      amount: moneyText(booking.amount),
+      paidAmount: moneyText(booking.paidAmount),
+      balance: moneyText(balance),
+      paymentUrl,
+    },
+    relatedEntityType: "booking",
+    relatedEntityId: bookingId,
+  });
+  await logAudit({
+    action: "update",
+    entity: "booking",
+    entityId: bookingId,
+    description: `Sent a payment link for ${moneyText(balance)} after a booking change`,
+  });
+  return { outcome: "charged", amount: balance, paymentUrl };
+}
+
+// Records money that moved outside Stripe — a bank transfer in, or a refund made
+// by hand — so the balance goes back to zero.
+export async function recordBookingSettlement(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("bookingId") || "");
+  const [booking] = await db
+    .select({ amount: bookings.amount, paidAmount: bookings.paidAmount })
+    .from(bookings)
+    .where(eq(bookings.id, id))
+    .limit(1);
+  if (!booking) throw new Error("Booking not found.");
+  const balance = booking.amount - booking.paidAmount;
+  if (balance === 0) return;
+
+  await db
+    .update(bookings)
+    .set({ paidAmount: booking.amount, updatedAt: new Date() })
+    .where(eq(bookings.id, id));
+  await logAudit({
+    action: "update",
+    entity: "booking",
+    entityId: id,
+    description:
+      balance > 0
+        ? `Recorded ${moneyText(balance)} received outside Stripe`
+        : `Recorded ${moneyText(-balance)} refunded outside Stripe`,
+  });
+  revalidatePath("/admin/bookings");
+  revalidatePath(`/admin/bookings/${id}/edit`);
 }
 
 export async function cancelAdminBooking(formData: FormData) {

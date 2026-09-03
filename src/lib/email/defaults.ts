@@ -12,7 +12,9 @@ export type EmailTemplateKey =
   | "lottery_welcome"
   | "lottery_payment_failed"
   | "lottery_draw_results"
-  | "lottery_manage_link";
+  | "lottery_manage_link"
+  | "booking_changed"
+  | "booking_change_payment_link";
 
 export type EmailTemplateCategory = "bookings" | "lottery" | "system";
 
@@ -62,6 +64,24 @@ export const emailTemplateDefaults: EmailTemplateDefault[] = [
     subject: "Payment link for your Loddiswell booking",
     body: "Hi {{customerName}},\n\nWe have reserved your booking for {{facilityName}}.\n\nBooking: {{offeringName}}\nSchedule: {{schedule}}\nAmount due: {{amount}}\n\nPlease use this secure Stripe link to pay and confirm your booking:\n\n{{paymentUrl}}",
     variables: ["customerName", "facilityName", "offeringName", "startDate", "endTime", "schedule", "amount", "paymentUrl"],
+  },
+  {
+    key: "booking_changed",
+    category: "bookings",
+    name: "Booking changed",
+    description: "Sent to a customer when the date or time of their booking changes.",
+    subject: "Your Loddiswell booking has been changed",
+    body: "Hi {{customerName}},\n\nYour booking for {{facilityName}} has been changed.\n\nWas: {{previousSchedule}}\nNow: {{schedule}}\n\nPrice: {{amount}}\n{{settlementLine}}\n\nPlease contact us if anything looks wrong.",
+    variables: ["customerName", "facilityName", "offeringName", "previousSchedule", "schedule", "amount", "settlementLine", "bookingUrl"],
+  },
+  {
+    key: "booking_change_payment_link",
+    category: "bookings",
+    name: "Booking change payment link",
+    description: "Sent when a change leaves more to pay, with a Stripe link for the difference.",
+    subject: "Payment for your changed Loddiswell booking",
+    body: "Hi {{customerName}},\n\nYour booking for {{facilityName}} is now {{schedule}}.\n\nThat leaves {{balance}} to pay on top of the {{paidAmount}} already received.\n\nPlease use this secure Stripe link to settle it:\n\n{{paymentUrl}}\n\nYour booking is held in the meantime.",
+    variables: ["customerName", "facilityName", "offeringName", "schedule", "amount", "paidAmount", "balance", "paymentUrl"],
   },
   {
     key: "booking_cancellation",

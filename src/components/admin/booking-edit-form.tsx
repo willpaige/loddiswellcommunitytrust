@@ -7,6 +7,7 @@ import {
   createBookingInvoice,
   getAvailableBookingSlots,
   markBookingInvoicePaidOutOfBand,
+  recordBookingSettlement,
   updateAdminBooking,
 } from "@/actions/bookings";
 import { bookingBalance, customerGroups, money, recurrenceOptions, type Recurrence } from "@/lib/bookings";
@@ -416,6 +417,18 @@ export function BookingEditForm({
                 ? `${money(balance)} outstanding`
                 : `${money(-balance)} to refund`}
             </p>
+          )}
+          {balance !== 0 && (
+            <form action={recordBookingSettlement} className="basis-full">
+              <input type="hidden" name="bookingId" value={booking.id} />
+              <Button type="submit" variant="outline" size="sm">
+                {balance > 0 ? "Record payment received" : "Record refund made"}
+              </Button>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Use this when the difference was settled outside Stripe, by transfer or in
+                person. It clears the balance without moving any money.
+              </p>
+            </form>
           )}
         </CardContent>
       </Card>
