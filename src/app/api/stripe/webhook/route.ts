@@ -16,6 +16,7 @@ import Stripe from "stripe";
 import { ensureLotteryTicketNumbers, ticketNumbersText } from "@/actions/lottery-ticket-numbers";
 import { sendTemplateEmail } from "@/lib/email/send";
 import { upsertCustomerRecord } from "@/actions/customer-records";
+import { recordLotteryPayment } from "@/lib/lottery/payments";
 
 type SubStatus = "active" | "expired" | "refunded" | "canceled" | "past_due";
 
@@ -156,6 +157,67 @@ async function upsertFromSubscription(
   }
 }
 
+// Money in, on the day Stripe collected it. The ticket row is reconciled in
+// place on every renewal, so it can only say what a subscriber pays per period,
+// never what they have paid to date.
+//
+// The ticket has to exist first, and only the checkout session carries the name
+// and phone the subscriber typed — so a first invoice arriving before its
+// checkout waits rather than creating a thinner row the checkout handler is then
+// forbidden from correcting. checkout.session.completed records that payment.
+async function recordLotteryInvoice(subscriptionId: string, invoice: Stripe.Invoice) {
+  const amount = invoice.amount_paid ?? 0;
+  if (amount <= 0) return;
+
+  const [ticket] = await db
+    .select({ id: lotteryTickets.id })
+    .from(lotteryTickets)
+    .where(eq(lotteryTickets.stripeSubscriptionId, subscriptionId))
+    .limit(1);
+  if (!ticket) return;
+
+  await recordLotteryPayment({
+    ticketId: ticket.id,
+    source: "stripe",
+    reference: invoice.id ?? `sub:${subscriptionId}:${invoice.created}`,
+    amount,
+    paidAt: invoice.status_transitions?.paid_at
+      ? new Date(invoice.status_transitions.paid_at * 1000)
+      : new Date(invoice.created * 1000),
+  });
+}
+
+// The opening payment, taken at checkout. Keyed on the invoice Stripe raised for
+// it, so the invoice.paid event for the same money finds it already recorded.
+async function recordLotteryCheckoutPayment(
+  subscriptionId: string,
+  session: Stripe.Checkout.Session
+) {
+  const amount = session.amount_total ?? 0;
+  if (amount <= 0) return;
+  // Keyed on the invoice or not at all: a made-up reference would be recorded
+  // again under the real invoice id when invoice.paid lands, counting the same
+  // money twice. A subscription checkout always raises one.
+  const invoiceRef = (session as unknown as { invoice?: string | { id: string } }).invoice;
+  const reference = typeof invoiceRef === "string" ? invoiceRef : invoiceRef?.id;
+  if (!reference) return;
+
+  const [ticket] = await db
+    .select({ id: lotteryTickets.id })
+    .from(lotteryTickets)
+    .where(eq(lotteryTickets.stripeSubscriptionId, subscriptionId))
+    .limit(1);
+  if (!ticket) return;
+
+  await recordLotteryPayment({
+    ticketId: ticket.id,
+    source: "stripe",
+    reference,
+    amount,
+    paidAt: new Date(),
+  });
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.text();
   const signature = req.headers.get("stripe-signature");
@@ -277,6 +339,7 @@ export async function POST(req: NextRequest) {
         const email = session.customer_details?.email || undefined;
 
         await upsertFromSubscription(sub, { name, email, phone });
+        await recordLotteryCheckoutPayment(subId, session);
         break;
       }
       case "customer.subscription.updated":
@@ -361,11 +424,21 @@ export async function POST(req: NextRequest) {
         const subRef = (invoice as unknown as { subscription?: string | Stripe.Subscription }).subscription;
         const subId = typeof subRef === "string" ? subRef : subRef?.id;
         if (!subId) break;
-        // Skip the first invoice (subscription_create) — the
-        // checkout.session.completed handler already inserted the row.
-        if (invoice.billing_reason !== "subscription_cycle") break;
+        const isRenewal = invoice.billing_reason === "subscription_cycle";
         const sub = await getStripe().subscriptions.retrieve(subId);
         if (sub.metadata?.type === "booking" && sub.metadata.bookingId) {
+          // Every cycle collected, first one included. The booking's own
+          // `paidAmount` only ever covers one period, so without this the money
+          // a recurring booking actually brings in is invisible to reporting.
+          const subPaymentIntent = (
+            invoice as unknown as { payment_intent?: string | { id: string } }
+          ).payment_intent;
+          await recordBookingTopUpPayment(
+            sub.metadata.bookingId,
+            typeof subPaymentIntent === "string" ? subPaymentIntent : subPaymentIntent?.id,
+            invoice.amount_paid ?? 0
+          );
+          if (!isRenewal) break;
           await db
             .update(bookings)
             .set({
@@ -378,7 +451,10 @@ export async function POST(req: NextRequest) {
           await extendSubscriptionBookingOccurrences(sub.metadata.bookingId);
           break;
         }
-        await upsertFromSubscription(sub);
+        // Renewals reconcile the ticket row; the first invoice is left to
+        // checkout.session.completed, which has the name and phone with it.
+        if (isRenewal) await upsertFromSubscription(sub);
+        await recordLotteryInvoice(subId, invoice);
         break;
       }
       case "invoice.payment_failed": {

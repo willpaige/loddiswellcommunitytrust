@@ -17,6 +17,7 @@ import {
 } from "@/actions/lottery-ticket-numbers";
 import { sendTemplateEmail } from "@/lib/email/send";
 import { upsertCustomerRecord } from "@/actions/customer-records";
+import { recordLotteryPayment, syncManualLotteryPayment } from "@/lib/lottery/payments";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -93,6 +94,13 @@ export async function createManualSubscriber(formData: FormData) {
     status: "active",
   }).returning();
   await ensureLotteryTicketNumbers(ticket.id);
+  await recordLotteryPayment({
+    ticketId: ticket.id,
+    source: "manual",
+    reference: `manual:${ticket.id}`,
+    amount: ticket.amount,
+    paidAt: ticket.purchaseDate,
+  });
   await sendTemplateEmail({
     key: "lottery_welcome",
     to: data.email,
@@ -149,6 +157,7 @@ export async function updateManualSubscriber(id: string, formData: FormData) {
       )
     );
   await ensureLotteryTicketNumbers(id);
+  await syncManualLotteryPayment(id, data.quantity * 1200, new Date());
 
   await logAudit({
     action: "update",
@@ -357,6 +366,13 @@ export async function importLotterySubscribers(
           phone: row.phone,
         });
         await ensureLotteryTicketNumbers(row.id);
+        await recordLotteryPayment({
+          ticketId: row.id,
+          source: "manual",
+          reference: `manual:${row.id}`,
+          amount: row.amount,
+          paidAt: row.purchaseDate,
+        });
         await sendTemplateEmail({
           key: "lottery_welcome",
           to: row.email,

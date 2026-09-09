@@ -698,3 +698,35 @@ export const emailLogs = pgTable(
     ),
   ]
 );
+
+// Lottery subscriptions renew in Stripe without leaving a trace on the ticket
+// row -- the webhook just updates it in place. Without a ledger, "lottery income
+// in a period" can only ever mean "tickets first sold in it", which undercounts
+// every renewal. One row per payment actually taken, so income can be reported
+// on the date the money arrived.
+export const lotteryPayments = pgTable(
+  "lottery_payments",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    ticketId: text("ticket_id")
+      .notNull()
+      .references(() => lotteryTickets.id, { onDelete: "cascade" }),
+    source: text("source", { enum: ["stripe", "manual"] })
+      .notNull()
+      .default("stripe"),
+    // Stripe's invoice id for a subscription cycle, or a synthetic key for
+    // manual and backfilled rows, so redelivered webhooks stay idempotent.
+    reference: text("reference").notNull(),
+    amount: integer("amount").notNull(),
+    refundedAmount: integer("refunded_amount").notNull().default(0),
+    paidAt: timestamp("paid_at", { mode: "date" }).notNull().defaultNow(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("lottery_payments_reference_idx").on(table.reference),
+    index("lottery_payments_ticket_idx").on(table.ticketId),
+    index("lottery_payments_paid_at_idx").on(table.paidAt),
+  ]
+);
