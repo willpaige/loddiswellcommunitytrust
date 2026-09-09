@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import {
   LayoutDashboard,
+  BarChart3,
   CalendarDays,
   FileText,
   Building2,
@@ -38,6 +39,16 @@ const navItems = [
       { name: "Requirements", href: "/admin/bookings/requirements" },
       { name: "Discount codes", href: "/admin/bookings/discount-codes" },
       { name: "Settings", href: "/admin/bookings/settings" },
+    ],
+  },
+  {
+    name: "Reports",
+    href: "/admin/reports",
+    icon: BarChart3,
+    children: [
+      { name: "Overview", href: "/admin/reports" },
+      { name: "Bookings", href: "/admin/reports/bookings" },
+      { name: "Lottery", href: "/admin/reports/lottery" },
     ],
   },
   { name: "Pages", href: "/admin/pages", icon: FileText },
@@ -108,7 +119,7 @@ export function AdminSidebar({ user }: AdminSidebarProps) {
                   {item.children.map((child) => {
                     const childActive =
                       pathname === child.href ||
-                      (child.href !== "/admin/bookings" && pathname.startsWith(child.href));
+                      (child.href !== item.href && pathname.startsWith(child.href));
                     return (
                       <Link
                         key={child.href}

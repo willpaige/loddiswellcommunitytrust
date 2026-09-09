@@ -8,6 +8,7 @@ import {
   Ticket,
   Plus,
   Settings,
+  BarChart3,
 } from "lucide-react";
 import {
   Card,
@@ -17,6 +18,12 @@ import {
 } from "@/components/ui/card";
 
 const quickActions = [
+  {
+    name: "Reports",
+    href: "/admin/reports",
+    icon: BarChart3,
+    description: "Income, bookings and lottery performance",
+  },
   {
     name: "Add Event",
     href: "/admin/events/new",

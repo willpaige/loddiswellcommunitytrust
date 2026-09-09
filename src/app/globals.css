@@ -44,6 +44,14 @@
   --color-stone-900: #3D3935;
   --color-stone-950: #2C2825;
 
+  /* Reporting series colours. Sage and copper sit too close under red-green
+     colour blindness to carry two series against each other (protan ΔE 1.8), so
+     the second series is a harbour blue that separates from copper on every
+     simulation. Validated against a white chart surface. */
+  --color-series-bookings: #1B7FA8;
+  --color-series-lottery: #B5654A;
+  --color-series-muted: #B5AFA5;
+
   --font-sans: var(--font-dm-sans, "DM Sans"), ui-sans-serif, system-ui, sans-serif;
   --font-serif: var(--font-dm-serif, "DM Serif Display"), ui-serif, Georgia, serif;
 }
