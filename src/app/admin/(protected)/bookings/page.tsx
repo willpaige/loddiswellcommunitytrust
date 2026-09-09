@@ -7,7 +7,7 @@ import { getBookingRequirementStatuses } from "@/lib/booking-requirements";
 import { bookingBalance, money } from "@/lib/bookings";
 import { ManualBookingDialog } from "@/components/admin/manual-booking-dialog";
 import { CancelBookingButton } from "@/components/admin/cancel-booking-button";
-import { BookingOccurrenceActions } from "@/components/admin/booking-occurrence-actions";
+import { BookingOccurrenceList } from "@/components/admin/booking-occurrence-list";
 import { DeleteButton } from "@/components/admin/delete-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -82,23 +82,9 @@ export default async function AdminBookingsPage() {
                     {booking.offeringName || "Booking"} · {formatBookingDate(booking.startDate, "d MMM yyyy, HH:mm")}
                   </p>
                   {booking.scheduleType === "custom" && (
-                    <ul className="mt-2 space-y-1 border-l-2 border-copper-200 pl-3">
-                      {occurrencesByBooking.get(booking.id)?.map((occurrence) => (
-                        <li key={occurrence.id} className="flex items-center gap-2 text-xs">
-                          <span className={occurrence.status === "cancelled" ? "line-through text-muted-foreground" : ""}>
-                            {formatBookingDate(occurrence.startDate, "d MMM, HH:mm")}–{formatBookingDate(occurrence.endDate, "HH:mm")}
-                            {occurrence.allocatedAmount > 0 && ` · ${money(occurrence.allocatedAmount)}`}
-                          </span>
-                          {occurrence.refundStatus === "due" && <Badge variant="destructive">Refund due</Badge>}
-                          {occurrence.refundStatus === "refunded" && <Badge variant="outline">Refunded</Badge>}
-                          <BookingOccurrenceActions
-                            occurrenceId={occurrence.id}
-                            cancelled={occurrence.status === "cancelled"}
-                            refundDue={occurrence.refundStatus === "due"}
-                          />
-                        </li>
-                      ))}
-                    </ul>
+                    <BookingOccurrenceList
+                      occurrences={occurrencesByBooking.get(booking.id) ?? []}
+                    />
                   )}
                 </TableCell>
                 <TableCell>
