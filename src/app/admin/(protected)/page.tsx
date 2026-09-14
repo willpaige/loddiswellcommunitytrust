@@ -9,6 +9,7 @@ import {
   Plus,
   Settings,
   BarChart3,
+  Newspaper,
 } from "lucide-react";
 import {
   Card,
@@ -65,6 +66,12 @@ const quickActions = [
     href: "/admin/lottery",
     icon: Ticket,
     description: "View lottery ticket holders",
+  },
+  {
+    name: "Newsletter",
+    href: "/admin/newsletter",
+    icon: Newspaper,
+    description: "See who has signed up and export the list",
   },
   {
     name: "Settings",

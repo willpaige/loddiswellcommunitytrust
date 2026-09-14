@@ -206,7 +206,7 @@ export const auditLog = pgTable("audit_log", {
     enum: ["create", "update", "delete", "publish", "unpublish", "upload", "login"],
   }).notNull(),
   entity: text("entity", {
-    enum: ["event", "page", "facility", "document", "image", "lottery", "user", "booking", "requirement_set"],
+    enum: ["event", "page", "facility", "document", "image", "lottery", "user", "booking", "requirement_set", "newsletter"],
   }).notNull(),
   entityId: text("entity_id"),
   description: text("description"),
