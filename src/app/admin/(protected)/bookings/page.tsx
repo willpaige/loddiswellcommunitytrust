@@ -8,6 +8,7 @@ import { bookingBalance, money } from "@/lib/bookings";
 import { ManualBookingDialog } from "@/components/admin/manual-booking-dialog";
 import { CancelBookingButton } from "@/components/admin/cancel-booking-button";
 import { BookingOccurrenceList } from "@/components/admin/booking-occurrence-list";
+import { BookingDetailsDialog } from "@/components/admin/booking-details-dialog";
 import { DeleteButton } from "@/components/admin/delete-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -65,12 +66,12 @@ export default async function AdminBookingsPage() {
         <Table className="min-w-[60rem] table-fixed">
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[30%] pl-6">Booking</TableHead>
+              <TableHead className="w-[27%] pl-6">Booking</TableHead>
               <TableHead className="w-[20%]">Customer</TableHead>
               <TableHead className="w-[12%]">Org / event</TableHead>
               <TableHead className="w-[13%]">Payment</TableHead>
               <TableHead className="w-[13%]">Status</TableHead>
-              <TableHead className="w-[12%] pr-6 text-right">Actions</TableHead>
+              <TableHead className="w-[15%] pr-6 text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -137,6 +138,11 @@ export default async function AdminBookingsPage() {
                 </TableCell>
                 <TableCell className="pr-6 text-right align-top">
                   <div className="flex flex-nowrap items-center justify-end gap-1">
+                    <BookingDetailsDialog
+                      booking={booking}
+                      occurrences={occurrencesByBooking.get(booking.id) ?? []}
+                      hasRequirements={requirementStatuses.get(booking.id)?.hasRequirements ?? false}
+                    />
                     <Button variant="ghost" size="icon" asChild className="h-8 w-8">
                       <Link
                         href={`/admin/bookings/${booking.id}/edit`}
