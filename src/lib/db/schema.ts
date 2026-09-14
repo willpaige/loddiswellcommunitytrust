@@ -388,7 +388,7 @@ export const bookings = pgTable(
     status: text("status", {
       enum: ["pending_payment", "confirmed", "cancelled", "payment_failed"],
     }).notNull().default("pending_payment"),
-    paymentType: text("payment_type", { enum: ["one_off", "subscription", "manual"] })
+    paymentType: text("payment_type", { enum: ["one_off", "subscription", "manual", "invoice"] })
       .notNull()
       .default("one_off"),
     amount: integer("amount").notNull().default(0),
@@ -465,14 +465,55 @@ export const bookingPayments = pgTable(
     bookingId: text("booking_id")
       .notNull()
       .references(() => bookings.id, { onDelete: "cascade" }),
-    stripePaymentIntentId: text("stripe_payment_intent_id").notNull(),
+    // A card payment is keyed on its payment intent. A monthly invoice paid by
+    // bank transfer has none, so those are keyed on the invoice instead.
+    stripePaymentIntentId: text("stripe_payment_intent_id"),
+    stripeInvoiceId: text("stripe_invoice_id"),
+    paidOutOfBand: boolean("paid_out_of_band").notNull().default(false),
     amount: integer("amount").notNull(),
     refundedAmount: integer("refunded_amount").notNull().default(0),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (table) => [
     uniqueIndex("booking_payments_intent_idx").on(table.stripePaymentIntentId),
+    uniqueIndex("booking_payments_invoice_idx").on(table.stripeInvoiceId),
     index("booking_payments_booking_idx").on(table.bookingId),
+  ]
+);
+
+// A monthly-invoiced booking is billed in advance for each calendar month's
+// sessions. One row per invoice; the booking itself only holds the slot.
+export const bookingInvoices = pgTable(
+  "booking_invoices",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    bookingId: text("booking_id")
+      .notNull()
+      .references(() => bookings.id, { onDelete: "cascade" }),
+    stripeInvoiceId: text("stripe_invoice_id"),
+    periodStart: timestamp("period_start", { mode: "date" }).notNull(),
+    periodEnd: timestamp("period_end", { mode: "date" }).notNull(),
+    sessionCount: integer("session_count").notNull().default(0),
+    amount: integer("amount").notNull().default(0),
+    status: text("status", { enum: ["draft", "open", "paid", "void", "uncollectible"] })
+      .notNull()
+      .default("draft"),
+    dueDate: timestamp("due_date", { mode: "date" }).notNull(),
+    hostedUrl: text("hosted_url"),
+    pdfUrl: text("pdf_url"),
+    paidAt: timestamp("paid_at"),
+    paidOutOfBand: boolean("paid_out_of_band").notNull().default(false),
+    // Bumped when a period is voided and reissued (a session cancelled after
+    // invoicing); keys the Stripe idempotency of each issue.
+    revision: integer("revision").notNull().default(0),
+    releasedAt: timestamp("released_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("booking_invoices_stripe_idx").on(table.stripeInvoiceId),
+    index("booking_invoices_booking_idx").on(table.bookingId),
   ]
 );
 
@@ -655,6 +696,10 @@ export const siteSettings = pgTable("site_settings", {
   bankAccountNumber: text("bank_account_number"),
   invoiceFooterNote: text("invoice_footer_note"),
   invoiceDaysUntilDue: integer("invoice_days_until_due").notNull().default(14),
+  // Monthly-invoiced bookings: how many days before the 1st the month's invoice
+  // goes out, and how many days overdue it may run before the sessions are released.
+  monthlyInvoiceLeadDays: integer("monthly_invoice_lead_days").notNull().default(7),
+  monthlyInvoiceGraceDays: integer("monthly_invoice_grace_days").notNull().default(7),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
   updatedBy: text("updated_by").references(() => users.id),
 });

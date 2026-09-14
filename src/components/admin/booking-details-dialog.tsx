@@ -13,6 +13,7 @@ import {
   Loader2,
   MapPin,
   Pencil,
+  Receipt,
   Repeat,
   User,
   X,
@@ -20,6 +21,9 @@ import {
 import { formatBookingDate } from "@/lib/booking-time";
 import { bookingBalance, customerGroups, money, recurrenceLabel } from "@/lib/bookings";
 import { getAdminBookingRequirements } from "@/actions/booking-requirements";
+import { getAdminBookingInvoices } from "@/actions/bookings";
+import { periodLabel } from "@/lib/booking-invoices";
+import { invoiceStatusBadge, type BookingInvoiceRow } from "@/components/admin/booking-invoices-card";
 import type { BookingRequirementDetail } from "@/lib/booking-requirements";
 import type { OccurrenceRow } from "@/components/admin/booking-occurrence-list";
 import { cn } from "@/lib/utils";
@@ -166,6 +170,20 @@ export function BookingDetailsDialog({ booking, occurrences, hasRequirements }: 
   const [open, setOpen] = useState(false);
   const [requirements, setRequirements] = useState<BookingRequirementDetail | null>(null);
   const [requirementsError, setRequirementsError] = useState<string | null>(null);
+  const [invoices, setInvoices] = useState<BookingInvoiceRow[] | null>(null);
+  const monthlyInvoiced = booking.paymentType === "invoice";
+
+  // Same again for a monthly-invoiced booking's ledger.
+  useEffect(() => {
+    if (!open || !monthlyInvoiced || invoices) return;
+    let cancelled = false;
+    getAdminBookingInvoices(booking.id).then((rows) => {
+      if (!cancelled) setInvoices(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, monthlyInvoiced, invoices, booking.id]);
 
   // The answers and documents are only worth fetching once someone actually
   // opens the dialog, otherwise the list page would query them for every row.
@@ -271,7 +289,7 @@ export function BookingDetailsDialog({ booking, occurrences, hasRequirements }: 
             </span>
             <span className="inline-flex items-center gap-1 rounded-full bg-primary-foreground/10 px-2.5 py-0.5 text-xs font-medium capitalize">
               <CreditCard className="h-3 w-3" aria-hidden="true" />
-              {booking.paymentType.replace("_", " ")}
+              {booking.paymentType === "invoice" ? "monthly invoice" : booking.paymentType.replace("_", " ")}
             </span>
             {booking.recurrence !== "none" && (
               <span className="inline-flex items-center gap-1 rounded-full bg-primary-foreground/10 px-2.5 py-0.5 text-xs font-medium">
@@ -319,21 +337,75 @@ export function BookingDetailsDialog({ booking, occurrences, hasRequirements }: 
           </div>
 
           {/* Money */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Stat label="Total" value={money(booking.amount)} />
-            <Stat label="Paid" value={money(booking.paidAmount)} />
-            <Stat
-              label="Balance"
-              tone={balance === 0 ? "good" : balance > 0 ? "bad" : "default"}
-              value={
-                balance === 0
-                  ? "Settled"
-                  : balance > 0
-                    ? `${money(balance)} due`
-                    : `${money(-balance)} to refund`
-              }
-            />
-          </div>
+          {monthlyInvoiced ? (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Stat label="Per session" value={money(booking.amount)} />
+              <Stat
+                label="Invoiced to date"
+                value={invoices ? money(invoices.filter((row) => row.status !== "void").reduce((sum, row) => sum + row.amount, 0)) : "…"}
+              />
+              <Stat
+                label="Unpaid"
+                tone={invoices && invoices.some((row) => row.status === "open" && row.dueDate < new Date()) ? "bad" : invoices?.some((row) => row.status === "open") ? "default" : "good"}
+                value={invoices ? money(invoices.filter((row) => row.status === "open").reduce((sum, row) => sum + row.amount, 0)) : "…"}
+              />
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Stat label="Total" value={money(booking.amount)} />
+              <Stat label="Paid" value={money(booking.paidAmount)} />
+              <Stat
+                label="Balance"
+                tone={balance === 0 ? "good" : balance > 0 ? "bad" : "default"}
+                value={
+                  balance === 0
+                    ? "Settled"
+                    : balance > 0
+                      ? `${money(balance)} due`
+                      : `${money(-balance)} to refund`
+                }
+              />
+            </div>
+          )}
+
+          {monthlyInvoiced && (
+            <Section
+              icon={Receipt}
+              title="Monthly invoices"
+              aside={invoices && <span className="text-xs text-muted-foreground">{invoices.length} issued</span>}
+            >
+              {!invoices ? (
+                <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  Loading…
+                </p>
+              ) : invoices.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No invoices yet.</p>
+              ) : (
+                <ul className="divide-y rounded-md border text-sm">
+                  {invoices.map((invoice) => {
+                    const badge = invoiceStatusBadge(invoice);
+                    return (
+                      <li key={invoice.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
+                        <span>
+                          {periodLabel({ start: invoice.periodStart, end: invoice.periodEnd })}
+                          <span className="text-muted-foreground">
+                            {" "}· {invoice.sessionCount} session{invoice.sessionCount === 1 ? "" : "s"} · due{" "}
+                            {formatBookingDate(invoice.dueDate, "d MMM yyyy")}
+                          </span>
+                        </span>
+                        <span className="flex items-center gap-2">
+                          <span className="tabular-nums">{money(invoice.amount)}</span>
+                          <Badge variant={badge.variant}>{badge.label}</Badge>
+                          {invoice.hostedUrl && <ExternalLink href={invoice.hostedUrl}>View</ExternalLink>}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </Section>
+          )}
 
           {booking.scheduleType === "custom" && occurrences.length > 0 && (
             <Section

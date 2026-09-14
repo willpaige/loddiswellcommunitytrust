@@ -72,6 +72,7 @@ export const BOOKING_TERMS: TermsSection[] = [
     heading: "Hire rates and payment terms",
     paragraphs: [
       "Payment to be made when the premises are booked. The times booked should be adhered to at all times or further charges will be applied.",
+      "Regular bookings paid monthly by invoice are invoiced in advance for the sessions in each calendar month, with the invoice issued around a week before the month begins and due on the 1st. If a monthly invoice is more than seven days overdue, the sessions it covers are released and the regular booking ends.",
     ],
   },
   {

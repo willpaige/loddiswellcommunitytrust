@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { db } from "@/lib/db";
-import { bookingOccurrences, bookings, lotteryTickets } from "@/lib/db/schema";
+import { bookingInvoices, bookingOccurrences, bookings, lotteryTickets } from "@/lib/db/schema";
 import {
+  applyMonthlyInvoicePaid,
   applyPaidBookingChange,
   createPromotionEventForBooking,
   recordBookingTopUpPayment,
@@ -10,7 +11,7 @@ import {
   sendBookingConfirmedEmails,
   sendBookingPaymentFailedEmail,
 } from "@/actions/bookings";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { addYears } from "date-fns";
 import Stripe from "stripe";
 import { ensureLotteryTicketNumbers, ticketNumbersText } from "@/actions/lottery-ticket-numbers";
@@ -388,6 +389,12 @@ export async function POST(req: NextRequest) {
       case "invoice.paid":
       case "invoice.payment_succeeded": {
         const invoice = event.data.object as Stripe.Invoice;
+        // A monthly-invoiced booking's month: the ledger row, its sessions and
+        // the booking itself are settled from the invoice Stripe holds.
+        if (invoice.metadata?.type === "booking_monthly_invoice" && invoice.id) {
+          await applyMonthlyInvoicePaid(invoice.id);
+          break;
+        }
         // One-off booking invoices have no subscription — handle them first,
         // before the subscription lookup below would `break` on a missing sub.
         if (invoice.metadata?.type === "booking_invoice" && invoice.metadata.bookingId) {
@@ -459,6 +466,10 @@ export async function POST(req: NextRequest) {
       }
       case "invoice.payment_failed": {
         const invoice = event.data.object as Stripe.Invoice;
+        // A declined card on a monthly invoice's hosted page leaves the invoice
+        // open and payable; the chase and release run on its due date, not on
+        // the attempt, so nothing changes here.
+        if (invoice.metadata?.type === "booking_monthly_invoice") break;
         if (invoice.metadata?.type === "booking_invoice" && invoice.metadata.bookingId) {
           await db
             .update(bookings)
@@ -504,6 +515,17 @@ export async function POST(req: NextRequest) {
       }
       case "invoice.finalized": {
         const invoice = event.data.object as Stripe.Invoice;
+        if (invoice.metadata?.type === "booking_monthly_invoice" && invoice.id) {
+          await db
+            .update(bookingInvoices)
+            .set({
+              status: "open",
+              hostedUrl: invoice.hosted_invoice_url ?? null,
+              pdfUrl: invoice.invoice_pdf ?? null,
+            })
+            .where(and(eq(bookingInvoices.stripeInvoiceId, invoice.id), eq(bookingInvoices.status, "draft")));
+          break;
+        }
         if (invoice.metadata?.type === "booking_invoice" && invoice.metadata.bookingId) {
           await db
             .update(bookings)
@@ -519,6 +541,13 @@ export async function POST(req: NextRequest) {
       }
       case "invoice.marked_uncollectible": {
         const invoice = event.data.object as Stripe.Invoice;
+        if (invoice.metadata?.type === "booking_monthly_invoice" && invoice.id) {
+          await db
+            .update(bookingInvoices)
+            .set({ status: "uncollectible" })
+            .where(eq(bookingInvoices.stripeInvoiceId, invoice.id));
+          break;
+        }
         if (invoice.metadata?.type === "booking_invoice" && invoice.metadata.bookingId) {
           await db
             .update(bookings)
@@ -529,6 +558,13 @@ export async function POST(req: NextRequest) {
       }
       case "invoice.voided": {
         const invoice = event.data.object as Stripe.Invoice;
+        if (invoice.metadata?.type === "booking_monthly_invoice" && invoice.id) {
+          await db
+            .update(bookingInvoices)
+            .set({ status: "void" })
+            .where(eq(bookingInvoices.stripeInvoiceId, invoice.id));
+          break;
+        }
         if (invoice.metadata?.type === "booking_invoice" && invoice.metadata.bookingId) {
           await db
             .update(bookings)

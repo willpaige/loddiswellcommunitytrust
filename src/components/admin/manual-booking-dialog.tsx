@@ -85,7 +85,7 @@ export function ManualBookingDialog({
   const [recurrence, setRecurrence] = useState<Recurrence>("none");
   const [repeatCount, setRepeatCount] = useState(8);
   const [indefinite, setIndefinite] = useState(false);
-  const [repeatPaymentMode, setRepeatPaymentMode] = useState<"upfront" | "subscription">("upfront");
+  const [repeatPaymentMode, setRepeatPaymentMode] = useState<"upfront" | "subscription" | "monthly_invoice">("upfront");
   const [billingInterval, setBillingInterval] = useState<Exclude<Recurrence, "none">>("monthly");
   const [recurringAmount, setRecurringAmount] = useState("");
   const [recurringEdited, setRecurringEdited] = useState(false);
@@ -113,6 +113,9 @@ export function ManualBookingDialog({
   const dialogOpen = open ?? internalOpen;
   const recurring = !isKidsParty && recurrence !== "none";
   const isSubscription = paymentMode === "payment_link" && recurring && repeatPaymentMode === "subscription";
+  // Invoiced a month at a time, in advance, for the sessions that month holds.
+  const isMonthlyInvoice = paymentMode === "invoice" && recurring && repeatPaymentMode === "monthly_invoice";
+  const perSessionOnly = isSubscription || isMonthlyInvoice;
   const needsOrganisationName = customerGroup === "team_community" || customerGroup === "business";
   const organisationLabel =
     customerGroup === "business" ? "Business / event name" : "Club / event name";
@@ -143,14 +146,14 @@ export function ManualBookingDialog({
   }, 0);
   const sessionCount = customSchedule ? customSessions.length : recurring ? repeatCount : 1;
   const repeatDiscountApplies =
-    (customSchedule || (recurring && !isSubscription && !indefinite)) &&
+    (customSchedule || (recurring && !perSessionOnly && !indefinite)) &&
     sessionCount >= repeatDiscount.threshold;
   const effectiveDiscountPercent = Math.max(
     customerDiscountPercent,
     repeatDiscountApplies ? repeatDiscount.percent : 0,
     discountCodeResult?.valid ? discountCodeResult.discountPercent ?? 0 : 0
   );
-  const regularGrossPence = perSessionPence * (recurring && !isSubscription && !indefinite ? repeatCount : 1);
+  const regularGrossPence = perSessionPence * (recurring && !perSessionOnly && !indefinite ? repeatCount : 1);
   const automaticTotalPence = Math.round(
     ((customSchedule ? customGrossPence : regularGrossPence) * (100 - effectiveDiscountPercent)) / 100
   );
@@ -478,7 +481,13 @@ export function ManualBookingDialog({
               <input
                 type="hidden"
                 name="repeatPaymentMode"
-                value={paymentMode === "payment_link" ? repeatPaymentMode : "upfront"}
+                value={
+                  paymentMode === "payment_link" && repeatPaymentMode === "subscription"
+                    ? "subscription"
+                    : paymentMode === "invoice" && repeatPaymentMode === "monthly_invoice"
+                      ? "monthly_invoice"
+                      : "upfront"
+                }
               />
               <div className="space-y-2">
                 <Label htmlFor="manualRecurrenceFrequency">Session frequency</Label>
@@ -521,6 +530,23 @@ export function ManualBookingDialog({
                   >
                     <option value="upfront">Pay upfront for a set number of sessions</option>
                     <option value="subscription">Auto-charge card each period (ongoing)</option>
+                  </select>
+                </div>
+              )}
+
+              {paymentMode === "invoice" && (
+                <div className="space-y-2">
+                  <Label htmlFor="manualInvoiceMode">Invoicing</Label>
+                  <select
+                    id="manualInvoiceMode"
+                    value={repeatPaymentMode === "monthly_invoice" ? "monthly_invoice" : "upfront"}
+                    onChange={(event) =>
+                      setRepeatPaymentMode(event.target.value as "upfront" | "monthly_invoice")
+                    }
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                  >
+                    <option value="upfront">One invoice for a set number of sessions</option>
+                    <option value="monthly_invoice">Invoice each month in advance (ongoing)</option>
                   </select>
                 </div>
               )}
@@ -571,6 +597,11 @@ export function ManualBookingDialog({
                     </p>
                   </div>
                 </>
+              ) : isMonthlyInvoice ? (
+                <p className="self-end pb-2 text-sm text-muted-foreground">
+                  The first invoice covers the sessions to the end of the month; each following month is
+                  invoiced in advance. The slot is held on a rolling 180-day horizon until cancelled.
+                </p>
               ) : !indefinite || paymentMode !== "confirmed" ? (
                 <div className="space-y-2">
                   <Label htmlFor="manualRepeatCount">Number of sessions</Label>
@@ -599,7 +630,9 @@ export function ManualBookingDialog({
             </div>
             {!isSubscription && (
               <div className="mt-4 max-w-md space-y-2">
-                <Label htmlFor="customBookingPrice">Custom total price (£)</Label>
+                <Label htmlFor="customBookingPrice">
+                  {isMonthlyInvoice ? "Custom price per session (£)" : "Custom total price (£)"}
+                </Label>
                 <Input
                   id="customBookingPrice"
                   name="customPrice"
@@ -627,13 +660,13 @@ export function ManualBookingDialog({
                     <dd>{customSessions.length}</dd>
                   </div>
                 )}
-                {recurring && !indefinite && !isSubscription && (
+                {recurring && !indefinite && !perSessionOnly && (
                   <div className="flex justify-between gap-4">
                     <dt className="text-sage-700">Number of sessions</dt>
                     <dd>{repeatCount}</dd>
                   </div>
                 )}
-                {!isSubscription && !indefinite && (
+                {!perSessionOnly && !indefinite && (
                   <div className="flex justify-between gap-4">
                     <dt className="text-sage-700">Standard total</dt>
                     <dd>{money(customSchedule ? customGrossPence : regularGrossPence)}</dd>
@@ -655,6 +688,8 @@ export function ManualBookingDialog({
                   <dt>
                     {isSubscription
                       ? `Charge every ${recurrenceLabel(billingInterval).toLowerCase()}`
+                      : isMonthlyInvoice
+                        ? "Per session, invoiced monthly"
                       : indefinite
                         ? "Recorded value per session"
                         : paymentMode === "confirmed"
@@ -672,6 +707,8 @@ export function ManualBookingDialog({
             <p className="mt-3 text-xs text-sage-700">
               {paymentMode === "confirmed"
                 ? "No payment link or invoice will be sent."
+                : isMonthlyInvoice
+                  ? "Each month's invoice is this amount times the sessions that month holds."
                 : paymentMode === "invoice"
                   ? "This amount will be used on the Stripe invoice."
                   : "This amount will be used for the Stripe payment link."}

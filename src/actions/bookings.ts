@@ -12,6 +12,7 @@ import { db } from "@/lib/db";
 import {
   bookingBlocks,
   bookingBlockSeries,
+  bookingInvoices,
   bookingOccurrences,
   bookingPayments,
   bookingOfferings,
@@ -41,6 +42,32 @@ import {
   formatBookingDate,
   parseBookingDateTime,
 } from "@/lib/booking-time";
+import {
+  addUtcDays,
+  daysOverdue,
+  daysUntilDue,
+  firstInvoicePeriod,
+  nextPeriod,
+  periodContaining,
+  periodLabel,
+  perSessionPrice,
+  ukToday,
+  type InvoicePeriod,
+} from "@/lib/booking-invoices";
+
+// How a recurring booking is paid for: a card subscription, the whole block
+// upfront, or an invoice each month in advance for that month's sessions.
+type RepeatPaymentMode = "subscription" | "upfront" | "monthly_invoice";
+
+function readBillingAddress(formData: FormData) {
+  const field = (key: string) => String(formData.get(key) || "").trim() || null;
+  return {
+    billingLine1: field("billingLine1"),
+    billingLine2: field("billingLine2"),
+    billingCity: field("billingCity"),
+    billingPostcode: field("billingPostcode"),
+  };
+}
 
 const publicFacilitySlugs = ["village-hall", "pavilion", "tennis-courts"];
 const defaultRepeatDiscount = {
@@ -266,6 +293,10 @@ function bookingCallbackUrl(formData: FormData) {
     "promoteOnSite",
     "promotionUrl",
     "discountCode",
+    "billingLine1",
+    "billingLine2",
+    "billingCity",
+    "billingPostcode",
   ].forEach((key) => {
     const value = formData.get(key);
     if (typeof value === "string" && value.trim()) {
@@ -428,6 +459,9 @@ async function createBookingStripeCheckoutSession(bookingId: string) {
     .where(eq(bookings.id, bookingId))
     .limit(1);
   if (!booking) throw new Error("Booking not found.");
+  if (booking.paymentType === "invoice") {
+    throw new Error("Monthly-invoiced bookings are paid through their invoices.");
+  }
   const schedule = await bookingScheduleText(bookingId);
 
   // Billing cadence can differ from the session cadence; fall back to the
@@ -501,6 +535,75 @@ async function getInvoiceSettings() {
   return settings ?? null;
 }
 
+// Reuse or create the Stripe customer for a booking, persisting the id so
+// retries and later invoices reuse it.
+async function ensureBookingStripeCustomer(booking: {
+  id: string;
+  customerName: string;
+  organisationName: string | null;
+  customerEmail: string;
+  customerPhone: string | null;
+  billingLine1: string | null;
+  billingLine2: string | null;
+  billingCity: string | null;
+  billingPostcode: string | null;
+  stripeCustomerId: string | null;
+}) {
+  if (booking.stripeCustomerId) return booking.stripeCustomerId;
+  const customer = await getStripe().customers.create({
+    name: booking.organisationName || booking.customerName,
+    email: booking.customerEmail,
+    phone: booking.customerPhone || undefined,
+    address: booking.billingLine1
+      ? {
+          line1: booking.billingLine1,
+          line2: booking.billingLine2 || undefined,
+          city: booking.billingCity || undefined,
+          postal_code: booking.billingPostcode || undefined,
+          country: "GB",
+        }
+      : undefined,
+    metadata: { type: "booking_invoice", bookingId: booking.id },
+  });
+  await db
+    .update(bookings)
+    .set({ stripeCustomerId: customer.id, updatedAt: new Date() })
+    .where(eq(bookings.id, booking.id));
+  return customer.id;
+}
+
+// The charity line and BACS bank-transfer instructions shown on an invoice.
+function invoiceBranding(
+  settings: Awaited<ReturnType<typeof getInvoiceSettings>>,
+  reference: string
+) {
+  const footerLines: string[] = [];
+  if (settings?.legalName) {
+    footerLines.push(
+      settings.charityNumber
+        ? `${settings.legalName} · Registered charity ${settings.charityNumber}`
+        : settings.legalName
+    );
+  }
+  if (settings?.bankAccountName && settings?.bankSortCode && settings?.bankAccountNumber) {
+    footerLines.push(
+      `Pay by bank transfer to ${settings.bankAccountName}, sort code ${settings.bankSortCode}, account ${settings.bankAccountNumber}, reference ${reference}.`
+    );
+  }
+  if (settings?.invoiceFooterNote) footerLines.push(settings.invoiceFooterNote);
+
+  const customFields: { name: string; value: string }[] = [];
+  if (settings?.bankSortCode) customFields.push({ name: "Sort code", value: settings.bankSortCode });
+  if (settings?.bankAccountNumber)
+    customFields.push({ name: "Account number", value: settings.bankAccountNumber });
+  customFields.push({ name: "Reference", value: reference });
+
+  return {
+    footer: footerLines.join("\n") || undefined,
+    customFields: customFields.length ? customFields.slice(0, 4) : undefined,
+  };
+}
+
 export async function createBookingInvoice(bookingId: string) {
   await requireAdmin();
   const [booking] = await db
@@ -547,53 +650,8 @@ export async function createBookingInvoice(bookingId: string) {
 
   const settings = await getInvoiceSettings();
   const reference = `BOOK-${bookingId.slice(0, 8).toUpperCase()}`;
-
-  // Reuse or create the Stripe customer, then persist the id so retries reuse it.
-  let customerId = booking.stripeCustomerId;
-  if (!customerId) {
-    const customer = await stripe.customers.create({
-      name: booking.organisationName || booking.customerName,
-      email: booking.customerEmail,
-      phone: booking.customerPhone || undefined,
-      address: booking.billingLine1
-        ? {
-            line1: booking.billingLine1,
-            line2: booking.billingLine2 || undefined,
-            city: booking.billingCity || undefined,
-            postal_code: booking.billingPostcode || undefined,
-            country: "GB",
-          }
-        : undefined,
-      metadata: { type: "booking_invoice", bookingId },
-    });
-    customerId = customer.id;
-    await db
-      .update(bookings)
-      .set({ stripeCustomerId: customerId, updatedAt: new Date() })
-      .where(eq(bookings.id, bookingId));
-  }
-
-  // Build the BACS bank-transfer instructions shown on the invoice.
-  const footerLines: string[] = [];
-  if (settings?.legalName) {
-    footerLines.push(
-      settings.charityNumber
-        ? `${settings.legalName} · Registered charity ${settings.charityNumber}`
-        : settings.legalName
-    );
-  }
-  if (settings?.bankAccountName && settings?.bankSortCode && settings?.bankAccountNumber) {
-    footerLines.push(
-      `Pay by bank transfer to ${settings.bankAccountName}, sort code ${settings.bankSortCode}, account ${settings.bankAccountNumber}, reference ${reference}.`
-    );
-  }
-  if (settings?.invoiceFooterNote) footerLines.push(settings.invoiceFooterNote);
-
-  const customFields: { name: string; value: string }[] = [];
-  if (settings?.bankSortCode) customFields.push({ name: "Sort code", value: settings.bankSortCode });
-  if (settings?.bankAccountNumber)
-    customFields.push({ name: "Account number", value: settings.bankAccountNumber });
-  customFields.push({ name: "Reference", value: reference });
+  const customerId = await ensureBookingStripeCustomer(booking);
+  const { footer, customFields } = invoiceBranding(settings, reference);
 
   await stripe.invoiceItems.create({
     customer: customerId,
@@ -610,8 +668,8 @@ export async function createBookingInvoice(bookingId: string) {
       auto_advance: true,
       pending_invoice_items_behavior: "include",
       description: `Booking at ${booking.facilityName}`,
-      footer: footerLines.join("\n") || undefined,
-      custom_fields: customFields.length ? customFields.slice(0, 4) : undefined,
+      footer,
+      custom_fields: customFields,
       payment_settings: { payment_method_types: ["card"] },
       metadata: { type: "booking_invoice", bookingId },
     },
@@ -672,6 +730,659 @@ export async function markBookingInvoicePaidOutOfBand(bookingId: string) {
   });
   revalidatePath("/admin/bookings");
   revalidatePath(`/admin/bookings/${bookingId}/edit`);
+}
+
+// ── Monthly-invoiced bookings ────────────────────────────────────────────────
+//
+// A regular hirer who would rather not keep a card on file holds their slot
+// indefinitely and is invoiced in advance for each calendar month's sessions.
+// There is no Stripe subscription: each month is a plain send_invoice invoice
+// created here, so it bills the sessions the month actually holds and the
+// release rule stays ours rather than Stripe's account-wide dunning.
+
+export async function getMonthlyInvoiceSettings() {
+  const [settings] = await db
+    .select({
+      leadDays: siteSettings.monthlyInvoiceLeadDays,
+      graceDays: siteSettings.monthlyInvoiceGraceDays,
+    })
+    .from(siteSettings)
+    .limit(1);
+  return { leadDays: settings?.leadDays ?? 7, graceDays: settings?.graceDays ?? 7 };
+}
+
+export async function updateMonthlyInvoiceSettings(formData: FormData) {
+  const session = await requireAdmin();
+  const leadDays = Math.max(1, Math.min(28, Math.round(Number(formData.get("leadDays") || 7))));
+  const graceDays = Math.max(1, Math.min(60, Math.round(Number(formData.get("graceDays") || 7))));
+  const [existing] = await db.select({ id: siteSettings.id }).from(siteSettings).limit(1);
+  if (existing) {
+    await db
+      .update(siteSettings)
+      .set({
+        monthlyInvoiceLeadDays: leadDays,
+        monthlyInvoiceGraceDays: graceDays,
+        updatedAt: new Date(),
+        updatedBy: session.user?.id ?? null,
+      })
+      .where(eq(siteSettings.id, existing.id));
+  } else {
+    await db.insert(siteSettings).values({
+      monthlyInvoiceLeadDays: leadDays,
+      monthlyInvoiceGraceDays: graceDays,
+      updatedBy: session.user?.id ?? null,
+    });
+  }
+  await logAudit({
+    action: "update",
+    entity: "booking",
+    description: "Updated monthly invoicing settings",
+    metadata: { leadDays, graceDays },
+  });
+  revalidatePath("/admin/bookings/settings");
+}
+
+async function loadMonthlyInvoiceBooking(bookingId: string) {
+  const [booking] = await db
+    .select({
+      id: bookings.id,
+      status: bookings.status,
+      paymentType: bookings.paymentType,
+      customerName: bookings.customerName,
+      organisationName: bookings.organisationName,
+      customerEmail: bookings.customerEmail,
+      customerPhone: bookings.customerPhone,
+      billingLine1: bookings.billingLine1,
+      billingLine2: bookings.billingLine2,
+      billingCity: bookings.billingCity,
+      billingPostcode: bookings.billingPostcode,
+      stripeCustomerId: bookings.stripeCustomerId,
+      unitAmount: bookings.unitAmount,
+      pricingPercent: bookings.pricingPercent,
+      startDate: bookings.startDate,
+      endDate: bookings.endDate,
+      facilityName: facilities.name,
+      offeringName: bookingOfferings.name,
+      offeringEndTime: bookingOfferings.endTime,
+    })
+    .from(bookings)
+    .innerJoin(facilities, eq(bookings.facilityId, facilities.id))
+    .leftJoin(bookingOfferings, eq(bookings.offeringId, bookingOfferings.id))
+    .where(eq(bookings.id, bookingId))
+    .limit(1);
+  return booking ?? null;
+}
+
+function monthlyInvoicePeriodKey(period: InvoicePeriod) {
+  return `${formatBookingDate(period.start, "yyyyMMdd")}-${formatBookingDate(period.end, "yyyyMMdd")}`;
+}
+
+function monthlyInvoiceVariables(
+  booking: NonNullable<Awaited<ReturnType<typeof loadMonthlyInvoiceBooking>>>,
+  invoice: { id: string; amount: number; dueDate: Date; hostedUrl: string | null; periodStart: Date; periodEnd: Date },
+  sessions: { startDate: Date; endDate: Date }[],
+  graceDays: number
+) {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  return {
+    customerName: booking.customerName,
+    customerEmail: booking.customerEmail,
+    customerPhone: booking.customerPhone || "Not provided",
+    facilityName: booking.facilityName,
+    offeringName: booking.offeringName || "Booking",
+    period: periodLabel({ start: invoice.periodStart, end: invoice.periodEnd }),
+    sessions: sessions
+      .map((row) => `${formatBookingDate(row.startDate, "EEE d MMM yyyy, HH:mm")}–${formatBookingDate(row.endDate, "HH:mm")}`)
+      .join("\n"),
+    amount: moneyText(invoice.amount),
+    dueDate: formatBookingDate(invoice.dueDate, "d MMMM yyyy"),
+    releaseDate: formatBookingDate(addUtcDays(invoice.dueDate, graceDays), "d MMMM yyyy"),
+    invoiceUrl: invoice.hostedUrl || `${appUrl}/account/bookings`,
+    bookingUrl: `${appUrl}/account/bookings`,
+    adminUrl: `${appUrl}/admin/bookings/${booking.id}/edit`,
+  };
+}
+
+// Issues the invoice for one period of a monthly-invoiced booking: prices the
+// sessions the period holds, allocates the money across them so a later
+// cancellation refunds its share, and raises the Stripe invoice. Idempotent per
+// booking, period and revision -- a rerun after a crash returns the live row.
+async function issueMonthlyBookingInvoice(
+  bookingId: string,
+  period: InvoicePeriod,
+  dueDate: Date,
+  revision = 0
+) {
+  const booking = await loadMonthlyInvoiceBooking(bookingId);
+  if (!booking) throw new Error("Booking not found.");
+  if (booking.paymentType !== "invoice") throw new Error("Not a monthly-invoiced booking.");
+
+  const [live] = await db
+    .select()
+    .from(bookingInvoices)
+    .where(
+      and(
+        eq(bookingInvoices.bookingId, bookingId),
+        eq(bookingInvoices.periodStart, period.start),
+        ne(bookingInvoices.status, "void")
+      )
+    )
+    .limit(1);
+  if (live && live.status !== "draft") return live;
+
+  const sessions = await db
+    .select({ id: bookingOccurrences.id, startDate: bookingOccurrences.startDate, endDate: bookingOccurrences.endDate })
+    .from(bookingOccurrences)
+    .where(
+      and(
+        eq(bookingOccurrences.bookingId, bookingId),
+        ne(bookingOccurrences.status, "cancelled"),
+        gte(bookingOccurrences.startDate, period.start),
+        lt(bookingOccurrences.startDate, period.end)
+      )
+    )
+    .orderBy(asc(bookingOccurrences.startDate));
+  if (sessions.length === 0) return null;
+
+  const variableDuration = !booking.offeringEndTime;
+  const hours = variableDuration ? differenceInHours(booking.endDate, booking.startDate) : 1;
+  const perSession = perSessionPrice(booking.unitAmount, booking.pricingPercent, hours);
+  const amount = perSession * sessions.length;
+  if (amount <= 0) return null;
+
+  const allocations = allocateAcrossOccurrences(amount, sessions.length);
+  for (const [index, session] of sessions.entries()) {
+    await db
+      .update(bookingOccurrences)
+      .set({ allocatedAmount: allocations[index] ?? 0 })
+      .where(eq(bookingOccurrences.id, session.id));
+  }
+
+  const invoiceRowId = live?.id ?? createId();
+  if (!live) {
+    await db.insert(bookingInvoices).values({
+      id: invoiceRowId,
+      bookingId,
+      periodStart: period.start,
+      periodEnd: period.end,
+      sessionCount: sessions.length,
+      amount,
+      status: "draft",
+      dueDate,
+      revision,
+    });
+  }
+
+  const stripe = getStripe();
+  const settings = await getInvoiceSettings();
+  const reference = `BOOK-${bookingId.slice(0, 8).toUpperCase()}-${formatBookingDate(period.start, "MMMyy").toUpperCase()}`;
+  const customerId = await ensureBookingStripeCustomer(booking);
+  const { footer, customFields } = invoiceBranding(settings, reference);
+  const periodKey = monthlyInvoicePeriodKey(period);
+  const label = periodLabel(period);
+
+  // The item is not covered by the invoice's idempotency key, so it gets its
+  // own; a retry would otherwise leave a stray item swept into the next invoice.
+  await stripe.invoiceItems.create(
+    {
+      customer: customerId,
+      currency: "gbp",
+      amount,
+      description: `${booking.facilityName} - ${booking.offeringName || "Booking"} · ${sessions.length} session${sessions.length === 1 ? "" : "s"}, ${label}`,
+    },
+    { idempotencyKey: `booking-monthly-item-${bookingId}-${periodKey}-r${revision}` }
+  );
+  const invoice = await stripe.invoices.create(
+    {
+      customer: customerId,
+      collection_method: "send_invoice",
+      // Stripe insists the due date is ahead of it; a reissue of an overdue month
+      // keeps its original due date in the ledger so the grace clock stands.
+      due_date: Math.floor(Math.max(dueDate.getTime(), Date.now() + 3_600_000) / 1000),
+      // Stripe would otherwise email the invoice and its own reminders on top of ours.
+      auto_advance: false,
+      pending_invoice_items_behavior: "include",
+      description: `${booking.facilityName} sessions, ${label}`,
+      footer,
+      custom_fields: customFields,
+      payment_settings: { payment_method_types: ["card"] },
+      metadata: { type: "booking_monthly_invoice", bookingId, bookingInvoiceId: invoiceRowId },
+    },
+    { idempotencyKey: `booking-monthly-${bookingId}-${periodKey}-r${revision}` }
+  );
+  if (!invoice.id) throw new Error("Stripe did not return an invoice id.");
+  const finalized = await stripe.invoices.finalizeInvoice(invoice.id);
+
+  const [row] = await db
+    .update(bookingInvoices)
+    .set({
+      stripeInvoiceId: invoice.id,
+      status: "open",
+      hostedUrl: finalized.hosted_invoice_url ?? null,
+      pdfUrl: finalized.invoice_pdf ?? null,
+      sessionCount: sessions.length,
+      amount,
+      dueDate,
+    })
+    .where(eq(bookingInvoices.id, invoiceRowId))
+    .returning();
+
+  const { graceDays } = await getMonthlyInvoiceSettings();
+  await sendTemplateEmail({
+    key: "booking_invoice_issued",
+    to: booking.customerEmail,
+    variables: monthlyInvoiceVariables(booking, row, sessions, graceDays),
+    relatedEntityType: "booking_invoice",
+    relatedEntityId: `${row.id}:issued`,
+  });
+  await logAudit({
+    action: "create",
+    entity: "booking",
+    entityId: bookingId,
+    description: `Issued monthly invoice for ${label} (${moneyText(amount)}, ${sessions.length} sessions)`,
+  });
+  return row;
+}
+
+// The first invoice covers the booking's first session through the end of that
+// month (or the next, when the month is nearly over). It is due a week out,
+// or on the day of the first session if that comes sooner.
+async function issueFirstBookingInvoice(bookingId: string) {
+  const [booking] = await db
+    .select({ startDate: bookings.startDate })
+    .from(bookings)
+    .where(eq(bookings.id, bookingId))
+    .limit(1);
+  if (!booking) throw new Error("Booking not found.");
+  const { leadDays } = await getMonthlyInvoiceSettings();
+  const period = firstInvoicePeriod(booking.startDate, leadDays);
+  const today = ukToday();
+  const firstSessionDay = new Date(
+    Date.UTC(booking.startDate.getUTCFullYear(), booking.startDate.getUTCMonth(), booking.startDate.getUTCDate())
+  );
+  let dueDate = addUtcDays(today, leadDays);
+  if (dueDate > firstSessionDay) dueDate = firstSessionDay;
+  if (dueDate <= today) dueDate = addUtcDays(today, 1);
+  return issueMonthlyBookingInvoice(bookingId, period, dueDate);
+}
+
+// Applies a paid invoice: the ledger row, the sessions it covers, the booking
+// itself on its first payment, and the income ledger. Trusts Stripe, not the
+// caller -- the invoice is re-read and must actually be paid -- so the webhook
+// and the admin's "mark paid" both funnel through here safely.
+export async function applyMonthlyInvoicePaid(stripeInvoiceId: string) {
+  const stripe = getStripe();
+  const invoice = await stripe.invoices.retrieve(stripeInvoiceId);
+  if (invoice.status !== "paid") return { applied: false as const };
+  const [row] = await db
+    .select()
+    .from(bookingInvoices)
+    .where(eq(bookingInvoices.stripeInvoiceId, stripeInvoiceId))
+    .limit(1);
+  if (!row) return { applied: false as const };
+
+  // The current API reports no flag for an out-of-band payment; it is the one
+  // with nothing behind it that Stripe collected.
+  const firstPayment = invoice.payments?.data?.[0]?.payment;
+  const paymentIntentId =
+    firstPayment && typeof firstPayment.payment_intent === "string"
+      ? firstPayment.payment_intent
+      : firstPayment && typeof firstPayment.payment_intent === "object"
+        ? firstPayment.payment_intent?.id ?? null
+        : null;
+  const paidOutOfBand = !paymentIntentId && !firstPayment?.charge;
+  const amountPaid = invoice.amount_paid || invoice.amount_due || row.amount;
+
+  const [earlierPaid] = await db
+    .select({ id: bookingInvoices.id })
+    .from(bookingInvoices)
+    .where(
+      and(
+        eq(bookingInvoices.bookingId, row.bookingId),
+        eq(bookingInvoices.status, "paid"),
+        ne(bookingInvoices.id, row.id)
+      )
+    )
+    .limit(1);
+
+  if (row.status !== "paid") {
+    await db
+      .update(bookingInvoices)
+      .set({ status: "paid", paidAt: new Date(), paidOutOfBand })
+      .where(eq(bookingInvoices.id, row.id));
+  }
+  await db
+    .update(bookingOccurrences)
+    .set({ status: "confirmed" })
+    .where(
+      and(
+        eq(bookingOccurrences.bookingId, row.bookingId),
+        eq(bookingOccurrences.status, "pending_payment"),
+        gte(bookingOccurrences.startDate, row.periodStart),
+        lt(bookingOccurrences.startDate, row.periodEnd)
+      )
+    );
+  const [booking] = await db
+    .select({ status: bookings.status })
+    .from(bookings)
+    .where(eq(bookings.id, row.bookingId))
+    .limit(1);
+  if (booking && (booking.status === "pending_payment" || booking.status === "payment_failed")) {
+    await db
+      .update(bookings)
+      .set({ status: "confirmed", updatedAt: new Date() })
+      .where(eq(bookings.id, row.bookingId));
+    // Later sessions are held on the rolling window and confirmed with the
+    // booking; only the invoiced period was ever pending.
+    await db
+      .update(bookingOccurrences)
+      .set({ status: "confirmed" })
+      .where(and(eq(bookingOccurrences.bookingId, row.bookingId), eq(bookingOccurrences.status, "pending_payment")));
+  }
+  await recordBookingPayment({
+    bookingId: row.bookingId,
+    amount: amountPaid,
+    paymentIntentId,
+    invoiceId: stripeInvoiceId,
+    paidOutOfBand,
+  });
+  if (!earlierPaid) {
+    await createPromotionEventForBooking(row.bookingId);
+    await sendBookingConfirmedEmails(row.bookingId);
+  }
+  revalidatePath("/admin/bookings");
+  revalidatePath(`/admin/bookings/${row.bookingId}/edit`);
+  revalidatePath("/account/bookings");
+  return { applied: true as const, bookingId: row.bookingId };
+}
+
+export async function markMonthlyInvoicePaidOutOfBand(invoiceRowId: string) {
+  await requireAdmin();
+  const [row] = await db
+    .select()
+    .from(bookingInvoices)
+    .where(eq(bookingInvoices.id, invoiceRowId))
+    .limit(1);
+  if (!row?.stripeInvoiceId) throw new Error("No invoice to mark as paid.");
+  if (row.status !== "open") throw new Error("Only an open invoice can be marked paid.");
+  await getStripe().invoices.pay(row.stripeInvoiceId, { paid_out_of_band: true });
+  await applyMonthlyInvoicePaid(row.stripeInvoiceId);
+  await logAudit({
+    action: "update",
+    entity: "booking",
+    entityId: row.bookingId,
+    description: `Marked monthly invoice for ${periodLabel({ start: row.periodStart, end: row.periodEnd })} paid (bank transfer)`,
+  });
+}
+
+export async function voidMonthlyInvoice(invoiceRowId: string) {
+  await requireAdmin();
+  const [row] = await db
+    .select()
+    .from(bookingInvoices)
+    .where(eq(bookingInvoices.id, invoiceRowId))
+    .limit(1);
+  if (!row) throw new Error("Invoice not found.");
+  if (row.status !== "open" && row.status !== "draft") throw new Error("Only an open invoice can be voided.");
+  await voidMonthlyInvoiceRow(row);
+  await logAudit({
+    action: "update",
+    entity: "booking",
+    entityId: row.bookingId,
+    description: `Voided monthly invoice for ${periodLabel({ start: row.periodStart, end: row.periodEnd })}`,
+  });
+  revalidatePath("/admin/bookings");
+  revalidatePath(`/admin/bookings/${row.bookingId}/edit`);
+}
+
+async function voidMonthlyInvoiceRow(row: { id: string; stripeInvoiceId: string | null; status: string }) {
+  if (row.stripeInvoiceId) {
+    const stripe = getStripe();
+    const current = await stripe.invoices.retrieve(row.stripeInvoiceId);
+    if (current.status === "draft") await stripe.invoices.del(row.stripeInvoiceId);
+    else if (current.status === "open") await stripe.invoices.voidInvoice(row.stripeInvoiceId);
+  }
+  await db.update(bookingInvoices).set({ status: "void" }).where(eq(bookingInvoices.id, row.id));
+}
+
+async function voidOpenMonthlyInvoices(bookingId: string) {
+  const rows = await db
+    .select()
+    .from(bookingInvoices)
+    .where(and(eq(bookingInvoices.bookingId, bookingId), inArray(bookingInvoices.status, ["draft", "open"])));
+  for (const row of rows) await voidMonthlyInvoiceRow(row);
+  return rows.length;
+}
+
+// Sessions inside a paid period that have not happened yet are money the Trust
+// holds for nothing once the booking is cancelled; flag each for a refund.
+async function markPaidFutureOccurrencesRefundDue(bookingId: string) {
+  const paid = await db
+    .select({ periodStart: bookingInvoices.periodStart, periodEnd: bookingInvoices.periodEnd })
+    .from(bookingInvoices)
+    .where(and(eq(bookingInvoices.bookingId, bookingId), eq(bookingInvoices.status, "paid")));
+  const now = new Date();
+  for (const period of paid) {
+    await db
+      .update(bookingOccurrences)
+      .set({ refundStatus: "due" })
+      .where(
+        and(
+          eq(bookingOccurrences.bookingId, bookingId),
+          ne(bookingOccurrences.status, "cancelled"),
+          eq(bookingOccurrences.refundStatus, "none"),
+          gt(bookingOccurrences.allocatedAmount, 0),
+          gte(bookingOccurrences.startDate, now),
+          gte(bookingOccurrences.startDate, period.periodStart),
+          lt(bookingOccurrences.startDate, period.periodEnd)
+        )
+      );
+  }
+}
+
+// A month left unpaid past the grace period: the invoice is voided so it can no
+// longer be paid, its sessions and everything after them are released, and the
+// booking ends so no further invoices go out.
+async function releaseMonthlyInvoice(
+  row: typeof bookingInvoices.$inferSelect,
+  graceDays: number
+) {
+  const booking = await loadMonthlyInvoiceBooking(row.bookingId);
+  if (!booking) return;
+  const released = await db
+    .select({ startDate: bookingOccurrences.startDate, endDate: bookingOccurrences.endDate })
+    .from(bookingOccurrences)
+    .where(
+      and(
+        eq(bookingOccurrences.bookingId, row.bookingId),
+        ne(bookingOccurrences.status, "cancelled"),
+        gte(bookingOccurrences.startDate, row.periodStart)
+      )
+    )
+    .orderBy(asc(bookingOccurrences.startDate));
+
+  await voidMonthlyInvoiceRow(row);
+  await db
+    .update(bookingInvoices)
+    .set({ releasedAt: new Date() })
+    .where(eq(bookingInvoices.id, row.id));
+  await db
+    .update(bookingOccurrences)
+    .set({ status: "cancelled" })
+    .where(
+      and(
+        eq(bookingOccurrences.bookingId, row.bookingId),
+        ne(bookingOccurrences.status, "cancelled"),
+        gte(bookingOccurrences.startDate, row.periodStart)
+      )
+    );
+  await db
+    .update(bookings)
+    .set({ status: "cancelled", cancelledAt: new Date(), updatedAt: new Date() })
+    .where(eq(bookings.id, row.bookingId));
+
+  const variables = {
+    ...monthlyInvoiceVariables(booking, row, released, graceDays),
+    releasedDates: released
+      .map((item) => `${formatBookingDate(item.startDate, "EEE d MMM yyyy, HH:mm")}–${formatBookingDate(item.endDate, "HH:mm")}`)
+      .join("\n") || "None",
+  };
+  await sendTemplateEmail({
+    key: "booking_invoice_released",
+    to: booking.customerEmail,
+    variables,
+    relatedEntityType: "booking_invoice",
+    relatedEntityId: `${row.id}:released`,
+  });
+  const managerEmail = await getBookingManagerEmail();
+  if (managerEmail) {
+    await sendTemplateEmail({
+      key: "booking_invoice_released_manager",
+      to: managerEmail,
+      variables,
+      relatedEntityType: "booking_invoice",
+      relatedEntityId: `${row.id}:released-manager`,
+    });
+  }
+  await logAudit({
+    action: "update",
+    entity: "booking",
+    entityId: row.bookingId,
+    description: `Released ${released.length} session(s): monthly invoice for ${periodLabel({ start: row.periodStart, end: row.periodEnd })} unpaid ${graceDays} days past due`,
+  });
+}
+
+// The daily cycle for monthly-invoiced bookings: raise next month's invoices,
+// chase the open ones, and release what has gone unpaid past the grace period.
+export async function runMonthlyInvoiceCycle() {
+  const today = ukToday();
+  const { leadDays, graceDays } = await getMonthlyInvoiceSettings();
+  const result = { issued: 0, reminded: 0, overdue: 0, released: 0, errors: [] as string[] };
+
+  // Issue. Both the current month and the next are checked, so a cycle that
+  // missed a day (or a booking confirmed late) still gets its invoice.
+  const active = await db
+    .select({ id: bookings.id })
+    .from(bookings)
+    .where(and(eq(bookings.paymentType, "invoice"), eq(bookings.status, "confirmed")));
+  const current = periodContaining(today);
+  const upcoming = nextPeriod(current);
+  for (const booking of active) {
+    for (const period of [current, upcoming]) {
+      if (today < addUtcDays(period.start, -leadDays)) continue;
+      const [covered] = await db
+        .select({ id: bookingInvoices.id })
+        .from(bookingInvoices)
+        .where(
+          and(
+            eq(bookingInvoices.bookingId, booking.id),
+            ne(bookingInvoices.status, "void"),
+            lte(bookingInvoices.periodStart, period.start),
+            gte(bookingInvoices.periodEnd, period.end)
+          )
+        )
+        .limit(1);
+      if (covered) continue;
+      const dueDate = period.start > today ? period.start : addUtcDays(today, 1);
+      try {
+        const row = await issueMonthlyBookingInvoice(booking.id, period, dueDate);
+        if (row) result.issued += 1;
+      } catch (error) {
+        result.errors.push(`issue ${booking.id} ${periodLabel(period)}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+  }
+
+  // Chase and release.
+  const open = await db
+    .select()
+    .from(bookingInvoices)
+    .where(eq(bookingInvoices.status, "open"));
+  const managerEmail = await getBookingManagerEmail();
+  for (const row of open) {
+    const booking = await loadMonthlyInvoiceBooking(row.bookingId);
+    if (!booking) continue;
+    const overdue = daysOverdue(row.dueDate, today);
+    const untilDue = daysUntilDue(row.dueDate, today);
+    try {
+      if (overdue >= graceDays) {
+        await releaseMonthlyInvoice(row, graceDays);
+        result.released += 1;
+        continue;
+      }
+      const sessions = await db
+        .select({ startDate: bookingOccurrences.startDate, endDate: bookingOccurrences.endDate })
+        .from(bookingOccurrences)
+        .where(
+          and(
+            eq(bookingOccurrences.bookingId, row.bookingId),
+            ne(bookingOccurrences.status, "cancelled"),
+            gte(bookingOccurrences.startDate, row.periodStart),
+            lt(bookingOccurrences.startDate, row.periodEnd)
+          )
+        )
+        .orderBy(asc(bookingOccurrences.startDate));
+      const variables = monthlyInvoiceVariables(booking, row, sessions, graceDays);
+      const reminder =
+        untilDue === 3 ? { when: "due in 3 days", key: "due-3" }
+        : untilDue === 0 ? { when: "due today", key: "due-0" }
+        : overdue === 3 ? { when: "3 days overdue", key: "overdue-3" }
+        : null;
+      if (reminder) {
+        const sent = await sendTemplateEmail({
+          key: "booking_invoice_reminder",
+          to: booking.customerEmail,
+          variables: { ...variables, when: reminder.when },
+          relatedEntityType: "booking_invoice",
+          relatedEntityId: `${row.id}:${reminder.key}`,
+        });
+        if (sent.sent) result.reminded += 1;
+      }
+      if (overdue === 1) {
+        const sent = await sendTemplateEmail({
+          key: "booking_invoice_overdue",
+          to: booking.customerEmail,
+          variables,
+          relatedEntityType: "booking_invoice",
+          relatedEntityId: `${row.id}:overdue-1`,
+        });
+        if (managerEmail) {
+          await sendTemplateEmail({
+            key: "booking_invoice_overdue_manager",
+            to: managerEmail,
+            variables,
+            relatedEntityType: "booking_invoice",
+            relatedEntityId: `${row.id}:overdue-manager`,
+          });
+        }
+        if (sent.sent) result.overdue += 1;
+      }
+    } catch (error) {
+      result.errors.push(`chase ${row.id}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  if (result.issued || result.released) revalidatePath("/admin/bookings");
+  return result;
+}
+
+// Form-posted wrappers for the edit page's invoice ledger.
+export async function markMonthlyInvoicePaidAction(formData: FormData) {
+  const invoiceId = String(formData.get("invoiceId") || "");
+  await markMonthlyInvoicePaidOutOfBand(invoiceId);
+}
+
+export async function voidMonthlyInvoiceAction(formData: FormData) {
+  const invoiceId = String(formData.get("invoiceId") || "");
+  await voidMonthlyInvoice(invoiceId);
+}
+
+export async function getAdminBookingInvoices(bookingId: string) {
+  await requireAdmin();
+  return db
+    .select()
+    .from(bookingInvoices)
+    .where(eq(bookingInvoices.bookingId, bookingId))
+    .orderBy(desc(bookingInvoices.periodStart), desc(bookingInvoices.revision));
 }
 
 export async function sendBookingConfirmedEmails(bookingId: string, manual = false) {
@@ -1205,10 +1916,15 @@ async function readBookingForm(formData: FormData) {
     recurrenceOptions.some((option) => option.value === recurrenceValue)
       ? (recurrenceValue as Recurrence)
       : "none";
-  let repeatPaymentMode: "subscription" | "upfront" =
-    recurrence !== "none" && formData.get("repeatPaymentMode") === "upfront"
-      ? "upfront"
-      : "subscription";
+  const requestedMode = formData.get("repeatPaymentMode");
+  let repeatPaymentMode: RepeatPaymentMode =
+    recurrence === "none"
+      ? "subscription"
+      : requestedMode === "upfront"
+        ? "upfront"
+        : requestedMode === "monthly_invoice"
+          ? "monthly_invoice"
+          : "subscription";
   let repeatCount = recurrence !== "none"
     ? Math.max(1, Math.min(52, Math.round(Number(formData.get("repeatCount") || 8))))
     : 1;
@@ -1315,7 +2031,7 @@ async function readBookingForm(formData: FormData) {
 function bookingPricingPercent(
   recurrence: Recurrence,
   repeatDiscount: { threshold: number; percent: number },
-  repeatPaymentMode: "subscription" | "upfront",
+  repeatPaymentMode: RepeatPaymentMode,
   repeatCount: number,
   customerDiscountPercent = 0
 ) {
@@ -1344,7 +2060,7 @@ function bookingAmount(
   recurrence: Recurrence,
   variableDuration: boolean,
   repeatDiscount: { threshold: number; percent: number },
-  repeatPaymentMode: "subscription" | "upfront",
+  repeatPaymentMode: RepeatPaymentMode,
   repeatCount: number,
   customerDiscountPercent = 0
 ) {
@@ -1362,7 +2078,7 @@ function bookingAmount(
   const applyPct = (value: number) => Math.round((value * (100 - effectivePct)) / 100);
   if (recurrence === "none") return applyPct(amount);
   if (repeatPaymentMode === "upfront") return applyPct(amount * repeatCount);
-  return applyPct(amount); // subscription: per-cycle
+  return applyPct(amount); // subscription and monthly invoice: per session
 }
 
 type CustomSessionInput = { date: string; startTime: string; endTime: string };
@@ -1560,12 +2276,17 @@ export async function createBookingCheckout(formData: FormData) {
   const { offering, price, start, end, recurrence, repeatPaymentMode, repeatCount } =
     await readBookingForm(formData);
   const repeatDiscount = await getRepeatDiscountSettings();
-  const dates = occurrenceDates(
-    start,
-    end,
-    recurrence,
-    repeatPaymentMode === "upfront" ? repeatCount : defaultSubscriptionOccurrenceCount(recurrence)
-  );
+  const isMonthlyInvoice = recurrence !== "none" && repeatPaymentMode === "monthly_invoice";
+  // A monthly-invoiced booking holds its slot indefinitely on the same rolling
+  // window a subscription uses; the nightly cron keeps it topped up.
+  const dates = isMonthlyInvoice
+    ? occurrenceDatesInWindow(start, end, recurrence, null, addDays(new Date(), SUBSCRIPTION_HORIZON_DAYS))
+    : occurrenceDates(
+        start,
+        end,
+        recurrence,
+        repeatPaymentMode === "upfront" ? repeatCount : defaultSubscriptionOccurrenceCount(recurrence)
+      );
   await assertAvailable(offering.facilityId, offering.capacity, dates);
 
   const facility = await db
@@ -1586,6 +2307,10 @@ export async function createBookingCheckout(formData: FormData) {
   if (!customerName) throw new Error("Name is required.");
   if ((price.customerGroup === "team_community" || price.customerGroup === "business") && !organisationName) {
     throw new Error("Business, club, or event name is required.");
+  }
+  const billing = readBillingAddress(formData);
+  if (isMonthlyInvoice && (!billing.billingLine1 || !billing.billingCity || !billing.billingPostcode)) {
+    throw new Error("A billing address is required for monthly invoicing.");
   }
   await upsertCustomerRecord({
     email: customerEmail,
@@ -1644,9 +2369,11 @@ export async function createBookingCheckout(formData: FormData) {
     status: isFree ? "confirmed" : "pending_payment",
     paymentType: isFree
       ? "manual"
-      : recurrence !== "none" && repeatPaymentMode === "subscription"
-        ? "subscription"
-        : "one_off",
+      : isMonthlyInvoice
+        ? "invoice"
+        : recurrence !== "none" && repeatPaymentMode === "subscription"
+          ? "subscription"
+          : "one_off",
     amount,
     discountCodeId: codeResult?.id ?? null,
     discountCode: codeResult?.code ?? null,
@@ -1663,12 +2390,17 @@ export async function createBookingCheckout(formData: FormData) {
     startDate: start,
     endDate: end,
     recurrence,
+    indefinite: isMonthlyInvoice && !isFree,
+    billingInterval: isMonthlyInvoice && !isFree ? "monthly" : null,
     repeatCount: recurrence !== "none" ? dates.length : 1,
     promoteOnSite,
     promotionUrl,
     requirementSetId: offering.requirementSetId ?? null,
+    ...(isMonthlyInvoice ? billing : {}),
   });
-  const allocations = allocateAcrossOccurrences(amount, dates.length);
+  // A monthly-invoiced booking's sessions are priced invoice by invoice, so
+  // nothing is allocated to them here.
+  const allocations = isMonthlyInvoice && !isFree ? [] : allocateAcrossOccurrences(amount, dates.length);
   await db.insert(bookingOccurrences).values(
     dates.map((date, index) => ({
       bookingId,
@@ -1684,6 +2416,11 @@ export async function createBookingCheckout(formData: FormData) {
     await sendBookingConfirmedEmails(bookingId);
     await createPromotionEventForBooking(bookingId);
     redirect("/booking/success");
+  }
+
+  if (isMonthlyInvoice) {
+    await issueFirstBookingInvoice(bookingId);
+    redirect(`/booking/success?booking_id=${bookingId}`);
   }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
@@ -1805,13 +2542,14 @@ export async function confirmStripeBooking(sessionId: string) {
       .update(bookingOccurrences)
       .set({ status: "confirmed" })
       .where(eq(bookingOccurrences.bookingId, booking.id));
-    await recordBookingPayment(
-      booking.id,
-      typeof checkoutSession.payment_intent === "string"
-        ? checkoutSession.payment_intent
-        : checkoutSession.payment_intent?.id,
-      checkoutSession.amount_total ?? booking.amount
-    );
+    await recordBookingPayment({
+      bookingId: booking.id,
+      paymentIntentId:
+        typeof checkoutSession.payment_intent === "string"
+          ? checkoutSession.payment_intent
+          : checkoutSession.payment_intent?.id,
+      amount: checkoutSession.amount_total ?? booking.amount,
+    });
     await createPromotionEventForBooking(booking.id);
     await sendBookingConfirmedEmails(booking.id);
   } else if (!booking.stripePaymentIntentId || !booking.stripeSubscriptionId || !booking.stripeCustomerId) {
@@ -1842,7 +2580,7 @@ export async function getCustomerBookings() {
   const session = await auth();
   if (!session?.user?.email) redirect("/account/login?callbackUrl=/account/bookings");
 
-  return db
+  const rows = await db
     .select({
       id: bookings.id,
       status: bookings.status,
@@ -1864,6 +2602,37 @@ export async function getCustomerBookings() {
     .leftJoin(bookingOfferings, eq(bookings.offeringId, bookingOfferings.id))
     .where(eq(bookings.customerEmail, session.user.email.toLowerCase()))
     .orderBy(desc(bookings.startDate));
+  const invoices = await latestBookingInvoices(rows.map((row) => row.id));
+  return rows.map((row) => ({ ...row, invoice: invoices.get(row.id) ?? null }));
+}
+
+// The invoice a monthly-invoiced booking is currently on: an open one if there
+// is one, otherwise the most recent. Keyed by booking id.
+async function latestBookingInvoices(bookingIds: string[]) {
+  const result = new Map<
+    string,
+    { id: string; status: string; amount: number; dueDate: Date; periodStart: Date; periodEnd: Date; hostedUrl: string | null }
+  >();
+  if (bookingIds.length === 0) return result;
+  const rows = await db
+    .select({
+      id: bookingInvoices.id,
+      bookingId: bookingInvoices.bookingId,
+      status: bookingInvoices.status,
+      amount: bookingInvoices.amount,
+      dueDate: bookingInvoices.dueDate,
+      periodStart: bookingInvoices.periodStart,
+      periodEnd: bookingInvoices.periodEnd,
+      hostedUrl: bookingInvoices.hostedUrl,
+    })
+    .from(bookingInvoices)
+    .where(and(inArray(bookingInvoices.bookingId, bookingIds), ne(bookingInvoices.status, "void")))
+    .orderBy(desc(bookingInvoices.periodStart));
+  for (const row of rows) {
+    const current = result.get(row.bookingId);
+    if (!current || (row.status === "open" && current.status !== "open")) result.set(row.bookingId, row);
+  }
+  return result;
 }
 
 export async function getCustomerBookingCancellationSettings() {
@@ -1902,6 +2671,13 @@ export async function retryCustomerBookingPayment(formData: FormData) {
   if (!booking || booking.customerEmail !== session.user.email.toLowerCase()) {
     throw new Error("Booking not found.");
   }
+  if (booking.paymentType === "invoice") {
+    const invoice = (await latestBookingInvoices([booking.id])).get(booking.id);
+    if (!invoice || invoice.status !== "open" || !invoice.hostedUrl) {
+      throw new Error("No invoice is outstanding on this booking.");
+    }
+    redirect(invoice.hostedUrl);
+  }
   if (booking.status !== "pending_payment") {
     throw new Error("Only pending bookings can be paid online.");
   }
@@ -1925,7 +2701,22 @@ export async function cancelCustomerBooking(formData: FormData) {
 
   if (booking.status === "confirmed") {
     const cancellationSettings = await getCancellationSettings();
-    if (differenceInHours(booking.startDate, new Date()) < cancellationSettings.noticeHours) {
+    // The notice period runs from the next session, not the series anchor --
+    // for a running regular booking the anchor is long past.
+    const [next] = await db
+      .select({ startDate: bookingOccurrences.startDate })
+      .from(bookingOccurrences)
+      .where(
+        and(
+          eq(bookingOccurrences.bookingId, id),
+          ne(bookingOccurrences.status, "cancelled"),
+          gte(bookingOccurrences.startDate, new Date())
+        )
+      )
+      .orderBy(asc(bookingOccurrences.startDate))
+      .limit(1);
+    const nextStart = next?.startDate ?? booking.startDate;
+    if (differenceInHours(nextStart, new Date()) < cancellationSettings.noticeHours) {
       throw new Error(
         `Bookings can only be cancelled online at least ${cancellationSettings.noticeHours} hours before the start time.`
       );
@@ -1939,6 +2730,13 @@ export async function cancelCustomerBooking(formData: FormData) {
     if (booking.paymentType === "subscription" && booking.stripeSubscriptionId) {
       await getStripe().subscriptions.cancel(booking.stripeSubscriptionId);
     }
+  }
+
+  if (booking.paymentType === "invoice") {
+    // No further invoices; sessions already paid for but not yet held are
+    // flagged for the Trust to refund by hand.
+    await voidOpenMonthlyInvoices(id);
+    await markPaidFutureOccurrencesRefundDue(id);
   }
 
   await db
@@ -2232,7 +3030,7 @@ export async function payCustomerBookingBalance(formData: FormData) {
   if (!booking || booking.customerEmail !== session.user.email.toLowerCase()) {
     throw new Error("Booking not found.");
   }
-  const balance = booking.amount - booking.paidAmount;
+  const balance = bookingBalance(booking);
   if (balance <= 0) redirect("/account/bookings");
   // A card top-up would not touch a Stripe subscription's price, and paying one
   // alongside an open invoice collects the same money twice.
@@ -2266,7 +3064,7 @@ export async function getCustomerBookingChange(bookingId: string) {
 
 export async function getAdminBookings() {
   await requireAdmin();
-  return db
+  const rows = await db
     .select({
       id: bookings.id,
       status: bookings.status,
@@ -2314,6 +3112,10 @@ export async function getAdminBookings() {
     .innerJoin(facilities, eq(bookings.facilityId, facilities.id))
     .leftJoin(bookingOfferings, eq(bookings.offeringId, bookingOfferings.id))
     .orderBy(desc(bookings.startDate));
+  const invoices = await latestBookingInvoices(
+    rows.filter((row) => row.paymentType === "invoice").map((row) => row.id)
+  );
+  return rows.map((row) => ({ ...row, invoice: invoices.get(row.id) ?? null }));
 }
 
 export async function getAdminBookingOccurrences(bookingIds: string[]) {
@@ -2736,9 +3538,12 @@ export async function createManualBooking(formData: FormData) {
   // session cadence and the slot is held with a rolling 180-day occurrence window.
   const isSubscription =
     scheduleType === "regular" && sendPaymentLink && recurrence !== "none" && repeatPaymentMode === "subscription";
+  // Invoiced a month at a time, in advance, on the same rolling window.
+  const isMonthlyInvoice =
+    scheduleType === "regular" && sendInvoice && recurrence !== "none" && repeatPaymentMode === "monthly_invoice";
   const indefinite =
     scheduleType === "regular" && recurrence !== "none" &&
-    (isSubscription || (!requiresPayment && formData.get("indefinite") === "on"));
+    (isSubscription || isMonthlyInvoice || (!requiresPayment && formData.get("indefinite") === "on"));
   const perSessionAmount = bookingAmount(
     price.amount,
     start,
@@ -2881,8 +3686,10 @@ export async function createManualBooking(formData: FormData) {
     billingPostcode,
     notes: String(formData.get("notes") || "").trim() || null,
     status: willCharge ? "pending_payment" : "confirmed",
-    paymentType: isSubscription ? "subscription" : sendPaymentLink ? "one_off" : "manual",
-    billingInterval: isSubscription ? billingInterval : null,
+    paymentType: isMonthlyInvoice && willCharge
+      ? "invoice"
+      : isSubscription ? "subscription" : sendPaymentLink ? "one_off" : "manual",
+    billingInterval: isMonthlyInvoice && willCharge ? "monthly" : isSubscription ? billingInterval : null,
     amount: finalAmount,
     discountCodeId: codeResult?.id ?? null,
     discountCode: codeResult?.code ?? null,
@@ -2915,15 +3722,19 @@ export async function createManualBooking(formData: FormData) {
       endDate: date.endDate,
       status: willCharge ? ("pending_payment" as const) : ("confirmed" as const),
       allocatedAmount:
-        customAmounts?.allocations[index] ??
-        allocateAcrossOccurrences(finalAmount, dates.length)[index] ??
-        0,
+        isMonthlyInvoice && willCharge
+          ? 0
+          : customAmounts?.allocations[index] ??
+            allocateAcrossOccurrences(finalAmount, dates.length)[index] ??
+            0,
     }))
   );
 
   if (willCharge && sendPaymentLink) {
     const paymentUrl = await createBookingStripeCheckoutSession(id);
     await sendManualBookingPaymentLinkEmail(id, paymentUrl);
+  } else if (willCharge && isMonthlyInvoice) {
+    await issueFirstBookingInvoice(id);
   } else if (willCharge && sendInvoice) {
     await createBookingInvoice(id);
   } else {
@@ -2940,6 +3751,7 @@ export async function updateAdminBooking(id: string, formData: FormData) {
   const [currentBooking] = await db
     .select({
       scheduleType: bookings.scheduleType,
+      paymentType: bookings.paymentType,
       unitAmount: bookings.unitAmount,
       pricingPercent: bookings.pricingPercent,
       amount: bookings.amount,
@@ -2961,7 +3773,11 @@ export async function updateAdminBooking(id: string, formData: FormData) {
     recurrence,
     recurrence !== "none" ? repeatCount : 1
   );
-  if (currentBooking.scheduleType !== "custom") {
+  // A custom schedule is edited session by session, and a monthly-invoiced
+  // booking rides a rolling window that rebuilding here would tear up; both
+  // take only the details below.
+  const detailsOnly = currentBooking.scheduleType === "custom" || currentBooking.paymentType === "invoice";
+  if (!detailsOnly) {
     await assertAvailable(offering.facilityId, offering.capacity, dates, id);
   }
 
@@ -2981,7 +3797,7 @@ export async function updateAdminBooking(id: string, formData: FormData) {
   });
   const customerDiscountPercent = await getCustomerDiscountPercent(customerEmail);
 
-  if (currentBooking.scheduleType === "custom") {
+  if (detailsOnly) {
     await db.update(bookings).set({
       userId,
       customerName,
@@ -2995,7 +3811,7 @@ export async function updateAdminBooking(id: string, formData: FormData) {
       notes: String(formData.get("notes") || "").trim() || null,
       updatedAt: new Date(),
     }).where(eq(bookings.id, id));
-    await logAudit({ action: "update", entity: "booking", entityId: id, description: "Updated custom booking details" });
+    await logAudit({ action: "update", entity: "booking", entityId: id, description: "Updated booking details" });
     revalidatePath("/admin/bookings");
     revalidatePath(`/admin/bookings/${id}/edit`);
     return;
@@ -3229,7 +4045,7 @@ export async function applyPaidBookingChange(
       updatedAt: new Date(),
     })
     .where(eq(bookings.id, bookingId));
-  await recordBookingPayment(bookingId, paymentIntentId, amountPaid);
+  await recordBookingPayment({ bookingId, paymentIntentId, amount: amountPaid });
 
   const [offering] = await db
     .select({ capacity: bookingOfferings.capacity })
@@ -3313,24 +4129,39 @@ async function moveBookingPromotionEvent(bookingId: string, start: Date, end: Da
 export async function recordBookingTopUpPayment(
   bookingId: string,
   paymentIntentId: string | null | undefined,
-  amount: number
+  amount: number,
+  invoiceId?: string | null
 ) {
-  await recordBookingPayment(bookingId, paymentIntentId, amount);
+  await recordBookingPayment({ bookingId, paymentIntentId, invoiceId, amount });
 }
 
 // Every payment taken against a booking, so a refund can find money paid after
 // the original one. Idempotent: Stripe redelivers, and a payment intent only
 // ever belongs to one booking.
-async function recordBookingPayment(
-  bookingId: string,
-  paymentIntentId: string | null | undefined,
-  amount: number
-) {
-  if (!paymentIntentId || amount <= 0) return;
+// A card payment is keyed on its payment intent; a monthly invoice settled by
+// bank transfer has none and is keyed on the invoice instead. Either key makes
+// a webhook retry a no-op.
+async function recordBookingPayment(input: {
+  bookingId: string;
+  amount: number;
+  paymentIntentId?: string | null;
+  invoiceId?: string | null;
+  paidOutOfBand?: boolean;
+}) {
+  const { bookingId, amount, paymentIntentId, invoiceId, paidOutOfBand = false } = input;
+  if (amount <= 0) return;
+  if (paymentIntentId) {
+    await db
+      .insert(bookingPayments)
+      .values({ bookingId, stripePaymentIntentId: paymentIntentId, stripeInvoiceId: invoiceId ?? null, amount, paidOutOfBand })
+      .onConflictDoNothing({ target: bookingPayments.stripePaymentIntentId });
+    return;
+  }
+  if (!invoiceId) return;
   await db
     .insert(bookingPayments)
-    .values({ bookingId, stripePaymentIntentId: paymentIntentId, amount })
-    .onConflictDoNothing({ target: bookingPayments.stripePaymentIntentId });
+    .values({ bookingId, stripeInvoiceId: invoiceId, amount, paidOutOfBand })
+    .onConflictDoNothing({ target: bookingPayments.stripeInvoiceId });
 }
 
 // Refunds up to `amount` across a booking's payments, most recent first, and
@@ -3350,6 +4181,8 @@ async function refundBookingPayments(bookingId: string, amount: number, reason: 
     if (outstanding <= 0) break;
     const available = payment.amount - payment.refundedAmount;
     if (available <= 0) continue;
+    // Money that arrived by bank transfer has nothing for Stripe to refund.
+    if (!payment.stripePaymentIntentId || payment.paidOutOfBand) continue;
     const take = Math.min(available, outstanding);
     try {
       await getStripe().refunds.create(
@@ -3421,6 +4254,9 @@ export async function settleBookingBalance(bookingId: string): Promise<BookingSe
     .limit(1);
   if (!booking) throw new Error("Booking not found.");
 
+  // A monthly-invoiced booking settles invoice by invoice; there is no balance
+  // on the booking itself to move.
+  if (booking.paymentType === "invoice") return { outcome: "balanced" };
   const balance = booking.amount - booking.paidAmount;
   if (balance === 0) return { outcome: "balanced" };
   if (booking.status === "cancelled") {
@@ -3578,6 +4414,10 @@ export async function cancelAdminBooking(formData: FormData) {
   if (booking?.paymentType === "subscription" && booking.stripeSubscriptionId) {
     await getStripe().subscriptions.cancel(booking.stripeSubscriptionId);
   }
+  if (booking.paymentType === "invoice") {
+    await voidOpenMonthlyInvoices(id);
+    await markPaidFutureOccurrencesRefundDue(id);
+  }
   await db
     .update(bookings)
     .set({ status: "cancelled", cancelledAt: new Date(), updatedAt: new Date() })
@@ -3636,6 +4476,7 @@ export async function deleteAdminBooking(id: string) {
       await stripe.invoices.voidInvoice(booking.stripeInvoiceId);
     }
   }
+  if (stripe) await voidOpenMonthlyInvoices(id);
 
   const [documents, occurrenceEvents] = await Promise.all([
     db
@@ -3711,6 +4552,27 @@ export async function cancelAdminBookingOccurrence(formData: FormData) {
     }
   }
 
+  // A monthly-invoiced session belongs to whichever invoice covers its month:
+  // a paid one owes a refund, an open one is reissued without it.
+  const [monthlyInvoice] =
+    row.paymentType === "invoice"
+      ? await db
+          .select()
+          .from(bookingInvoices)
+          .where(
+            and(
+              eq(bookingInvoices.bookingId, row.bookingId),
+              inArray(bookingInvoices.status, ["open", "paid"]),
+              lte(bookingInvoices.periodStart, row.occurrence.startDate),
+              gt(bookingInvoices.periodEnd, row.occurrence.startDate)
+            )
+          )
+          .limit(1)
+      : [];
+  if (monthlyInvoice?.status === "paid" && row.occurrence.allocatedAmount > 0) {
+    refundStatus = "due";
+  }
+
   if (row.invoiceStatus === "open" && row.stripeInvoiceId) {
     await getStripe().invoices.voidInvoice(row.stripeInvoiceId);
   }
@@ -3747,7 +4609,8 @@ export async function cancelAdminBookingOccurrence(formData: FormData) {
       status: remaining.length === 0 ? "cancelled" : row.bookingStatus,
       cancelledAt: remaining.length === 0 ? new Date() : null,
       repeatCount: remaining.length,
-      amount: Math.max(0, row.amount - row.occurrence.allocatedAmount),
+      // A monthly-invoiced booking's amount is its per-session rate, not a total.
+      amount: row.paymentType === "invoice" ? row.amount : Math.max(0, row.amount - row.occurrence.allocatedAmount),
       startDate: remaining[0]?.startDate ?? row.occurrence.startDate,
       endDate: remaining[0]?.endDate ?? row.occurrence.endDate,
       stripeCheckoutSessionId: row.bookingStatus === "pending_payment" ? null : undefined,
@@ -3765,6 +4628,17 @@ export async function cancelAdminBookingOccurrence(formData: FormData) {
   }
   if (row.invoiceStatus === "open" && remaining.length > 0) {
     await createBookingInvoice(row.bookingId);
+  }
+  if (monthlyInvoice?.status === "open") {
+    await voidMonthlyInvoiceRow(monthlyInvoice);
+    if (remaining.length > 0) {
+      await issueMonthlyBookingInvoice(
+        row.bookingId,
+        { start: monthlyInvoice.periodStart, end: monthlyInvoice.periodEnd },
+        monthlyInvoice.dueDate,
+        monthlyInvoice.revision + 1
+      );
+    }
   }
   await logAudit({
     action: "delete",

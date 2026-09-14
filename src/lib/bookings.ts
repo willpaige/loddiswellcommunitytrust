@@ -70,11 +70,16 @@ export const bookingHourOptions = Array.from({ length: 17 }, (_, index) => {
 // cancelled while the Trust still holds the money. A cancelled booking costs
 // nothing, so its price is not owed -- reading it as outstanding would chase a
 // customer for a booking that is not happening.
+//
+// A monthly-invoiced booking has no balance of its own: `amount` is its
+// per-session rate and what is owed lives on its invoices.
 export function bookingBalance(booking: {
   amount: number;
   paidAmount: number;
   status?: string;
+  paymentType?: string;
 }) {
+  if (booking.paymentType === "invoice") return 0;
   if (booking.status === "cancelled") return -booking.paidAmount;
   return booking.amount - booking.paidAmount;
 }

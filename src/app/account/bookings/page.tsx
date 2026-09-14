@@ -63,7 +63,11 @@ export default async function AccountBookingsPage() {
       ) : (
         <div className="space-y-4">
           {bookings.map((booking) => {
-            const canRetryPayment = booking.status === "pending_payment";
+            const isInvoiced = booking.paymentType === "invoice";
+            const openInvoice =
+              isInvoiced && booking.invoice?.status === "open" ? booking.invoice : null;
+            const invoiceOverdue = Boolean(openInvoice && openInvoice.dueDate < new Date());
+            const canRetryPayment = !isInvoiced && booking.status === "pending_payment";
             const canCancelWithoutRefund =
               booking.status === "pending_payment" || booking.status === "payment_failed";
             const canCancelWithRefund =
@@ -76,18 +80,21 @@ export default async function AccountBookingsPage() {
             // cancelCustomerBooking only refunds a one-off card payment. Anything
             // else -- a bank transfer, an invoice, a subscription -- has to be
             // settled by hand, so the dialog must not promise otherwise.
-            const refundKind: "card" | "manual" | "subscription" | "none" =
-              booking.paidAmount <= 0
-                ? "none"
-                : booking.paymentType === "subscription"
-                  ? "subscription"
-                  : booking.paymentType === "one_off" && booking.stripePaymentIntentId
-                    ? "card"
-                    : "manual";
+            const refundKind: "card" | "manual" | "subscription" | "invoice" | "none" =
+              isInvoiced
+                ? "invoice"
+                : booking.paidAmount <= 0
+                  ? "none"
+                  : booking.paymentType === "subscription"
+                    ? "subscription"
+                    : booking.paymentType === "one_off" && booking.stripePaymentIntentId
+                      ? "card"
+                      : "manual";
             const canChange =
               Boolean(booking.offeringId) &&
               (booking.status === "confirmed" || booking.status === "pending_payment") &&
               booking.paymentType !== "subscription" &&
+              !isInvoiced &&
               booking.recurrence === "none" &&
               booking.scheduleType === "regular" &&
               differenceInHours(booking.startDate, new Date()) >=
@@ -110,6 +117,7 @@ export default async function AccountBookingsPage() {
                         <Badge variant="outline">{recurrenceLabel(booking.recurrence)}</Badge>
                       )}
                       {needsInfo && <Badge variant="destructive">Action needed</Badge>}
+                      {invoiceOverdue && <Badge variant="destructive">Invoice overdue</Badge>}
                     </div>
                     <p className="mt-1 text-sm text-muted-foreground">
                       {booking.offeringName || "Booking"} · {formatBookingDate(booking.startDate, "d MMM yyyy, HH:mm")} to{" "}
@@ -127,8 +135,22 @@ export default async function AccountBookingsPage() {
                       {money(booking.amount)} ·{" "}
                       {booking.paymentType === "subscription"
                         ? `subscription every ${recurrenceIntervalLabel(booking.recurrence)}`
-                        : "card payment"}
+                        : isInvoiced
+                          ? "per session, invoiced monthly"
+                          : "card payment"}
                     </p>
+                    {openInvoice && (
+                      <p className={`mt-1 text-sm font-medium ${invoiceOverdue ? "text-destructive" : ""}`}>
+                        Invoice for {money(openInvoice.amount)} {invoiceOverdue ? "was due" : "due"}{" "}
+                        {formatBookingDate(openInvoice.dueDate, "d MMM yyyy")}
+                        {invoiceOverdue && " — pay now to keep your sessions"}
+                      </p>
+                    )}
+                    {isInvoiced && booking.invoice?.status === "paid" && booking.status === "confirmed" && (
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Paid up to {formatBookingDate(new Date(booking.invoice.periodEnd.getTime() - 1), "d MMM yyyy")}
+                      </p>
+                    )}
                   </div>
                   <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                     {requirement?.hasRequirements && booking.status !== "cancelled" && (
@@ -151,6 +173,13 @@ export default async function AccountBookingsPage() {
                         <input type="hidden" name="bookingId" value={booking.id} />
                         <Button type="submit">Pay now</Button>
                       </form>
+                    )}
+                    {openInvoice?.hostedUrl && (
+                      <Button asChild>
+                        <a href={openInvoice.hostedUrl} target="_blank" rel="noreferrer">
+                          Pay invoice
+                        </a>
+                      </Button>
                     )}
                     {canChange && (
                       <Button asChild variant="outline">

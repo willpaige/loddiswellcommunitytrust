@@ -86,7 +86,7 @@ export function BookingForm({
   const [offeringId, setOfferingId] = useState(firstOfferingId);
   const [customerGroup, setCustomerGroup] = useState<(typeof customerGroups)[number]["value"]>("parent_private");
   const [recurrence, setRecurrence] = useState<Recurrence>("none");
-  const [repeatPaymentMode, setRepeatPaymentMode] = useState<"subscription" | "upfront">("subscription");
+  const [repeatPaymentMode, setRepeatPaymentMode] = useState<"subscription" | "upfront" | "monthly_invoice">("subscription");
   const [repeatCount, setRepeatCount] = useState(repeatDiscount.threshold);
   const [promoteOnSite, setPromoteOnSite] = useState(false);
   const [slots, setSlots] = useState<AvailableSlot[]>([]);
@@ -410,7 +410,7 @@ export function BookingForm({
                   ))}
                 </select>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-3 sm:grid-cols-3">
                 <button
                   type="button"
                   onClick={() => setRepeatPaymentMode("subscription")}
@@ -441,7 +441,49 @@ export function BookingForm({
                     Book {repeatDiscount.threshold}+ sessions now for {repeatDiscount.percent}% off.
                   </span>
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setRepeatPaymentMode("monthly_invoice")}
+                  className={[
+                    "rounded-md border p-3 text-left transition",
+                    repeatPaymentMode === "monthly_invoice"
+                      ? "border-copper-500 bg-copper-50"
+                      : "hover:border-copper-300",
+                  ].join(" ")}
+                >
+                  <span className="block font-medium">Pay monthly by invoice</span>
+                  <span className="mt-1 block text-sm text-muted-foreground">
+                    Keep the slot ongoing; invoiced each month in advance, by card or bank transfer.
+                  </span>
+                </button>
               </div>
+
+              {repeatPaymentMode === "monthly_invoice" && (
+                <div className="space-y-3">
+                  <p className="rounded-md bg-copper-50 px-3 py-2 text-sm text-copper-900">
+                    Your first invoice covers the sessions up to the end of the month. After that, an
+                    invoice for the coming month is sent around the 24th and due on the 1st. If an
+                    invoice is more than seven days overdue, its sessions are released. Cancel any time.
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label htmlFor="billingLine1">Billing address</Label>
+                      <Input id="billingLine1" name="billingLine1" autoComplete="address-line1" placeholder="Address line 1" required />
+                    </div>
+                    <div className="space-y-2 sm:col-span-2">
+                      <Input id="billingLine2" name="billingLine2" autoComplete="address-line2" placeholder="Address line 2 (optional)" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="billingCity">Town / city</Label>
+                      <Input id="billingCity" name="billingCity" autoComplete="address-level2" required />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="billingPostcode">Postcode</Label>
+                      <Input id="billingPostcode" name="billingPostcode" autoComplete="postal-code" required />
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {repeatPaymentMode === "upfront" && (
                 <div className="grid gap-3 sm:grid-cols-[12rem_1fr]">
@@ -525,7 +567,9 @@ export function BookingForm({
               {recurring
                 ? repeatPaymentMode === "upfront"
                   ? "Card payment today"
-                  : `${recurrenceLabel(recurrence)} subscription`
+                  : repeatPaymentMode === "monthly_invoice"
+                    ? "Per session, invoiced monthly"
+                    : `${recurrenceLabel(recurrence)} subscription`
                 : "Card payment today"}
             </p>
             {recurringDiscountAmount > 0 && (
@@ -541,6 +585,11 @@ export function BookingForm({
             {recurring && repeatPaymentMode === "upfront" && (
               <p className="mt-2 text-sm text-muted-foreground">
                 {repeatCount} {recurrenceLabel(recurrence).toLowerCase()} sessions paid upfront.
+              </p>
+            )}
+            {recurring && repeatPaymentMode === "monthly_invoice" && (
+              <p className="mt-2 text-sm text-muted-foreground">
+                Each month&apos;s invoice is this amount times the sessions that month holds.
               </p>
             )}
             <p className="mt-1 text-2xl font-semibold">
@@ -577,7 +626,11 @@ export function BookingForm({
             className="w-full"
             disabled={loadingSlots || !hasAvailability || Boolean(discountCode.trim() && !discountCodeResult?.valid)}
           >
-            {loadingSlots ? "Checking availability..." : "Continue to payment"}
+            {loadingSlots
+              ? "Checking availability..."
+              : recurring && repeatPaymentMode === "monthly_invoice"
+                ? "Continue"
+                : "Continue to payment"}
           </Button>
           {!loadingSlots && !hasAvailability && (
             <p className="text-sm text-destructive">

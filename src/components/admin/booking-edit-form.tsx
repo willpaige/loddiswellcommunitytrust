@@ -55,6 +55,7 @@ type Booking = {
   billingPostcode: string | null;
   amount: number;
   paidAmount: number;
+  paymentType?: string;
   stripeInvoiceId: string | null;
   invoiceStatus: "draft" | "open" | "paid" | "uncollectible" | "void" | null;
   invoiceHostedUrl: string | null;
@@ -194,6 +195,10 @@ export function BookingEditForm({
 
   const hasInvoice = Boolean(booking.stripeInvoiceId);
   const customSchedule = booking.scheduleType === "custom";
+  const monthlyInvoiced = booking.paymentType === "invoice";
+  // A custom schedule is edited session by session; a monthly-invoiced booking
+  // rides a rolling window that re-saving the schedule would tear up.
+  const lockedSchedule = customSchedule || monthlyInvoiced;
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -208,14 +213,21 @@ export function BookingEditForm({
               This booking uses custom dates. Manage its sessions in the Custom sessions panel below.
             </p>
           )}
-          {customSchedule && <input type="hidden" name="offeringId" value={offeringId} />}
+          {monthlyInvoiced && (
+            <p className="rounded-md border border-copper-200 bg-copper-50 p-3 text-sm text-copper-900 sm:col-span-2">
+              This is an ongoing booking invoiced monthly. Its slot cannot be moved here — cancel
+              individual sessions from the bookings list, or cancel and rebook to change the time.
+              Contact and billing details can be edited below.
+            </p>
+          )}
+          {lockedSchedule && <input type="hidden" name="offeringId" value={offeringId} />}
           <div className="space-y-2 sm:col-span-2">
             <Label htmlFor="offeringId">Booking type</Label>
             <select
               id="offeringId"
-              name={customSchedule ? undefined : "offeringId"}
+              name={lockedSchedule ? undefined : "offeringId"}
               value={offeringId}
-              disabled={customSchedule}
+              disabled={lockedSchedule}
               onChange={(event) => setOfferingId(event.target.value)}
               className="h-10 w-full rounded-md border bg-background px-3 text-sm"
             >
@@ -232,7 +244,7 @@ export function BookingEditForm({
             <AvailableDatePicker
               slots={slots}
               value={date}
-              disabled={customSchedule || loadingSlots}
+              disabled={lockedSchedule || loadingSlots}
               onChange={(nextDate) => {
                 const nextSlot = slots.find((slot) => slot.date === nextDate);
                 const nextTime = nextSlot?.times.includes(time)
@@ -253,7 +265,7 @@ export function BookingEditForm({
               availableTimes={availableTimes}
               startTime={selectedOffering?.facilityBookableStartTime ?? "08:00"}
               endTime={selectedOffering?.facilityBookableEndTime ?? "23:00"}
-              disabled={customSchedule || loadingSlots || availableTimes.length === 0}
+              disabled={lockedSchedule || loadingSlots || availableTimes.length === 0}
               onChange={(nextTime) => {
                 setEndTime(keepDuration(selectedDateSlot, nextTime, time, endTime));
                 setTime(nextTime);
@@ -269,7 +281,7 @@ export function BookingEditForm({
               availableTimes={availableEndTimes}
               startTime={time || selectedOffering?.facilityBookableStartTime || "08:00"}
               endTime={selectedOffering?.facilityBookableEndTime ?? "23:00"}
-              disabled={customSchedule || loadingSlots || availableEndTimes.length === 0}
+              disabled={lockedSchedule || loadingSlots || availableEndTimes.length === 0}
               onChange={setEndTime}
             />
           </div>
@@ -298,7 +310,7 @@ export function BookingEditForm({
               <input
                 type="checkbox"
                 checked={recurring}
-                disabled={customSchedule}
+                disabled={lockedSchedule}
                 onChange={(event) => setRecurrence(event.target.checked ? "weekly" : "none")}
               />
               Repeat
@@ -399,6 +411,7 @@ export function BookingEditForm({
       </div>
     </form>
 
+      {!monthlyInvoiced && (<>
       <Card>
         <CardHeader>
           <CardTitle>Payment</CardTitle>
@@ -490,6 +503,7 @@ export function BookingEditForm({
           {invoiceError && <p className="text-sm text-destructive">{invoiceError}</p>}
         </CardContent>
       </Card>
+      </>)}
     </div>
   );
 }

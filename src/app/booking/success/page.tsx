@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { CheckCircle2, Ticket } from "lucide-react";
-import { confirmStripeBooking } from "@/actions/bookings";
+import { confirmStripeBooking, getCustomerBookings } from "@/actions/bookings";
+import { formatBookingDate } from "@/lib/booking-time";
+import { money } from "@/lib/bookings";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -9,12 +11,18 @@ export const dynamic = "force-dynamic";
 export default async function BookingSuccessPage({
   searchParams,
 }: {
-  searchParams: Promise<{ session_id?: string }>;
+  searchParams: Promise<{ session_id?: string; booking_id?: string }>;
 }) {
   const params = await searchParams;
   if (params.session_id) {
     await confirmStripeBooking(params.session_id);
   }
+  // A monthly-invoiced booking lands here with its first invoice open rather
+  // than a completed checkout.
+  const invoiced = params.booking_id
+    ? (await getCustomerBookings()).find((booking) => booking.id === params.booking_id) ?? null
+    : null;
+  const invoice = invoiced?.invoice ?? null;
 
   return (
     <main className="bg-background">
@@ -23,13 +31,24 @@ export default async function BookingSuccessPage({
         <Card>
           <CardHeader>
             <CheckCircle2 className="h-12 w-12 text-primary" aria-hidden="true" />
-            <CardTitle className="font-serif text-3xl">Booking confirmed</CardTitle>
+            <CardTitle className="font-serif text-3xl">
+              {invoiced ? "Slot reserved" : "Booking confirmed"}
+            </CardTitle>
             <CardDescription>
-              Your payment has been received and the booking has been added to your account.
+              {invoiced
+                ? invoice
+                  ? `Your first invoice for ${money(invoice.amount)} has been emailed to you and is due by ${formatBookingDate(invoice.dueDate, "d MMMM yyyy")}. The booking is confirmed once it is paid.`
+                  : "Your first invoice is on its way by email. The booking is confirmed once it is paid."
+                : "Your payment has been received and the booking has been added to your account."}
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-3">
-            <Button asChild>
+            {invoice?.hostedUrl && (
+              <Button asChild>
+                <a href={invoice.hostedUrl} target="_blank" rel="noreferrer">Pay the invoice</a>
+              </Button>
+            )}
+            <Button asChild variant={invoice?.hostedUrl ? "outline" : "default"}>
               <Link href="/account/bookings">View my bookings</Link>
             </Button>
             <Button variant="outline" asChild>

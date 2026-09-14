@@ -10,6 +10,7 @@ import { CancelBookingButton } from "@/components/admin/cancel-booking-button";
 import { BookingOccurrenceList } from "@/components/admin/booking-occurrence-list";
 import { BookingDetailsDialog } from "@/components/admin/booking-details-dialog";
 import { DeleteButton } from "@/components/admin/delete-button";
+import { invoiceStatusBadge } from "@/components/admin/booking-invoices-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -96,8 +97,25 @@ export default async function AdminBookingsPage() {
                   <p>{booking.organisationName || "—"}</p>
                 </TableCell>
                 <TableCell>
-                  <p>{money(booking.amount)}</p>
-                  <p className="text-sm text-muted-foreground">{booking.paymentType}</p>
+                  <p>
+                    {money(booking.amount)}
+                    {booking.paymentType === "invoice" && (
+                      <span className="text-sm text-muted-foreground"> / session</span>
+                    )}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {booking.paymentType === "invoice" ? "monthly invoice" : booking.paymentType}
+                  </p>
+                  {booking.invoice && (() => {
+                    const badge = invoiceStatusBadge(booking.invoice);
+                    return (
+                      <Badge variant={badge.variant} className="mt-1 max-w-full">
+                        Invoice: {badge.label.toLowerCase()}
+                        {booking.invoice.status === "open" &&
+                          ` · due ${formatBookingDate(booking.invoice.dueDate, "d MMM")}`}
+                      </Badge>
+                    );
+                  })()}
                   {bookingBalance(booking) !== 0 && (
                     <p
                       className={`text-sm font-medium ${

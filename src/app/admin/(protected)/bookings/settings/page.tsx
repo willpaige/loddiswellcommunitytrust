@@ -4,7 +4,9 @@ import {
   deleteBookingBlock,
   deleteBookingBlockSeries,
   getAdminBookingSetup,
+  getMonthlyInvoiceSettings,
   updateBookingCancellationSettings,
+  updateMonthlyInvoiceSettings,
   updateRepeatBookingDiscount,
   updateFacilityBookableHours,
 } from "@/actions/bookings";
@@ -25,10 +27,11 @@ import { Label } from "@/components/ui/label";
 export const dynamic = "force-dynamic";
 
 export default async function AdminBookingSettingsPage() {
-  const [setup, requirementOfferings, requirementSets] = await Promise.all([
+  const [setup, requirementOfferings, requirementSets, monthlyInvoice] = await Promise.all([
     getAdminBookingSetup(),
     getAdminOfferingsForRequirements(),
     getRequirementSets(),
+    getMonthlyInvoiceSettings(),
   ]);
   const uniqueOfferings = setup.offerings.filter(
     (offering, index, all) =>
@@ -127,6 +130,57 @@ export default async function AdminBookingSettingsPage() {
               <div className="flex items-end">
                 <Button type="submit" variant="outline">
                   Save cancellation policy
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Monthly invoicing</CardTitle>
+            <CardDescription>
+              Ongoing bookings paid by invoice are billed in advance for each month&apos;s sessions, due on
+              the 1st. Set how far ahead the invoice goes out and how long it may run overdue before the
+              sessions are released and the booking ends.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form action={updateMonthlyInvoiceSettings} className="grid gap-4 sm:grid-cols-3">
+              <div className="space-y-2">
+                <Label htmlFor="monthlyInvoiceLeadDays">Issue invoice</Label>
+                <Input
+                  id="monthlyInvoiceLeadDays"
+                  name="leadDays"
+                  type="number"
+                  min="1"
+                  max="28"
+                  step="1"
+                  defaultValue={monthlyInvoice.leadDays}
+                  required
+                />
+                <p className="text-xs text-muted-foreground">Days before the 1st of the month.</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="monthlyInvoiceGraceDays">Release after</Label>
+                <Input
+                  id="monthlyInvoiceGraceDays"
+                  name="graceDays"
+                  type="number"
+                  min="1"
+                  max="60"
+                  step="1"
+                  defaultValue={monthlyInvoice.graceDays}
+                  required
+                />
+                <p className="text-xs text-muted-foreground">
+                  Days overdue before the unpaid month&apos;s sessions are released. Reminders go out 3 days
+                  before, on the day, and 3 days after the due date; the booking manager is told on day 1.
+                </p>
+              </div>
+              <div className="flex items-end">
+                <Button type="submit" variant="outline">
+                  Save invoicing settings
                 </Button>
               </div>
             </form>

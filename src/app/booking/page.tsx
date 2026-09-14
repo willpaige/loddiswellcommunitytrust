@@ -190,5 +190,9 @@ function pendingBookingFromParams(
     promoteOnSite: firstParam(params, "promoteOnSite") || undefined,
     promotionUrl: firstParam(params, "promotionUrl") || undefined,
     discountCode: firstParam(params, "discountCode") || undefined,
+    billingLine1: firstParam(params, "billingLine1") || undefined,
+    billingLine2: firstParam(params, "billingLine2") || undefined,
+    billingCity: firstParam(params, "billingCity") || undefined,
+    billingPostcode: firstParam(params, "billingPostcode") || undefined,
   };
 }

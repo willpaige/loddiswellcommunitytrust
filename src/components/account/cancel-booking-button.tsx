@@ -16,7 +16,7 @@ import {
 
 // Cancelling refunds the card and releases the slot, and neither can be undone
 // from here, so it always asks first.
-type RefundKind = "card" | "manual" | "subscription" | "none";
+type RefundKind = "card" | "manual" | "subscription" | "invoice" | "none";
 
 // What cancelling actually does with the money, in the same words the action
 // will follow: only a one-off card payment comes back automatically.
@@ -28,6 +28,8 @@ function refundText(kind: RefundKind, amount: string) {
       return `${amount} has been paid for this booking. We cannot refund it automatically, so the Trust will contact you to arrange it.`;
     case "subscription":
       return "Your subscription will be cancelled and no further payments taken. Payments already made are not refunded automatically — the Trust will contact you.";
+    case "invoice":
+      return "No further monthly invoices will be sent and any unpaid invoice is cancelled. If you have already paid for sessions that have not yet happened, the Trust will contact you about a refund.";
     default:
       return "No payment has been taken for this booking, so there is nothing to refund.";
   }

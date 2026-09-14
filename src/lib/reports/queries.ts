@@ -31,7 +31,8 @@ function num(value: unknown): number {
  *
  * Three things make money arrive, and each is counted exactly once:
  *  - card and invoice payments against a booking (`booking_payments`), net of
- *    anything refunded off that payment;
+ *    anything refunded off that payment -- a monthly invoice settled by bank
+ *    transfer is recorded here too, flagged as out of band;
  *  - the part of a booking settled outside Stripe — cash, cheque, bank transfer,
  *    or a manual booking the office marked as paid — which is what the booking
  *    records as paid beyond its Stripe payments;
@@ -51,7 +52,7 @@ const incomeLedger = sql`
   ledger as (
     select bp.created_at as paid_at,
            'bookings'::text as source,
-           'card'::text as method,
+           case when bp.paid_out_of_band then 'offline' else 'card' end as method,
            (bp.amount - bp.refunded_amount) as amount
     from booking_payments bp
     union all
@@ -360,11 +361,16 @@ export async function getTopBookingCustomers(
         lower(customer_email) as email,
         max(organisation_name) as organisation,
         count(*) as bookings,
-        coalesce(sum(paid_amount), 0) as paid
-      from bookings
+        coalesce(sum(greatest(paid_amount, coalesce(p.net, 0))), 0) as paid
+      from bookings b
+      left join (
+        select booking_id, sum(amount - refunded_amount) as net
+        from booking_payments
+        group by booking_id
+      ) p on p.booking_id = b.id
       where created_at >= ${start} and created_at < ${end}
       group by lower(customer_email)
-      having sum(paid_amount) > 0
+      having sum(greatest(paid_amount, coalesce(p.net, 0))) > 0
       order by paid desc
       limit ${limit}
     `)
@@ -461,16 +467,22 @@ export type OutstandingMoney = {
  */
 export async function getOutstandingMoney(): Promise<OutstandingMoney> {
   await requireAdmin();
+  // A monthly-invoiced booking's amount is a per-session rate and its money
+  // lives on its invoices, so it is left out of the balance arithmetic and its
+  // open invoices are counted alongside the one-off ones.
   const [balances] = await rows<Record<string, string>>(sql`
     select
-      coalesce(sum(case when status <> 'cancelled' and amount > paid_amount
+      coalesce(sum(case when payment_type <> 'invoice' and status <> 'cancelled' and amount > paid_amount
         then amount - paid_amount else 0 end), 0) as owed,
-      count(*) filter (where status <> 'cancelled' and amount > paid_amount) as owed_bookings,
-      coalesce(sum(case when status = 'cancelled' then paid_amount
+      count(*) filter (where payment_type <> 'invoice' and status <> 'cancelled' and amount > paid_amount) as owed_bookings,
+      coalesce(sum(case when payment_type = 'invoice' then 0
+        when status = 'cancelled' then paid_amount
         when paid_amount > amount then paid_amount - amount else 0 end), 0) as refund_due,
-      count(*) filter (where (status = 'cancelled' and paid_amount > 0) or paid_amount > amount) as refund_bookings,
-      count(*) filter (where invoice_status = 'open') as unpaid_invoices,
-      coalesce(sum(amount) filter (where invoice_status = 'open'), 0) as unpaid_invoice_value,
+      count(*) filter (where payment_type <> 'invoice' and ((status = 'cancelled' and paid_amount > 0) or paid_amount > amount)) as refund_bookings,
+      count(*) filter (where invoice_status = 'open')
+        + (select count(*) from booking_invoices where status = 'open') as unpaid_invoices,
+      coalesce(sum(amount) filter (where invoice_status = 'open'), 0)
+        + (select coalesce(sum(amount), 0) from booking_invoices where status = 'open') as unpaid_invoice_value,
       count(*) filter (where status = 'pending_payment') as pending_payment
     from bookings
   `);
@@ -759,12 +771,12 @@ export async function getIncomeLedgerRows(start: Date, end: Date): Promise<Expor
     select
       to_char(bp.created_at, 'YYYY-MM-DD') as date,
       'Bookings' as source,
-      'Card' as method,
+      case when bp.paid_out_of_band then 'Offline' else 'Card' end as method,
       b.customer_name as payer,
       coalesce(f.name, '') as detail,
       (bp.amount - bp.refunded_amount) / 100.0 as amount,
       bp.refunded_amount / 100.0 as refunded,
-      bp.stripe_payment_intent_id as reference
+      coalesce(bp.stripe_payment_intent_id, bp.stripe_invoice_id) as reference
     from booking_payments bp
     join bookings b on b.id = bp.booking_id
     left join facilities f on f.id = b.facility_id

@@ -35,6 +35,10 @@ type PendingBooking = {
   promoteOnSite?: string;
   promotionUrl?: string;
   discountCode?: string;
+  billingLine1?: string;
+  billingLine2?: string;
+  billingCity?: string;
+  billingPostcode?: string;
 };
 
 function addMinutes(date: Date, minutes: number) {
@@ -96,7 +100,12 @@ export function BookingReview({
       ? new Date(`${pending.date}T${pending.endTime}`)
       : addMinutes(start, offering.durationMinutes);
   const recurring = pending.recurrence !== "none";
-  const repeatPaymentMode = pending.repeatPaymentMode === "upfront" ? "upfront" : "subscription";
+  const repeatPaymentMode =
+    pending.repeatPaymentMode === "upfront"
+      ? "upfront"
+      : pending.repeatPaymentMode === "monthly_invoice"
+        ? "monthly_invoice"
+        : "subscription";
   const repeatCount = Math.max(2, Math.min(52, Math.round(Number(pending.repeatCount) || repeatDiscount.threshold)));
   const hours = Math.max(1, end.getHours() - start.getHours());
   const baseAmount = pricedOffering.amount * (offering.startTime ? 1 : hours);
@@ -177,8 +186,16 @@ export function BookingReview({
                 {money(amount)}{" "}
                 {recurring && repeatPaymentMode === "subscription"
                   ? `every ${recurrenceIntervalLabel(pending.recurrence)}`
-                  : "today"}
+                  : recurring && repeatPaymentMode === "monthly_invoice"
+                    ? "per session, invoiced monthly"
+                    : "today"}
               </dd>
+              {recurring && repeatPaymentMode === "monthly_invoice" && (
+                <dd className="mt-1 text-sm text-muted-foreground">
+                  Ongoing {recurrenceLabel(pending.recurrence).toLowerCase()} booking, invoiced in advance for each
+                  month&apos;s sessions. Sessions are released if an invoice is more than seven days overdue.
+                </dd>
+              )}
               {recurring && repeatPaymentMode === "upfront" && (
                 <dd className="mt-1 text-sm text-muted-foreground">
                   {repeatCount} {recurrenceLabel(pending.recurrence).toLowerCase()} sessions paid today
@@ -196,6 +213,16 @@ export function BookingReview({
                 </dd>
               )}
             </div>
+            {recurring && repeatPaymentMode === "monthly_invoice" && pending.billingLine1 && (
+              <div>
+                <dt className="text-sm text-muted-foreground">Billing address</dt>
+                <dd className="font-medium">
+                  {[pending.billingLine1, pending.billingLine2, pending.billingCity, pending.billingPostcode]
+                    .filter(Boolean)
+                    .join(", ")}
+                </dd>
+              </div>
+            )}
             {pending.promoteOnSite === "on" && (
               <div>
                 <dt className="text-sm text-muted-foreground">Website promotion</dt>

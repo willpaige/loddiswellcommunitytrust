@@ -1,7 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import { getAdminBooking, getAdminBookingOccurrences, getAdminBookingSetup } from "@/actions/bookings";
+import {
+  getAdminBooking,
+  getAdminBookingInvoices,
+  getAdminBookingOccurrences,
+  getAdminBookingSetup,
+  getMonthlyInvoiceSettings,
+} from "@/actions/bookings";
+import { BookingInvoicesCard } from "@/components/admin/booking-invoices-card";
 import { getAdminBookingRequirements } from "@/actions/booking-requirements";
 import { BookingEditForm } from "@/components/admin/booking-edit-form";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +34,10 @@ export default async function AdminEditBookingPage({
     getAdminBookingOccurrences([id]),
   ]);
   if (!booking) notFound();
+  const [invoices, invoiceSettings] =
+    booking.paymentType === "invoice"
+      ? await Promise.all([getAdminBookingInvoices(id), getMonthlyInvoiceSettings()])
+      : [[], null];
 
   const uniqueOfferings = setup.offerings.filter(
     (offering, index, all) =>
@@ -55,6 +66,10 @@ export default async function AdminEditBookingPage({
         }}
         offerings={uniqueOfferings}
       />
+
+      {booking.paymentType === "invoice" && invoiceSettings && (
+        <BookingInvoicesCard invoices={invoices} graceDays={invoiceSettings.graceDays} />
+      )}
 
       {booking.scheduleType === "custom" && (
         <Card className="mt-6 max-w-4xl">

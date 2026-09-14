@@ -14,7 +14,13 @@ export type EmailTemplateKey =
   | "lottery_draw_results"
   | "lottery_manage_link"
   | "booking_changed"
-  | "booking_change_payment_link";
+  | "booking_change_payment_link"
+  | "booking_invoice_issued"
+  | "booking_invoice_reminder"
+  | "booking_invoice_overdue"
+  | "booking_invoice_overdue_manager"
+  | "booking_invoice_released"
+  | "booking_invoice_released_manager";
 
 export type EmailTemplateCategory = "bookings" | "lottery" | "system";
 
@@ -100,6 +106,60 @@ export const emailTemplateDefaults: EmailTemplateDefault[] = [
     subject: "Payment issue with your Loddiswell booking",
     body: "Hi {{customerName}},\n\nThere was a problem taking payment for your booking at {{facilityName}}.\n\nPlease use your account to review the booking or update payment details.",
     variables: ["customerName", "facilityName", "bookingUrl"],
+  },
+  {
+    key: "booking_invoice_issued",
+    category: "bookings",
+    name: "Monthly booking invoice",
+    description: "Sent when a monthly-invoiced booking's invoice for the coming period is issued.",
+    subject: "Invoice for your {{facilityName}} sessions: {{period}}",
+    body: "Hi {{customerName}},\n\nHere is your invoice for {{offeringName}} at {{facilityName}} covering {{period}}.\n\nSessions:\n{{sessions}}\n\nAmount: {{amount}}\nDue: {{dueDate}}\n\nPay by card or bank transfer here:\n{{invoiceUrl}}\n\nBank details are on the invoice. If it is not paid within seven days of the due date, the sessions it covers are released for others to book.",
+    variables: ["customerName", "facilityName", "offeringName", "period", "sessions", "amount", "dueDate", "invoiceUrl", "bookingUrl"],
+  },
+  {
+    key: "booking_invoice_reminder",
+    category: "bookings",
+    name: "Monthly invoice reminder",
+    description: "Sent three days before a monthly invoice is due, on the due date, and three days after.",
+    subject: "Reminder: {{facilityName}} invoice for {{period}} is {{when}}",
+    body: "Hi {{customerName}},\n\nA reminder that your invoice for {{offeringName}} at {{facilityName}} covering {{period}} is {{when}}.\n\nAmount: {{amount}}\nDue: {{dueDate}}\n\nPay here:\n{{invoiceUrl}}\n\nIf you have already paid by bank transfer, thank you - please ignore this reminder.",
+    variables: ["customerName", "facilityName", "offeringName", "period", "when", "amount", "dueDate", "invoiceUrl", "bookingUrl"],
+  },
+  {
+    key: "booking_invoice_overdue",
+    category: "bookings",
+    name: "Monthly invoice overdue",
+    description: "Sent to the customer the day after a monthly invoice falls overdue.",
+    subject: "Overdue: {{facilityName}} invoice for {{period}}",
+    body: "Hi {{customerName}},\n\nYour invoice for {{offeringName}} at {{facilityName}} covering {{period}} was due on {{dueDate}} and has not been paid.\n\nAmount: {{amount}}\n\nPay here:\n{{invoiceUrl}}\n\nIf it is still unpaid on {{releaseDate}}, the sessions it covers will be released and your regular slot will end. If you have paid by bank transfer in the last day or two, please ignore this message.",
+    variables: ["customerName", "facilityName", "offeringName", "period", "amount", "dueDate", "releaseDate", "invoiceUrl", "bookingUrl"],
+  },
+  {
+    key: "booking_invoice_overdue_manager",
+    category: "bookings",
+    name: "Monthly invoice overdue (booking manager)",
+    description: "Sent to the booking manager the day after a monthly invoice falls overdue.",
+    subject: "Overdue invoice: {{customerName}} - {{facilityName}} {{period}}",
+    body: "The monthly invoice for {{customerName}} ({{customerEmail}}, {{customerPhone}}) covering {{offeringName}} at {{facilityName}} for {{period}} was due on {{dueDate}} and is unpaid.\n\nAmount: {{amount}}\n\nUnless it is paid, the sessions will be released automatically on {{releaseDate}}. If they have paid by bank transfer, mark the invoice paid in the admin:\n{{adminUrl}}",
+    variables: ["customerName", "customerEmail", "customerPhone", "facilityName", "offeringName", "period", "amount", "dueDate", "releaseDate", "adminUrl"],
+  },
+  {
+    key: "booking_invoice_released",
+    category: "bookings",
+    name: "Sessions released for unpaid invoice",
+    description: "Sent to the customer when a monthly invoice has gone unpaid past the grace period and the sessions have been released.",
+    subject: "Your {{facilityName}} sessions have been released",
+    body: "Hi {{customerName}},\n\nYour invoice for {{offeringName}} at {{facilityName}} covering {{period}} was not paid within seven days of its due date, so the following sessions have been released and your regular booking has ended:\n\n{{releasedDates}}\n\nThe invoice has been cancelled and nothing is owed. You are welcome to book again at any time:\n{{bookingUrl}}",
+    variables: ["customerName", "facilityName", "offeringName", "period", "releasedDates", "bookingUrl"],
+  },
+  {
+    key: "booking_invoice_released_manager",
+    category: "bookings",
+    name: "Sessions released for unpaid invoice (booking manager)",
+    description: "Sent to the booking manager when a monthly invoice has gone unpaid past the grace period and the sessions have been released.",
+    subject: "Released: {{customerName}} - {{facilityName}} {{period}}",
+    body: "The monthly invoice for {{customerName}} ({{customerEmail}}) covering {{offeringName}} at {{facilityName}} for {{period}} went unpaid past the grace period. The invoice has been voided, the booking cancelled, and these sessions are now available:\n\n{{releasedDates}}",
+    variables: ["customerName", "customerEmail", "facilityName", "offeringName", "period", "releasedDates"],
   },
   {
     key: "booking_reminder",
