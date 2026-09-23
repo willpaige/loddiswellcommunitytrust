@@ -183,6 +183,13 @@
       "when": 1789396305411,
       "tag": "0025_monthly_booking_invoices",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1790150400000,
+      "tag": "0026_access_info_in_booking_confirmations",
+      "breakpoints": true
     }
   ]
 }

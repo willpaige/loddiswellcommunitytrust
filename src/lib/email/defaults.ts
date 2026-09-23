@@ -41,8 +41,8 @@ export const emailTemplateDefaults: EmailTemplateDefault[] = [
     name: "Booking confirmation",
     description: "Sent to a customer when an online booking is confirmed.",
     subject: "Your Loddiswell booking is confirmed",
-    body: "Hi {{customerName}},\n\nYour booking for {{facilityName}} is confirmed.\n\nBooking: {{offeringName}}\nSchedule: {{schedule}}\nAmount paid: {{amount}}\n\nYou can manage your booking from your account.",
-    variables: ["customerName", "facilityName", "offeringName", "startDate", "endTime", "schedule", "amount", "bookingUrl"],
+    body: "Hi {{customerName}},\n\nYour booking for {{facilityName}} is confirmed.\n\nBooking: {{offeringName}}\nSchedule: {{schedule}}\nAmount paid: {{amount}}\n\nAccess information:\n{{accessInstructions}}\n\nYou can manage your booking from your account.",
+    variables: ["customerName", "facilityName", "offeringName", "startDate", "endTime", "schedule", "amount", "accessInstructions", "bookingUrl"],
   },
   {
     key: "booking_manager_notification",
@@ -59,8 +59,8 @@ export const emailTemplateDefaults: EmailTemplateDefault[] = [
     name: "Manual booking confirmation",
     description: "Sent to a customer when an admin creates a manual booking.",
     subject: "Your Loddiswell booking has been added",
-    body: "Hi {{customerName}},\n\nYour booking for {{facilityName}} has been added by the Trust.\n\nBooking: {{offeringName}}\nSchedule: {{schedule}}\n\nPlease contact us if anything looks wrong.",
-    variables: ["customerName", "facilityName", "offeringName", "startDate", "endTime", "schedule"],
+    body: "Hi {{customerName}},\n\nYour booking for {{facilityName}} has been added by the Trust.\n\nBooking: {{offeringName}}\nSchedule: {{schedule}}\n\nAccess information:\n{{accessInstructions}}\n\nPlease contact us if anything looks wrong.",
+    variables: ["customerName", "facilityName", "offeringName", "startDate", "endTime", "schedule", "accessInstructions"],
   },
   {
     key: "manual_booking_payment_link",
