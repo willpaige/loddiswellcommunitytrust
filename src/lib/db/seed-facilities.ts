@@ -77,7 +77,7 @@ const facilitySeeds: FacilitySeed[] = [
     slug: "tennis-courts",
     name: "Tennis Courts",
     description: descriptionDoc(
-      "The Loddiswell Tennis Courts are community facilities managed by the Loddiswell Community Trust. The courts are available for anyone to use, for a small fee.\n\nCourts can be booked at £6 per hour. A gate key must be collected from the village Spar shop (RS Stores) — a deposit is charged which is refunded when the key is returned.\n\nThe Tennis Club offers regular club sessions, coaching, and social events throughout the year. New members of all abilities are always welcome."
+      "The Loddiswell Tennis Courts are community facilities managed by the Loddiswell Community Trust. The courts are available for anyone to use, for a small fee.\n\nCourts can be booked online at £6 per hour. Once you’ve booked, we’ll email you the code for the court gate.\n\nThe Tennis Club offers regular club sessions, coaching, and social events throughout the year. New members of all abilities are always welcome."
     ),
     address: "Loddiswell Playing Fields, Loddiswell, TQ7 4QH",
     capacity: null,
@@ -90,7 +90,7 @@ const facilitySeeds: FacilitySeed[] = [
     ],
     rates: null,
     bookingInfo:
-      "Collect the court key from RS Stores (the village Spar shop) — 01548 550258. A deposit is charged and refunded when the key is returned. For club membership and sessions, visit the ClubSpark page.",
+      "For club membership and sessions, visit the ClubSpark page.",
     externalBookingUrl:
       "https://clubspark.lta.org.uk/LoddiswellTennisClub/Booking/BookByDate",
     sortOrder: 30,
