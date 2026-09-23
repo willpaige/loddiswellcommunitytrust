@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { CalendarDays, MapPin, Clock } from "lucide-react";
-import { format, isSameDay } from "date-fns";
+import { addMonths, format, isSameDay } from "date-fns";
 import { PageHeader } from "@/components/layout/page-header";
 import { SectionLabel } from "@/components/ui/section-label";
 import { AvailabilityCalendar } from "@/components/booking/availability-calendar";
@@ -71,6 +71,11 @@ export default async function EventsPage() {
     getUpcomingEvents(),
     getPublicAvailability(),
   ]);
+  const calendarItems = availability.map((item) =>
+    item.type === "event" ? { ...item, href: `#event-${item.id}` } : item
+  );
+  // getPublicAvailability only looks 180 days ahead, so stop the calendar there.
+  const today = new Date();
 
   return (
     <div>
@@ -108,7 +113,8 @@ export default async function EventsPage() {
                 return (
                   <article
                     key={event.id}
-                    className="rounded-lg border border-border bg-card p-8 hover:border-copper-300 hover:shadow-sm transition-all"
+                    id={`event-${event.id}`}
+                    className="scroll-mt-28 rounded-lg border border-border bg-card p-8 hover:border-copper-300 hover:shadow-sm transition-all"
                   >
                     <div className="flex flex-col sm:flex-row gap-6">
                       <div className="flex-shrink-0">
@@ -203,9 +209,12 @@ export default async function EventsPage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <SectionLabel>Availability</SectionLabel>
           <AvailabilityCalendar
-            items={availability}
+            items={calendarItems}
+            month={today}
+            minMonth={today}
+            maxMonth={addMonths(today, 5)}
             title="Venue calendar"
-            description="Published events and team/community bookings. Select a date to start a booking."
+            description="Published events and team/community bookings. Select a day to see what's on or to start a booking."
             publicBookingHref="/booking"
           />
         </div>
