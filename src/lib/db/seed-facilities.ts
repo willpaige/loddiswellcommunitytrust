@@ -77,7 +77,7 @@ const facilitySeeds: FacilitySeed[] = [
     slug: "tennis-courts",
     name: "Tennis Courts",
     description: descriptionDoc(
-      "The Loddiswell Tennis Courts are community facilities managed by the Loddiswell Tennis Club, part of the LTA. The courts are open to both members and visitors.\n\nVisitors can book courts at £6 per hour. A key for the visitors’ gate must be collected from the village Spar shop (RS Stores) — a deposit is charged which is refunded when the key is returned.\n\nThe Tennis Club offers regular club sessions, coaching, and social events throughout the year. New members of all abilities are always welcome."
+      "The Loddiswell Tennis Courts are community facilities managed by the Loddiswell Community Trust. The courts are available for anyone to use, for a small fee.\n\nVisitors can book courts at £6 per hour. A key for the visitors’ gate must be collected from the village Spar shop (RS Stores) — a deposit is charged which is refunded when the key is returned.\n\nThe Tennis Club offers regular club sessions, coaching, and social events throughout the year. New members of all abilities are always welcome."
     ),
     address: "Loddiswell Playing Fields, Loddiswell, TQ7 4QH",
     capacity: null,
