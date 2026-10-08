@@ -3,6 +3,9 @@ import { CheckCircle2, Ticket } from "lucide-react";
 import { confirmStripeBooking, getCustomerBookings } from "@/actions/bookings";
 import { formatBookingDate } from "@/lib/booking-time";
 import { money } from "@/lib/bookings";
+import { getBookingRequirementStatuses } from "@/lib/booking-requirements";
+import { getNextRequirementSessions } from "@/lib/requirement-schedule";
+import { requirementDeadline } from "@/lib/requirement-policy";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -14,13 +17,16 @@ export default async function BookingSuccessPage({
   searchParams: Promise<{ session_id?: string; booking_id?: string }>;
 }) {
   const params = await searchParams;
-  if (params.session_id) {
-    await confirmStripeBooking(params.session_id);
-  }
+  const confirmed = params.session_id ? await confirmStripeBooking(params.session_id) : null;
+  const ownedBookings = await getCustomerBookings();
+  const currentBooking = ownedBookings.find(b => b.id === (params.booking_id || confirmed?.id));
+  const requirement = currentBooking ? (await getBookingRequirementStatuses([currentBooking.id])).get(currentBooking.id) : null;
+  const nextSession = currentBooking ? (await getNextRequirementSessions([currentBooking.id])).get(currentBooking.id) : null;
+  const deadline = nextSession ? requirementDeadline(nextSession) : null;
   // A monthly-invoiced booking lands here with its first invoice open rather
   // than a completed checkout.
   const invoiced = params.booking_id
-    ? (await getCustomerBookings()).find((booking) => booking.id === params.booking_id) ?? null
+    ? ownedBookings.find((booking) => booking.id === params.booking_id) ?? null
     : null;
   const invoice = invoiced?.invoice ?? null;
 
@@ -43,6 +49,13 @@ export default async function BookingSuccessPage({
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-3">
+            {currentBooking && requirement?.hasRequirements && !requirement.complete && nextSession && (
+              <div className="mb-3 w-full rounded-md border border-primary/30 bg-primary/5 p-4">
+                <h2 className="font-semibold">Next step: complete your required information</h2>
+                <p className="my-3 text-sm">Answer the booking questions and upload any supporting documents requested. {deadline?.overdue ? "Please complete this now, before your session." : `Please complete by ${formatBookingDate(deadline!.deadline, "d MMM yyyy, HH:mm")}.`}</p>
+                <Button asChild><Link href={`/account/bookings/${currentBooking.id}/requirements`}>Complete required information</Link></Button>
+              </div>
+            )}
             {invoice?.hostedUrl && (
               <Button asChild>
                 <a href={invoice.hostedUrl} target="_blank" rel="noreferrer">Pay the invoice</a>

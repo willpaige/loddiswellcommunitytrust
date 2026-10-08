@@ -1,9 +1,7 @@
 "use server";
 
-import { addDays, startOfDay } from "date-fns";
-import { formatBookingDate } from "@/lib/booking-time";
-import { and, asc, desc, eq, gte, inArray, isNotNull, lt } from "drizzle-orm";
-import { put, del } from "@vercel/blob";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { head, del } from "@vercel/blob";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
@@ -18,14 +16,13 @@ import {
   requirementSets,
   siteSettings,
 } from "@/lib/db/schema";
-import { sendTemplateEmail } from "@/lib/email/send";
+import { assertRequirementsEditable, getNextRequirementSessions } from "@/lib/requirement-schedule";
+import { REQUIREMENT_UPLOAD_LIMIT, REQUIREMENT_UPLOAD_TYPES, requirementNow } from "@/lib/requirement-policy";
 import {
   getBookingRequirementDetail,
-  getBookingRequirementStatuses,
 } from "@/lib/booking-requirements";
 
-const ALLOWED_MIME = ["application/pdf", "image/png", "image/jpeg"];
-const MAX_FILE_BYTES = 10 * 1024 * 1024;
+
 
 async function requireAdmin() {
   const session = await auth();
@@ -50,21 +47,10 @@ async function loadOwnedBooking(bookingId: string, email: string) {
     .from(bookings)
     .where(eq(bookings.id, bookingId))
     .limit(1);
-  if (!booking || booking.customerEmail !== email.toLowerCase()) {
+  if (!booking || booking.customerEmail.toLowerCase() !== email.toLowerCase()) {
     throw new Error("Booking not found.");
   }
   return booking;
-}
-
-async function getBookingManagerEmail() {
-  const [settings] = await db
-    .select({
-      bookingManagerEmail: siteSettings.bookingManagerEmail,
-      emailAddress: siteSettings.emailAddress,
-    })
-    .from(siteSettings)
-    .limit(1);
-  return settings?.bookingManagerEmail || settings?.emailAddress || null;
 }
 
 // ── Customer-facing ──────────────────────────────────────────────────────────
@@ -78,12 +64,15 @@ export async function getCustomerBookingRequirements(bookingId: string) {
     .where(eq(facilities.id, booking.facilityId))
     .limit(1);
   const detail = await getBookingRequirementDetail(booking.id, booking.requirementSetId);
+  const nextSession = (await getNextRequirementSessions([booking.id])).get(booking.id);
   return {
     booking: {
       id: booking.id,
       facilityName: facility?.name ?? "Booking",
-      startDate: booking.startDate,
-      startDatePast: booking.startDate.getTime() < Date.now(),
+      startDate: nextSession ?? booking.startDate,
+      startDatePast: booking.status === "cancelled" || !nextSession,
+      completedAt: booking.requirementCompletedAt,
+      confirmed: booking.status === "confirmed",
     },
     detail,
   };
@@ -93,7 +82,8 @@ export async function saveRequirementAnswers(formData: FormData) {
   const session = await requireCustomer();
   const bookingId = String(formData.get("bookingId") || "");
   const booking = await loadOwnedBooking(bookingId, session.user!.email!);
-  if (!booking.requirementSetId) return;
+  await assertRequirementsEditable(booking);
+  if (!booking.requirementSetId) throw new Error("This booking has no required information.");
 
   const questions = await db
     .select()
@@ -103,6 +93,7 @@ export async function saveRequirementAnswers(formData: FormData) {
     );
 
   for (const question of questions) {
+    if (!formData.has(`answer_${question.id}`)) continue;
     const raw = formData.get(`answer_${question.id}`);
     let answerBool: boolean | null = null;
     let answerText: string | null = null;
@@ -111,6 +102,7 @@ export async function saveRequirementAnswers(formData: FormData) {
       answerBool = value === "yes" ? true : value === "no" ? false : null;
     } else {
       answerText = String(raw ?? "").trim() || null;
+      if (answerText && answerText.length > 5000) throw new Error("Answers must be 5,000 characters or fewer.");
     }
 
     await db
@@ -121,6 +113,7 @@ export async function saveRequirementAnswers(formData: FormData) {
         questionLabel: question.label,
         answerBool,
         answerText,
+        updatedAt: new Date(),
       })
       .onConflictDoUpdate({
         target: [bookingRequirementResponses.bookingId, bookingRequirementResponses.questionId],
@@ -128,97 +121,65 @@ export async function saveRequirementAnswers(formData: FormData) {
       });
   }
 
-  revalidatePath(`/account/bookings/${bookingId}/requirements`);
-  revalidatePath("/account/bookings");
-  revalidatePath(`/admin/bookings/${bookingId}/edit`);
+  return refreshRequirementProgress(booking);
 }
 
-export async function uploadRequirementDocument(
-  formData: FormData
-): Promise<{ error?: string }> {
+async function refreshRequirementProgress(booking: { id: string; requirementSetId: string | null }) {
+  const detail = await getBookingRequirementDetail(booking.id, booking.requirementSetId);
+  await db.update(bookings).set({ requirementCompletedAt: detail.complete ? sql`coalesce(${bookings.requirementCompletedAt}, ${new Date().toISOString()}::timestamp)` : null })
+    .where(eq(bookings.id, booking.id));
+  revalidatePath(`/account/bookings/${booking.id}/requirements`);
+  revalidatePath("/account/bookings");
+  revalidatePath("/admin/bookings");
+  revalidatePath("/admin/bookings/requirements/outstanding");
+  revalidatePath(`/admin/bookings/${booking.id}/edit`);
+  return detail;
+}
+
+export async function authorizeRequirementUpload(bookingId: string, questionId: string) {
   const session = await requireCustomer();
+  const booking = await loadOwnedBooking(bookingId, session.user!.email!);
+  await assertRequirementsEditable(booking);
+  const detail = await getBookingRequirementDetail(booking.id, booking.requirementSetId);
+  const question = detail.questions.find((q) => q.questionId === questionId);
+  if (!question?.needsDocument) throw new Error("Save a yes answer before uploading a document for this question.");
+  return { booking, question, userId: session.user!.id ?? null };
+}
+
+// The file travels directly to Blob. Only its URL is submitted to this action,
+// avoiding both Next's action-body limit and Vercel's function-body limit.
+export async function uploadRequirementDocument(formData: FormData) {
   const bookingId = String(formData.get("bookingId") || "");
   const questionId = String(formData.get("questionId") || "");
-  const booking = await loadOwnedBooking(bookingId, session.user!.email!);
-
-  const file = formData.get("file");
-  if (!(file instanceof File) || file.size === 0) return { error: "Choose a file to upload." };
-  if (!ALLOWED_MIME.includes(file.type)) return { error: "Upload a PDF, PNG, or JPG file." };
-  if (file.size > MAX_FILE_BYTES) return { error: "Files must be 10MB or smaller." };
-
-  const [question] = await db
-    .select()
-    .from(requirementQuestions)
-    .where(eq(requirementQuestions.id, questionId))
-    .limit(1);
-  if (
-    !question ||
-    question.setId !== booking.requirementSetId ||
-    !question.requiresDocumentOnYes
-  ) {
-    return { error: "This question does not accept a document." };
-  }
-  const [response] = await db
-    .select()
-    .from(bookingRequirementResponses)
-    .where(
-      and(
-        eq(bookingRequirementResponses.bookingId, bookingId),
-        eq(bookingRequirementResponses.questionId, questionId)
-      )
-    )
-    .limit(1);
-  if (response?.answerBool !== true) {
-    return { error: "Answer yes before uploading a document." };
-  }
-
-  const stamp = Math.random().toString(36).slice(2, 8);
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const blob = await put(`booking-documents/${bookingId}/${stamp}-${safeName}`, file, {
-    access: "public",
-  });
-
-  await db.insert(bookingRequirementDocuments).values({
-    bookingId,
-    questionId,
-    documentLabel: question.documentLabel,
-    fileUrl: blob.url,
-    fileName: file.name,
-    fileSize: file.size,
-    mimeType: file.type,
-    uploadedBy: session.user!.id ?? null,
-  });
-
-  revalidatePath(`/account/bookings/${bookingId}/requirements`);
-  revalidatePath("/account/bookings");
-  revalidatePath(`/admin/bookings/${bookingId}/edit`);
-  return {};
+  const { booking, question, userId } = await authorizeRequirementUpload(bookingId, questionId);
+  const url = String(formData.get("url") || "");
+  const parsed = new URL(url);
+  if (parsed.protocol !== "https:" || !parsed.hostname.endsWith(".public.blob.vercel-storage.com")) throw new Error("Invalid document URL.");
+  const prefix = `booking-documents/${bookingId}/${questionId}/`;
+  if (!decodeURIComponent(parsed.pathname).slice(1).startsWith(prefix)) throw new Error("This document does not belong to this question.");
+  const blob = await head(url);
+  if (!blob.pathname.startsWith(prefix) || blob.url !== url) throw new Error("Invalid document path.");
+  if (!REQUIREMENT_UPLOAD_TYPES.includes(blob.contentType)) throw new Error("Upload a PDF, PNG or JPG file.");
+  if (blob.size <= 0 || blob.size > REQUIREMENT_UPLOAD_LIMIT) throw new Error("Files must be between 1 byte and 10 MB.");
+  await db.insert(bookingRequirementDocuments).values({ bookingId, questionId,
+    documentLabel: question.documentLabel, fileUrl: blob.url,
+    fileName: String(formData.get("fileName") || "Supporting document").slice(0, 255),
+    fileSize: blob.size, mimeType: blob.contentType, uploadedBy: userId,
+  }).onConflictDoNothing({ target: bookingRequirementDocuments.fileUrl });
+  return refreshRequirementProgress(booking);
 }
 
 export async function deleteRequirementDocument(formData: FormData) {
   const session = await requireCustomer();
   const documentId = String(formData.get("documentId") || "");
-  const [doc] = await db
-    .select()
-    .from(bookingRequirementDocuments)
-    .where(eq(bookingRequirementDocuments.id, documentId))
-    .limit(1);
+  const [doc] = await db.select().from(bookingRequirementDocuments).where(eq(bookingRequirementDocuments.id, documentId)).limit(1);
   if (!doc) throw new Error("Document not found.");
   const booking = await loadOwnedBooking(doc.bookingId, session.user!.email!);
-  if (booking.startDate.getTime() < Date.now()) {
-    throw new Error("This booking has already started.");
-  }
-
-  try {
-    await del(doc.fileUrl);
-  } catch (error) {
-    console.error("Failed to delete blob", error);
-  }
+  await assertRequirementsEditable(booking);
+  // Keep the database record until storage confirms deletion.
+  await del(doc.fileUrl);
   await db.delete(bookingRequirementDocuments).where(eq(bookingRequirementDocuments.id, documentId));
-
-  revalidatePath(`/account/bookings/${doc.bookingId}/requirements`);
-  revalidatePath("/account/bookings");
-  revalidatePath(`/admin/bookings/${doc.bookingId}/edit`);
+  return refreshRequirementProgress(booking);
 }
 
 // ── Admin: requirement-set builder ───────────────────────────────────────────
@@ -304,6 +265,7 @@ export async function addRequirementQuestion(formData: FormData) {
       : null,
     sortOrder: (last?.sortOrder ?? -1) + 1,
   });
+  await db.update(bookings).set({ requirementCompletedAt: null }).where(eq(bookings.requirementSetId, setId));
   revalidatePath("/admin/bookings/requirements");
 }
 
@@ -323,18 +285,14 @@ export async function updateRequirementQuestion(formData: FormData) {
   if (!label) throw new Error("A question label is required.");
   const type = formData.get("type") === "text" ? "text" : "yes_no";
   const requiresDocumentOnYes = type === "yes_no" && formData.get("requiresDocumentOnYes") === "on";
-  await db
-    .update(requirementQuestions)
-    .set({
-      label,
-      type,
-      requiresDocumentOnYes,
-      documentLabel: requiresDocumentOnYes
-        ? String(formData.get("documentLabel") || "").trim() || "Supporting document"
-        : null,
-      updatedAt: new Date(),
-    })
-    .where(eq(requirementQuestions.id, id));
+  const [existing] = await db.select().from(requirementQuestions).where(eq(requirementQuestions.id, id)).limit(1);
+  if (!existing) throw new Error("Question not found.");
+  const documentLabel = requiresDocumentOnYes ? String(formData.get("documentLabel") || "").trim() || "Supporting document" : null;
+  const changed = existing.label !== label || existing.type !== type || existing.requiresDocumentOnYes !== requiresDocumentOnYes || existing.documentLabel !== documentLabel;
+  if (changed) {
+    await db.update(requirementQuestions).set({ label, type, requiresDocumentOnYes, documentLabel, updatedAt: new Date() }).where(eq(requirementQuestions.id, id));
+    await db.update(bookings).set({ requirementCompletedAt: null }).where(eq(bookings.requirementSetId, existing.setId));
+  }
   revalidatePath("/admin/bookings/requirements");
 }
 
@@ -384,13 +342,14 @@ export async function assignRequirementSetToOffering(formData: FormData) {
 
   // Backfill future, non-cancelled bookings of this type that don't yet have a
   // set, so turning requirements on applies to upcoming bookings.
-  await db
+  if (requirementSetId) await db
     .update(bookings)
-    .set({ requirementSetId, updatedAt: new Date() })
+    .set({ requirementSetId, requirementCompletedAt: null, updatedAt: new Date() })
     .where(
       and(
         eq(bookings.offeringId, offeringId),
-        gte(bookings.startDate, new Date()),
+        isNull(bookings.requirementSetId),
+        sql`exists (select 1 from booking_occurrences o where o.booking_id = ${bookings.id} and o.status <> 'cancelled' and o.start_date > ${requirementNow().toISOString()}::timestamp)`,
         inArray(bookings.status, ["pending_payment", "confirmed", "payment_failed"])
       )
     );
@@ -409,88 +368,4 @@ export async function getAdminBookingRequirements(bookingId: string) {
     .limit(1);
   if (!booking) return null;
   return getBookingRequirementDetail(bookingId, booking.requirementSetId);
-}
-
-// ── Chase cron ───────────────────────────────────────────────────────────────
-
-export async function sendDueRequirementReminders() {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  const managerEmail = await getBookingManagerEmail();
-  const today = startOfDay(new Date());
-  let checked = 0;
-  let sent = 0;
-
-  for (const milestone of [14, 7]) {
-    const from = addDays(today, milestone);
-    const to = addDays(today, milestone + 1);
-    const candidates = await db
-      .select({
-        id: bookings.id,
-        customerName: bookings.customerName,
-        customerEmail: bookings.customerEmail,
-        startDate: bookings.startDate,
-        requirementSetId: bookings.requirementSetId,
-        facilityName: facilities.name,
-      })
-      .from(bookings)
-      .innerJoin(facilities, eq(bookings.facilityId, facilities.id))
-      .where(
-        and(
-          eq(bookings.status, "confirmed"),
-          isNotNull(bookings.requirementSetId),
-          gte(bookings.startDate, from),
-          lt(bookings.startDate, to)
-        )
-      );
-
-    checked += candidates.length;
-    if (candidates.length === 0) continue;
-
-    const statuses = await getBookingRequirementStatuses(candidates.map((b) => b.id));
-
-    for (const booking of candidates) {
-      const status = statuses.get(booking.id);
-      if (!status?.hasRequirements || status.complete) continue;
-
-      const detail = await getBookingRequirementDetail(booking.id, booking.requirementSetId);
-      const outstanding = detail.questions
-        .filter((q) => !q.answered || (q.needsDocument && q.documents.length === 0))
-        .map((q) => (!q.answered ? `- ${q.label}` : `- ${q.documentLabel || q.label} (document needed)`))
-        .join("\n");
-      const startDate = formatBookingDate(booking.startDate, "d MMM yyyy, HH:mm");
-      const bookingUrl = `${appUrl}/account/bookings/${booking.id}/requirements`;
-
-      const customerResult = await sendTemplateEmail({
-        key: "booking_requirements_customer",
-        to: booking.customerEmail,
-        variables: {
-          customerName: booking.customerName,
-          facilityName: booking.facilityName,
-          startDate,
-          outstanding,
-          bookingUrl,
-        },
-        relatedEntityType: "booking",
-        relatedEntityId: `${booking.id}:req-${milestone}`,
-      });
-      if (customerResult.sent) sent += 1;
-
-      if (managerEmail) {
-        await sendTemplateEmail({
-          key: "booking_requirements_manager",
-          to: managerEmail,
-          variables: {
-            customerName: booking.customerName,
-            facilityName: booking.facilityName,
-            startDate,
-            outstanding,
-          },
-          relatedEntityType: "booking",
-          relatedEntityId: `${booking.id}:req-${milestone}-manager`,
-        });
-      }
-    }
-  }
-
-  return { checked, sent };
 }

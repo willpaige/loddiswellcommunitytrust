@@ -5,6 +5,7 @@ import { ServerClient } from "postmark";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { emailLogs, emailTemplates, siteSettings } from "@/lib/db/schema";
+import { renderBodyTextAsHtml } from "@/lib/email/render";
 import {
   emailTemplateDefaults,
   type EmailTemplateKey,
@@ -23,29 +24,11 @@ function getPostmark() {
   return new ServerClient(process.env.POSTMARK_API_KEY!);
 }
 
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
 function interpolate(template: string, variables: Record<string, string | number | null | undefined>) {
   return template.replace(/\{\{(\w+)\}\}/g, (_, key: string) => {
     const value = variables[key];
     return value === null || value === undefined ? "" : String(value);
   });
-}
-
-function renderBodyTextAsHtml(body: string) {
-  return body
-    .split(/\n{2,}/)
-    .map((paragraph) => {
-      const escaped = escapeHtml(paragraph.trim()).replace(/\n/g, "<br>");
-      return escaped ? `<p>${escaped}</p>` : "";
-    })
-    .join("");
 }
 
 function brandedEmailHtml(contentHtml: string) {
@@ -97,7 +80,7 @@ export async function ensureEmailTemplates() {
       variables: template.variables,
       enabled: true,
     }))
-  );
+  ).onConflictDoNothing({ target: emailTemplates.key });
 }
 
 export async function sendTemplateEmail({
@@ -108,12 +91,12 @@ export async function sendTemplateEmail({
   relatedEntityId,
   dedupe = true,
 }: SendTemplateEmailInput) {
-  if (!process.env.POSTMARK_API_KEY || !to) return { sent: false, skipped: true };
+  if (!process.env.POSTMARK_API_KEY || !to) return { sent: false, skipped: true, reason: "not_configured" };
   await ensureEmailTemplates();
 
   if (dedupe && relatedEntityType && relatedEntityId) {
     const existing = await db
-      .select({ id: emailLogs.id })
+      .select({ id: emailLogs.id, providerMessageId: emailLogs.providerMessageId })
       .from(emailLogs)
       .where(
         and(
@@ -125,11 +108,11 @@ export async function sendTemplateEmail({
         )
       )
       .limit(1);
-    if (existing.length > 0) return { sent: false, skipped: true };
+    if (existing.length > 0) return { sent: false, skipped: true, reason: "duplicate", messageId: existing[0].providerMessageId };
   }
 
   const [template] = await db.select().from(emailTemplates).where(eq(emailTemplates.key, key)).limit(1);
-  if (!template?.enabled) return { sent: false, skipped: true };
+  if (!template?.enabled) return { sent: false, skipped: true, reason: "disabled" };
 
   const [settings] = await db.select().from(siteSettings).limit(1);
   const subject = interpolate(template.subject, variables);
@@ -138,7 +121,7 @@ export async function sendTemplateEmail({
 
   try {
     const result = await getPostmark().sendEmail({
-      From: process.env.EMAIL_FROM || "noreply@loddiswellcommunitytrust.org",
+      From: process.env.EMAIL_FROM || "hello@loddiswellcommunitytrust.org",
       To: to,
       Subject: subject,
       TextBody: body,
@@ -155,7 +138,7 @@ export async function sendTemplateEmail({
       status: "sent",
       providerMessageId: result.MessageID,
     });
-    return { sent: true, skipped: false };
+    return { sent: true, skipped: false, messageId: result.MessageID };
   } catch (error) {
     await db.insert(emailLogs).values({
       id: createId(),

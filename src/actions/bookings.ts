@@ -35,6 +35,10 @@ import {
   type Recurrence,
 } from "@/lib/bookings";
 import { sendTemplateEmail } from "@/lib/email/send";
+import { sendRequirementRequest } from "@/lib/requirement-reminders";
+import { getBookingRequirementDetail } from "@/lib/booking-requirements";
+import { getNextRequirementSessions } from "@/lib/requirement-schedule";
+import { requirementDeadline } from "@/lib/requirement-policy";
 import { upsertCustomerRecord } from "@/actions/customer-records";
 import { validateBookingDiscountCode } from "@/actions/booking-discount-codes";
 import {
@@ -400,6 +404,7 @@ async function getBookingEmailData(bookingId: string) {
   const [booking] = await db
     .select({
       id: bookings.id,
+      requirementSetId: bookings.requirementSetId,
       customerName: bookings.customerName,
       organisationName: bookings.organisationName,
       customerEmail: bookings.customerEmail,
@@ -420,9 +425,18 @@ async function getBookingEmailData(bookingId: string) {
   if (!booking) return null;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const schedule = await bookingScheduleText(bookingId);
+  const detail = await getBookingRequirementDetail(bookingId, booking.requirementSetId);
+  const next = (await getNextRequirementSessions([bookingId])).get(bookingId);
+  const deadline = next ? requirementDeadline(next) : null;
+  const requirementsNotice = detail.hasRequirements && !detail.complete && next
+    ? `Required information — please complete your booking form${deadline?.overdue ? " now, before your session" : ` by ${formatBookingDate(deadline!.deadline, "d MMM yyyy, HH:mm")}`}.
+Answer the questions and upload any supporting documents requested. Sign in using the email address on your booking.
+${appUrl}/account/bookings/${bookingId}/requirements`
+    : detail.hasRequirements && detail.complete ? "Your required information is complete. Thank you." : "";
   return {
     ...booking,
     variables: {
+      requirementsNotice,
       customerName: booking.customerName,
       organisationName: booking.organisationName || "",
       customerEmail: booking.customerEmail,
@@ -1386,24 +1400,24 @@ export async function getAdminBookingInvoices(bookingId: string) {
 }
 
 export async function sendBookingConfirmedEmails(bookingId: string, manual = false) {
-  const booking = await getBookingEmailData(bookingId);
-  if (!booking) return;
-  await sendTemplateEmail({
-    key: manual ? "manual_booking_confirmation" : "booking_confirmation",
-    to: booking.customerEmail,
-    variables: booking.variables,
-    relatedEntityType: "booking",
-    relatedEntityId: `${bookingId}:${manual ? "manual-confirmation" : "confirmation"}`,
+  // Requirements are independent of confirmation/manager delivery failures.
+  const initialRequest = sendRequirementRequest(bookingId).catch((error) => {
+    console.error("Initial requirements request failed; cron will retry", bookingId, error);
   });
-  const managerEmail = await getBookingManagerEmail();
-  if (managerEmail) {
-    await sendTemplateEmail({
-      key: "booking_manager_notification",
-      to: managerEmail,
-      variables: booking.variables,
-      relatedEntityType: "booking",
-      relatedEntityId: `${bookingId}:manager`,
-    });
+  try {
+    const booking = await getBookingEmailData(bookingId);
+    if (!booking) return;
+    const managerEmail = await getBookingManagerEmail();
+    const results = await Promise.allSettled([
+      sendTemplateEmail({ key: manual ? "manual_booking_confirmation" : "booking_confirmation",
+        to: booking.customerEmail, variables: booking.variables, relatedEntityType: "booking",
+        relatedEntityId: `${bookingId}:${manual ? "manual-confirmation" : "confirmation"}` }),
+      ...(managerEmail ? [sendTemplateEmail({ key: "booking_manager_notification", to: managerEmail,
+        variables: booking.variables, relatedEntityType: "booking", relatedEntityId: `${bookingId}:manager` })] : []),
+    ]);
+    for (const result of results) if (result.status === "rejected") console.error("Booking confirmation email failed", bookingId, result.reason);
+  } finally {
+    await initialRequest;
   }
 }
 
@@ -3750,6 +3764,10 @@ export async function updateAdminBooking(id: string, formData: FormData) {
   await requireAdmin();
   const [currentBooking] = await db
     .select({
+      organisationName: bookings.organisationName,
+      offeringId: bookings.offeringId,
+      requirementReviewAfter: bookings.requirementReviewAfter,
+      requirementCompletedAt: bookings.requirementCompletedAt,
       scheduleType: bookings.scheduleType,
       paymentType: bookings.paymentType,
       unitAmount: bookings.unitAmount,
@@ -3797,9 +3815,15 @@ export async function updateAdminBooking(id: string, formData: FormData) {
   });
   const customerDiscountPercent = await getCustomerDiscountPercent(customerEmail);
 
+  const requirementsChanged = customerEmail !== currentBooking.customerEmail || organisationName !== currentBooking.organisationName || (!detailsOnly && offering.id !== currentBooking.offeringId);
+  const requirementReviewAfter = requirementsChanged ? new Date() : currentBooking.requirementReviewAfter;
+  const requirementCompletedAt = requirementsChanged ? null : currentBooking.requirementCompletedAt;
+
   if (detailsOnly) {
     await db.update(bookings).set({
       userId,
+      requirementReviewAfter,
+      requirementCompletedAt,
       customerName,
       organisationName,
       customerEmail,
@@ -3821,6 +3845,8 @@ export async function updateAdminBooking(id: string, formData: FormData) {
     .update(bookings)
     .set({
       userId,
+      requirementReviewAfter,
+      requirementCompletedAt,
       facilityId: offering.facilityId,
       offeringId: offering.id,
       customerGroup: price.customerGroup,

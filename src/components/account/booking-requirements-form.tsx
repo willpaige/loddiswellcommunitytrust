@@ -1,209 +1,118 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { CheckCircle2, FileText, Trash2 } from "lucide-react";
-import {
-  deleteRequirementDocument,
-  saveRequirementAnswers,
-  uploadRequirementDocument,
-} from "@/actions/booking-requirements";
+import { useEffect, useRef, useState } from "react";
+import { upload } from "@vercel/blob/client";
+import { CheckCircle2, Trash2 } from "lucide-react";
+import { deleteRequirementDocument, saveRequirementAnswers, uploadRequirementDocument } from "@/actions/booking-requirements";
 import type { BookingRequirementDetail } from "@/lib/booking-requirements";
+import { REQUIREMENT_UPLOAD_LIMIT, REQUIREMENT_UPLOAD_TYPES } from "@/lib/requirement-policy";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export function BookingRequirementsForm({
-  bookingId,
-  detail,
-  locked,
-}: {
-  bookingId: string;
-  detail: BookingRequirementDetail;
-  locked: boolean;
+export function BookingRequirementsForm({ bookingId, detail, locked, confirmed = false }: {
+  bookingId: string; detail: BookingRequirementDetail; locked: boolean; confirmed?: boolean;
 }) {
-  const router = useRouter();
-  const [answers, setAnswers] = useState<Record<string, string>>(() => {
-    const initial: Record<string, string> = {};
-    for (const q of detail.questions) {
-      initial[q.questionId] =
-        q.type === "yes_no"
-          ? q.answerBool === true
-            ? "yes"
-            : q.answerBool === false
-              ? "no"
-              : ""
-          : q.answerText ?? "";
-    }
-    return initial;
-  });
-  const [savingAnswers, setSavingAnswers] = useState(false);
-  const [uploadingId, setUploadingId] = useState<string | null>(null);
-  const [uploadError, setUploadError] = useState<Record<string, string>>({});
-
-  async function handleSaveAnswers(formData: FormData) {
-    setSavingAnswers(true);
-    try {
-      await saveRequirementAnswers(formData);
-      router.refresh();
-    } finally {
-      setSavingAnswers(false);
-    }
+  const [saved, setSaved] = useState(detail);
+  const [answers, setAnswers] = useState<Record<string, string>>(() => Object.fromEntries(detail.questions.map(q => [q.questionId,
+    q.type === "yes_no" ? q.answerBool === true ? "yes" : q.answerBool === false ? "no" : "" : q.answerText ?? ""])));
+  const answersRef = useRef(answers);
+  const [pending, setPending] = useState(0);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [uploading, setUploading] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  // Serialize writes so a slower earlier save cannot overwrite a newer answer.
+  const queue = useRef<Promise<void>>(Promise.resolve());
+  const save = (values: Record<string, string>) => {
+    setPending(n => n + 1);
+    const next = queue.current.then(async () => {
+      const form = new FormData(); form.set("bookingId", bookingId);
+      for (const [key, value] of Object.entries(values)) form.set(`answer_${key}`, value);
+      try {
+        setSaved(await saveRequirementAnswers(form));
+        setError(""); setNotice("Answers saved.");
+      } catch {
+        setError("Your answers could not be saved. Check your connection and choose Save answers to retry. If your session has expired, sign in again.");
+        throw new Error("Save failed");
+      } finally { setPending(n => n - 1); }
+    });
+    queue.current = next.catch(() => {});
+    return next;
+  };
+  function change(id: string, value: string, immediately: boolean) {
+    const next = { ...answersRef.current, [id]: value };
+    answersRef.current = next; setAnswers(next); setNotice("");
+    if (immediately) void save({ [id]: value }).catch(() => {});
   }
+  const answered = saved.questions.filter(q => q.answered).length;
+  const missingDocs = saved.questions.filter(q => q.needsDocument && !q.documents.length).length;
+  const dirty = saved.questions.some(q => (q.type === "yes_no" ? q.answerBool === true ? "yes" : q.answerBool === false ? "no" : "" : q.answerText ?? "") !== (answers[q.questionId] ?? "").trim());
+  const complete = saved.complete && !dirty && pending === 0 && !error && !uploading;
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    if (dirty || pending > 0 || uploading) window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty, pending, uploading]);
 
   async function handleUpload(questionId: string, formData: FormData) {
-    setUploadingId(questionId);
-    setUploadError((prev) => ({ ...prev, [questionId]: "" }));
-    try {
-      const result = await uploadRequirementDocument(formData);
-      if (result?.error) {
-        setUploadError((prev) => ({ ...prev, [questionId]: result.error! }));
-      } else {
-        router.refresh();
-      }
-    } finally {
-      setUploadingId(null);
+    const file = formData.get("file");
+    if (!(file instanceof File) || !file.size) { setError("Choose a file to upload."); return; }
+    if (!REQUIREMENT_UPLOAD_TYPES.includes(file.type) || file.size > REQUIREMENT_UPLOAD_LIMIT) {
+      setError("Choose a PDF, PNG or JPG file no larger than 10 MB."); return;
     }
+    setUploading(questionId); setUploadProgress(0); setError("");
+    try {
+      await save(answersRef.current);
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-150);
+      const blob = await upload(`booking-documents/${bookingId}/${questionId}/${crypto.randomUUID()}-${safeName}`, file, {
+        access: "public", handleUploadUrl: "/api/booking-requirements/upload",
+        clientPayload: JSON.stringify({ bookingId, questionId }),
+        onUploadProgress: ({ percentage }) => setUploadProgress(Math.round(percentage)),
+      });
+      const data = new FormData(); data.set("bookingId", bookingId); data.set("questionId", questionId);
+      data.set("url", blob.url); data.set("fileName", file.name);
+      setSaved(await uploadRequirementDocument(data)); setNotice("Document uploaded and saved.");
+    } catch {
+      setError("The document could not be saved. Check your connection and try uploading it again. If your session has expired, sign in again.");
+    } finally { setUploading(null); }
+  }
+  async function remove(documentId: string) {
+    setError("");
+    try {
+      const form = new FormData(); form.set("documentId", documentId);
+      setSaved(await deleteRequirementDocument(form)); setNotice("Document removed.");
+    } catch { setError("The document could not be removed. Please try again."); }
   }
 
-  return (
-    <div className="space-y-6">
-      {detail.complete && (
-        <div className="flex items-center gap-2 rounded-md border border-green-600/30 bg-green-50 p-3 text-sm text-green-800">
-          <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-          All required information has been provided. Thank you.
-        </div>
-      )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Questionnaire</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form action={handleSaveAnswers} className="space-y-5">
-            <input type="hidden" name="bookingId" value={bookingId} />
-            {detail.questions.map((q) => (
-              <div key={q.questionId} className="space-y-2">
-                <Label>{q.label}</Label>
-                {q.type === "yes_no" ? (
-                  <div className="flex gap-4 text-sm">
-                    {["yes", "no"].map((value) => (
-                      <label key={value} className="flex items-center gap-2">
-                        <input
-                          type="radio"
-                          name={`answer_${q.questionId}`}
-                          value={value}
-                          checked={answers[q.questionId] === value}
-                          disabled={locked}
-                          onChange={(event) =>
-                            setAnswers((prev) => ({ ...prev, [q.questionId]: event.target.value }))
-                          }
-                        />
-                        {value === "yes" ? "Yes" : "No"}
-                      </label>
-                    ))}
-                  </div>
-                ) : (
-                  <Input
-                    name={`answer_${q.questionId}`}
-                    value={answers[q.questionId] ?? ""}
-                    disabled={locked}
-                    onChange={(event) =>
-                      setAnswers((prev) => ({ ...prev, [q.questionId]: event.target.value }))
-                    }
-                  />
-                )}
-              </div>
-            ))}
-            {!locked && (
-              <Button type="submit" disabled={savingAnswers}>
-                {savingAnswers ? "Saving..." : "Save answers"}
-              </Button>
-            )}
-          </form>
-        </CardContent>
-      </Card>
-
-      {detail.questions.some((q) => q.needsDocument) && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Documents</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {detail.questions
-              .filter((q) => q.needsDocument)
-              .map((q) => (
-                <div key={q.questionId} className="space-y-3">
-                  <div>
-                    <p className="text-sm font-medium">{q.documentLabel || q.label}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Required because you answered yes to &ldquo;{q.label}&rdquo;. PDF, PNG or JPG, up to 10MB.
-                    </p>
-                  </div>
-
-                  {q.documents.length > 0 ? (
-                    <ul className="space-y-2">
-                      {q.documents.map((doc) => (
-                        <li
-                          key={doc.id}
-                          className="flex items-center justify-between gap-3 rounded-md border p-2 text-sm"
-                        >
-                          <a
-                            href={doc.fileUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex items-center gap-2 text-primary underline"
-                          >
-                            <FileText className="h-4 w-4" aria-hidden="true" />
-                            {doc.fileName}
-                          </a>
-                          {!locked && (
-                            <form action={deleteRequirementDocument}>
-                              <input type="hidden" name="documentId" value={doc.id} />
-                              <Button type="submit" variant="ghost" size="icon" className="h-8 w-8">
-                                <Trash2 className="h-4 w-4" aria-hidden="true" />
-                                <span className="sr-only">Remove</span>
-                              </Button>
-                            </form>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No document uploaded yet.</p>
-                  )}
-
-                  {!locked && (
-                    <form action={(formData) => handleUpload(q.questionId, formData)} className="flex flex-wrap items-center gap-2">
-                      <input type="hidden" name="bookingId" value={bookingId} />
-                      <input type="hidden" name="questionId" value={q.questionId} />
-                      <Input
-                        type="file"
-                        name="file"
-                        accept="application/pdf,image/png,image/jpeg"
-                        required
-                        className="max-w-xs"
-                      />
-                      <Button type="submit" variant="outline" disabled={uploadingId === q.questionId}>
-                        {uploadingId === q.questionId ? "Uploading..." : "Upload"}
-                      </Button>
-                    </form>
-                  )}
-                  {uploadError[q.questionId] && (
-                    <p className="text-sm text-destructive">{uploadError[q.questionId]}</p>
-                  )}
-                </div>
-              ))}
-          </CardContent>
-        </Card>
-      )}
-
-      {locked && (
-        <p className="text-sm text-muted-foreground">
-          This booking has started, so required information can no longer be changed.
-        </p>
-      )}
+  return <div className="space-y-6">
+    <div role="status" aria-live="polite" className={`rounded-md border p-4 ${complete ? "border-green-600/30 bg-green-50 text-green-800" : "bg-muted/40"}`}>
+      {complete ? <><p className="flex items-center gap-2 font-medium"><CheckCircle2 className="h-5 w-5" />{confirmed ? "Required information complete — ready for hire" : "Required information complete"}</p><p className="mt-1 text-sm">Your answers and required documents have been saved. Thank you. They apply to all sessions in this booking.</p></>
+        : <><p className="font-medium">{answered} of {saved.questions.length} questions saved{missingDocs > 0 ? ` · ${missingDocs} document${missingDocs === 1 ? "" : "s"} still needed` : ""}</p><p className="mt-1 text-sm">Answer every question and upload the documents requested below. Answers save when you select an option or leave a text field.</p></>}
     </div>
-  );
+    {error && <p role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">{error}</p>}
+    <p role="status" aria-live="polite" className="text-sm text-muted-foreground">{pending > 0 ? "Saving answers…" : dirty ? "You have unsaved answers." : notice}</p>
+    <Card><CardHeader><CardTitle>Questionnaire</CardTitle></CardHeader><CardContent>
+      <form className="space-y-6" onSubmit={event => { event.preventDefault(); void save(answersRef.current).catch(() => {}); }}>
+        {saved.questions.map(q => <div key={q.questionId} className="space-y-2">
+          <Label htmlFor={`answer-${q.questionId}`}>{q.label}</Label>
+          {q.type === "yes_no" ? <fieldset disabled={locked || !!uploading} className="flex gap-5"><legend className="sr-only">{q.label}</legend>
+            {["yes", "no"].map(value => <label key={value} className="flex items-center gap-2 text-sm"><input type="radio" name={`answer_${q.questionId}`} value={value} checked={answers[q.questionId] === value} onChange={() => change(q.questionId, value, true)} />{value === "yes" ? "Yes" : "No"}</label>)}
+          </fieldset> : <Input id={`answer-${q.questionId}`} value={answers[q.questionId] ?? ""} maxLength={5000} disabled={locked || !!uploading} onChange={event => change(q.questionId, event.target.value, false)} onBlur={() => { if (!locked) void save({ [q.questionId]: answersRef.current[q.questionId] ?? "" }).catch(() => {}); }} />}
+          {!q.answered && <p className="text-xs text-muted-foreground">Answer required</p>}
+          {q.requiresDocumentOnYes && answers[q.questionId] === "yes" && <p className="text-sm font-medium">Document required: {q.documentLabel || q.label}. Upload it below.</p>}
+        </div>)}
+        {!locked && <Button type="submit" disabled={pending > 0 || !!uploading}>{pending > 0 ? "Saving…" : "Save answers"}</Button>}
+      </form>
+    </CardContent></Card>
+    {saved.questions.filter(q => q.requiresDocumentOnYes && answers[q.questionId] === "yes").map(q => <Card key={q.questionId}>
+      <CardHeader><CardTitle>{q.documentLabel || q.label}</CardTitle></CardHeader>
+      <CardContent className="space-y-3"><p className="text-sm text-muted-foreground">Required because you answered yes. PDF, PNG or JPG, up to 10 MB.</p>
+        {q.documents.length ? <ul className="space-y-2">{q.documents.map(doc => <li key={doc.id} className="flex items-center justify-between gap-3 rounded-md border p-2 text-sm"><a href={doc.fileUrl} target="_blank" rel="noreferrer" className="underline">{doc.fileName}</a>{!locked && <Button type="button" size="icon" variant="ghost" disabled={!!uploading || pending > 0} onClick={() => void remove(doc.id)}><Trash2 className="h-4 w-4" /><span className="sr-only">Remove {doc.fileName}</span></Button>}</li>)}</ul> : <p className="text-sm font-medium">Document still needed</p>}
+        {!locked && <form action={data => handleUpload(q.questionId, data)} className="flex flex-wrap gap-2"><Input aria-label={`Upload ${q.documentLabel || q.label}`} type="file" name="file" required accept="application/pdf,image/png,image/jpeg" disabled={!!uploading} className="max-w-xs" /><Button type="submit" variant="outline" disabled={!!uploading || pending > 0}>{uploading === q.questionId ? `Uploading ${uploadProgress}%…` : "Upload document"}</Button></form>}
+      </CardContent>
+    </Card>)}
+    {locked && <p className="text-sm text-muted-foreground">This booking has no upcoming sessions or has been cancelled, so its information can no longer be changed.</p>}
+  </div>;
 }

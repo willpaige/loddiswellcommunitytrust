@@ -1,5 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
+import { requirementAnswerCurrent } from "@/lib/requirement-policy";
 import {
   bookingRequirementDocuments,
   bookingRequirementResponses,
@@ -71,7 +72,7 @@ export async function getBookingRequirementDetail(
 ): Promise<BookingRequirementDetail> {
   if (!requirementSetId) return EMPTY;
 
-  const [questions, responses, documents] = await Promise.all([
+  const [questions, responses, documents, bookingRows] = await Promise.all([
     db
       .select()
       .from(requirementQuestions)
@@ -85,6 +86,7 @@ export async function getBookingRequirementDetail(
       .select()
       .from(bookingRequirementDocuments)
       .where(eq(bookingRequirementDocuments.bookingId, bookingId)),
+    db.select({ reviewAfter: bookings.requirementReviewAfter }).from(bookings).where(eq(bookings.id, bookingId)).limit(1),
   ]);
 
   if (questions.length === 0) return EMPTY;
@@ -98,7 +100,10 @@ export async function getBookingRequirementDetail(
   }
 
   const states: RequirementQuestionState[] = questions.map((q) => {
-    const response = responseByQuestion.get(q.id);
+    const reviewAfter = bookingRows[0]?.reviewAfter;
+    const requiredSince = reviewAfter && reviewAfter > q.updatedAt ? reviewAfter : q.updatedAt;
+    const stored = responseByQuestion.get(q.id);
+    const response = requirementAnswerCurrent({ updatedAt: requiredSince }, stored) ? stored : undefined;
     const answerBool = response?.answerBool ?? null;
     const answerText = response?.answerText ?? null;
     const state = { type: q.type, answerBool, answerText, requiresDocumentOnYes: q.requiresDocumentOnYes };
@@ -113,7 +118,7 @@ export async function getBookingRequirementDetail(
       answerText,
       answered: isAnswered(state),
       needsDocument: needsDocument(state),
-      documents: docsByQuestion.get(q.id) ?? [],
+      documents: (docsByQuestion.get(q.id) ?? []).filter((doc) => doc.uploadedAt >= requiredSince),
     };
   });
 
@@ -138,7 +143,7 @@ export async function getBookingRequirementStatuses(
   if (bookingIds.length === 0) return result;
 
   const bookingRows = await db
-    .select({ id: bookings.id, requirementSetId: bookings.requirementSetId })
+    .select({ id: bookings.id, requirementSetId: bookings.requirementSetId, reviewAfter: bookings.requirementReviewAfter })
     .from(bookings)
     .where(inArray(bookings.id, bookingIds));
 
@@ -175,10 +180,13 @@ export async function getBookingRequirementStatuses(
   }
   const responsesByBookingQuestion = new Map<string, (typeof responses)[number]>();
   for (const r of responses) responsesByBookingQuestion.set(`${r.bookingId}:${r.questionId}`, r);
-  const docCount = new Map<string, number>();
+  const currentDocKeys = new Set<string>();
+  const questionDates = new Map(questions.map(q => [q.id, q.updatedAt]));
+  const bookingDates = new Map(bookingRows.map(b => [b.id, b.reviewAfter]));
   for (const d of documents) {
-    const key = `${d.bookingId}:${d.questionId}`;
-    docCount.set(key, (docCount.get(key) ?? 0) + 1);
+    const updatedAt = questionDates.get(d.questionId);
+    const reviewAfter = bookingDates.get(d.bookingId);
+    if (updatedAt && d.uploadedAt >= updatedAt && (!reviewAfter || d.uploadedAt >= reviewAfter)) currentDocKeys.add(`${d.bookingId}:${d.questionId}`);
   }
 
   for (const booking of withSet) {
@@ -189,12 +197,15 @@ export async function getBookingRequirementStatuses(
     }
     let complete = true;
     for (const q of setQuestions) {
-      const response = responsesByBookingQuestion.get(`${booking.id}:${q.id}`);
+      const stored = responsesByBookingQuestion.get(`${booking.id}:${q.id}`);
+      const requiredSince = booking.reviewAfter && booking.reviewAfter > q.updatedAt ? booking.reviewAfter : q.updatedAt;
+      const response = requirementAnswerCurrent({ updatedAt: requiredSince }, stored) ? stored : undefined;
       const answerBool = response?.answerBool ?? null;
       const answerText = response?.answerText ?? null;
       const answered = isAnswered({ type: q.type, answerBool, answerText });
       const requiresDoc = needsDocument({ type: q.type, requiresDocumentOnYes: q.requiresDocumentOnYes, answerBool });
-      if (!answered || (requiresDoc && (docCount.get(`${booking.id}:${q.id}`) ?? 0) === 0)) {
+      const hasCurrentDoc = currentDocKeys.has(`${booking.id}:${q.id}`);
+      if (!answered || (requiresDoc && !hasCurrentDoc)) {
         complete = false;
         break;
       }

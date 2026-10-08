@@ -443,6 +443,8 @@ export const bookings = pgTable(
     requirementSetId: text("requirement_set_id").references(() => requirementSets.id, {
       onDelete: "set null",
     }),
+    requirementCompletedAt: timestamp("requirement_completed_at"),
+    requirementReviewAfter: timestamp("requirement_review_after"),
     cancelledAt: timestamp("cancelled_at"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -632,8 +634,25 @@ export const bookingRequirementDocuments = pgTable(
     uploadedAt: timestamp("uploaded_at").notNull().defaultNow(),
     uploadedBy: text("uploaded_by").references(() => users.id),
   },
-  (table) => [index("booking_requirement_documents_booking_idx").on(table.bookingId)]
+  (table) => [index("booking_requirement_documents_booking_idx").on(table.bookingId), uniqueIndex("booking_requirement_documents_url_idx").on(table.fileUrl)]
 );
+
+export const bookingRequirementMessages = pgTable("booking_requirement_messages", {
+  id: text("id").primaryKey(),
+  bookingId: text("booking_id").notNull().references(() => bookings.id, { onDelete: "cascade" }),
+  recipient: text("recipient").notNull(),
+  kind: text("kind", { enum: ["customer", "manager"] }).notNull(),
+  stage: text("stage").notNull(),
+  cycle: text("cycle").notNull(),
+  status: text("status", { enum: ["sending", "sent", "failed"] }).notNull(),
+  attempts: integer("attempts").notNull().default(1),
+  lastAttemptAt: timestamp("last_attempt_at").notNull().defaultNow(),
+  nextAttemptAt: timestamp("next_attempt_at").notNull().defaultNow(),
+  sentAt: timestamp("sent_at"),
+  providerMessageId: text("provider_message_id"),
+  deliveryStatus: text("delivery_status", { enum: ["accepted", "delivered", "bounced"] }),
+  error: text("error"),
+}, (table) => [index("booking_requirement_messages_booking_idx").on(table.bookingId)]);
 
 export const bookingBlocks = pgTable(
   "booking_blocks",

@@ -1,6 +1,8 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
 import { formatBookingDate } from "@/lib/booking-time";
+import { requirementDeadline } from "@/lib/requirement-policy";
 import { ArrowLeft } from "lucide-react";
 import { getCustomerBookingRequirements } from "@/actions/booking-requirements";
 import { Button } from "@/components/ui/button";
@@ -15,6 +17,11 @@ export default async function BookingRequirementsPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const session = await auth();
+  if (!session?.user?.email) {
+    const callbackUrl = `/account/bookings/${id}/requirements`;
+    redirect(`/account/login?callbackUrl=${encodeURIComponent(callbackUrl)}`);
+  }
   let data;
   try {
     data = await getCustomerBookingRequirements(id);
@@ -22,6 +29,7 @@ export default async function BookingRequirementsPage({
     notFound();
   }
   if (!data.detail.hasRequirements) notFound();
+  const deadline = requirementDeadline(data.booking.startDate);
 
   return (
     <AccountPortalShell
@@ -40,12 +48,18 @@ export default async function BookingRequirementsPage({
         <p className="mt-1 text-sm text-muted-foreground">
           {formatBookingDate(data.booking.startDate, "d MMM yyyy, HH:mm")}
         </p>
+        {!data.booking.startDatePast && !data.detail.complete && (
+          <p className="mt-3 font-medium">
+            {deadline.overdue ? "Please complete this now, before your upcoming session." : `Please complete by ${formatBookingDate(deadline.deadline, "d MMM yyyy, HH:mm")} — 48 hours before your session.`}
+          </p>
+        )}
       </div>
 
       <BookingRequirementsForm
         bookingId={data.booking.id}
         detail={data.detail}
         locked={data.booking.startDatePast}
+        confirmed={data.booking.confirmed}
       />
     </AccountPortalShell>
   );

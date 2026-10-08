@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/cron/booking-requirements",
-      "schedule": "0 8 * * *"
+      "schedule": "15 * * * *"
     },
     {
       "path": "/api/cron/booking-invoices",

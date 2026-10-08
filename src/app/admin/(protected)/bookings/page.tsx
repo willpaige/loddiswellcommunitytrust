@@ -51,6 +51,7 @@ export default async function AdminBookingsPage() {
           <p className="mt-1 text-muted-foreground">
             View customer and manual bookings with payment and confirmation status.
           </p>
+          <Link href="/admin/bookings/requirements/outstanding" className="mt-3 inline-block font-medium underline">Chase outstanding required information</Link>
         </div>
         <ManualBookingDialog
           offerings={uniqueOfferings}

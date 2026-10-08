@@ -15,6 +15,8 @@ import {
   recurrenceLabel,
 } from "@/lib/bookings";
 import { getBookingRequirementStatuses } from "@/lib/booking-requirements";
+import { getNextRequirementSessions } from "@/lib/requirement-schedule";
+import { requirementDeadline } from "@/lib/requirement-policy";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,6 +31,7 @@ export default async function AccountBookingsPage() {
     getCustomerBookingCancellationSettings(),
   ]);
   const requirementStatuses = await getBookingRequirementStatuses(bookings.map((b) => b.id));
+  const nextSessions = await getNextRequirementSessions(bookings.map((b) => b.id));
 
   return (
     <AccountPortalShell
@@ -100,8 +103,11 @@ export default async function AccountBookingsPage() {
               differenceInHours(booking.startDate, new Date()) >=
                 cancellationSettings.noticeHours;
             const requirement = requirementStatuses.get(booking.id);
+            const nextSession = nextSessions.get(booking.id);
+            const requirementDue = nextSession ? requirementDeadline(nextSession) : null;
             const needsInfo =
               booking.status !== "cancelled" &&
+              Boolean(nextSession) &&
               Boolean(requirement?.hasRequirements) &&
               !requirement?.complete;
             return (
@@ -154,11 +160,14 @@ export default async function AccountBookingsPage() {
                   </div>
                   <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                     {requirement?.hasRequirements && booking.status !== "cancelled" && (
+                      <>
                       <Button asChild variant={needsInfo ? "default" : "outline"}>
                         <Link href={`/account/bookings/${booking.id}/requirements`}>
                           {needsInfo ? "Complete required information" : "View requirements"}
                         </Link>
                       </Button>
+                      {needsInfo && requirementDue && <p className="w-full text-sm font-medium">{requirementDue.overdue ? "Required information is due now, before your next session." : `Information due ${formatBookingDate(requirementDue.deadline, "d MMM yyyy, HH:mm")}.`}</p>}
+                      </>
                     )}
                     {bookingBalance(booking) > 0 && booking.status === "confirmed" && (
                       <form action={payCustomerBookingBalance}>

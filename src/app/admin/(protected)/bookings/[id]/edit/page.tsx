@@ -117,7 +117,7 @@ export default async function AdminEditBookingPage({
             <CardTitle className="flex items-center gap-3">
               Required information
               <Badge variant={requirements.complete ? "default" : "destructive"}>
-                {requirements.complete ? "Complete" : "Outstanding"}
+                {requirements.complete ? booking.status === "confirmed" ? "Information complete — ready for hire" : "Information complete" : "Information outstanding"}
               </Badge>
             </CardTitle>
           </CardHeader>

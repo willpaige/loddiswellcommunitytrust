@@ -22,7 +22,7 @@ export async function sendContactEmail(formData: FormData) {
 
   try {
     await getPostmark().sendEmail({
-      From: process.env.EMAIL_FROM || "noreply@loddiswellcommunitytrust.org",
+      From: process.env.EMAIL_FROM || "hello@loddiswellcommunitytrust.org",
       To: process.env.CONTACT_EMAIL || "hello@loddiswellcommunitytrust.org",
       ReplyTo: email,
       Subject: `[Website] ${subject}: Message from ${name}`,
