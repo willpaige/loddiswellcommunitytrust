@@ -162,7 +162,7 @@ export async function Footer() {
               rel="noopener"
               className="text-xs text-sage-400/60 hover:text-sage-400 no-underline transition-colors"
             >
-              Built by Evolve
+              Built by Evolve AI
             </a>
           </div>
         </div>
