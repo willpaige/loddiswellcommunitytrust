@@ -157,7 +157,7 @@ export async function Footer() {
               Privacy Policy
             </Link>
             <a
-              href="https://evolve-ai.co"
+              href="https://evolve-ai.co/locations/devon"
               target="_blank"
               rel="noopener"
               className="text-xs text-sage-400/60 hover:text-sage-400 no-underline transition-colors"

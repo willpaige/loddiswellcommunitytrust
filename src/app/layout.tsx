@@ -67,6 +67,14 @@ const jsonLd = {
   },
 };
 
+const websiteJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: "Loddiswell Playing Fields & Village Hall Trust",
+  url: "https://loddiswellcommunitytrust.org",
+  creator: { "@type": "Organization", name: "Evolve AI", url: "https://evolve-ai.co" },
+};
+
 export default function RootLayout({
   children,
 }: {
@@ -78,6 +86,10 @@ export default function RootLayout({
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
         />
       </head>
       <body className="flex min-h-screen flex-col">
