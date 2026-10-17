@@ -33,3 +33,11 @@ export function bookingHourOfDay(date: Date) {
 export function bookingMinuteOfDay(date: Date) {
   return date.getUTCHours() * 60 + date.getUTCMinutes();
 }
+
+// Staff can book on the current UK calendar day. Public bookings start tomorrow.
+// Return a UTC midnight to match the stored booking wall-clock timestamps.
+export function earliestBookingDate(role?: string, now = new Date()) {
+  const uk = new TZDate(now, "Europe/London");
+  const offset = role === "admin" || role === "editor" ? 0 : 1;
+  return new Date(Date.UTC(uk.getFullYear(), uk.getMonth(), uk.getDate() + offset));
+}

@@ -42,6 +42,7 @@ import { requirementDeadline } from "@/lib/requirement-policy";
 import { upsertCustomerRecord } from "@/actions/customer-records";
 import { validateBookingDiscountCode } from "@/actions/booking-discount-codes";
 import {
+  earliestBookingDate,
   bookingMinuteOfDay,
   formatBookingDate,
   parseBookingDateTime,
@@ -317,6 +318,12 @@ async function requireAdmin() {
     throw new Error("Unauthorized");
   }
   return session;
+}
+
+async function earliestBookingStart() {
+  const session = await auth();
+  const role = (session?.user as { role?: string } | undefined)?.role;
+  return earliestBookingDate(role);
 }
 
 function moneyText(amount: number) {
@@ -1786,9 +1793,8 @@ export async function getAvailableBookingSlots(offeringId: string, excludeBookin
     times: string[];
     endTimesByStart: Record<string, string[]>;
   }> = [];
-  const tomorrow = addDays(new Date(), 1);
-  tomorrow.setHours(0, 0, 0, 0);
-  const rangeEnd = addDays(tomorrow, 180);
+  const rangeStart = await earliestBookingStart();
+  const rangeEnd = addDays(rangeStart, 180);
 
   const [blocks, occurrences] = await Promise.all([
     db
@@ -1801,7 +1807,7 @@ export async function getAvailableBookingSlots(offeringId: string, excludeBookin
         and(
           eq(bookingBlocks.facilityId, offering.facilityId),
           lt(bookingBlocks.startDate, rangeEnd),
-          gt(bookingBlocks.endDate, tomorrow)
+          gt(bookingBlocks.endDate, rangeStart)
         )
       ),
     db
@@ -1816,7 +1822,7 @@ export async function getAvailableBookingSlots(offeringId: string, excludeBookin
           ne(bookingOccurrences.status, "cancelled"),
           ...(excludeBookingId ? [ne(bookingOccurrences.bookingId, excludeBookingId)] : []),
           lt(bookingOccurrences.startDate, rangeEnd),
-          gt(bookingOccurrences.endDate, tomorrow)
+          gt(bookingOccurrences.endDate, rangeStart)
         )
       ),
   ]);
@@ -1834,7 +1840,7 @@ export async function getAvailableBookingSlots(offeringId: string, excludeBookin
   }
 
   for (let index = 0; index < 180; index += 1) {
-    const day = addDays(tomorrow, index);
+    const day = addDays(rangeStart, index);
     if (!offering.allowedDays.includes(day.getDay())) continue;
 
     const startTimes = offering.startTime
@@ -2018,13 +2024,10 @@ async function readBookingForm(formData: FormData) {
     );
   }
 
-  // Mirror getAvailableBookingSlots, which only offers slots from the start of
-  // the next day onward. Comparing against an exact now+24h would reject
-  // tomorrow-morning slots that the form legitimately offers.
-  const earliestStart = addDays(new Date(), 1);
-  earliestStart.setHours(0, 0, 0, 0);
+  // Use the same role-based calendar boundary as the availability picker.
+  const earliestStart = await earliestBookingStart();
   if (start < earliestStart) {
-    throw new Error("Bookings must be made at least a day in advance.");
+    throw new Error("This date is too early. Public bookings must be made at least a day in advance.");
   }
 
   return {
@@ -2097,7 +2100,7 @@ function bookingAmount(
 
 type CustomSessionInput = { date: string; startTime: string; endTime: string };
 
-function parseCustomSessions(
+async function parseCustomSessions(
   raw: FormDataEntryValue | null,
   offering: typeof bookingOfferings.$inferSelect,
   facility: { bookableStartTime: string; bookableEndTime: string },
@@ -2112,8 +2115,7 @@ function parseCustomSessions(
   if (!Array.isArray(input) || input.length < minimum || input.length > 52) {
     throw new Error(`Choose between ${minimum} and 52 custom sessions.`);
   }
-  const earliest = addDays(new Date(), 1);
-  earliest.setHours(0, 0, 0, 0);
+  const earliest = await earliestBookingStart();
   const seen = new Set<string>();
   const sessions = input
     .map((item) => {
@@ -3541,7 +3543,7 @@ export async function createManualBooking(formData: FormData) {
     .limit(1);
   if (!facilityHours) throw new Error("Invalid venue.");
   const customSessions = scheduleType === "custom"
-    ? parseCustomSessions(formData.get("customSessions"), offering, facilityHours)
+    ? await parseCustomSessions(formData.get("customSessions"), offering, facilityHours)
     : null;
 
   const manualPaymentMode = String(formData.get("manualPaymentMode") || "confirmed");
@@ -4735,7 +4737,7 @@ export async function saveCustomBookingOccurrence(formData: FormData) {
   if (!booking || booking.scheduleType !== "custom" || booking.status === "cancelled") {
     throw new Error("Custom booking not found.");
   }
-  const [next] = parseCustomSessions(
+  const [next] = await parseCustomSessions(
     JSON.stringify([{ date: formData.get("date"), startTime: formData.get("time"), endTime: formData.get("endTime") }]),
     booking.offering,
     {
