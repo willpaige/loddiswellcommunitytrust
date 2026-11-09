@@ -12,6 +12,7 @@ import {
   FolderOpen,
   ImageIcon,
   Ticket,
+  Gift,
   Users,
   Settings,
   Mail,
@@ -60,6 +61,7 @@ const navItems = [
   { name: "Documents", href: "/admin/documents", icon: FolderOpen },
   { name: "Images", href: "/admin/images", icon: ImageIcon },
   { name: "Lottery", href: "/admin/lottery", icon: Ticket },
+  { name: "Raffles", href: "/admin/raffles", icon: Gift },
   {
     name: "Emails",
     href: "/admin/emails",
@@ -67,6 +69,7 @@ const navItems = [
     children: [
       { name: "Bookings", href: "/admin/emails?category=bookings" },
       { name: "Lottery", href: "/admin/emails?category=lottery" },
+      { name: "Raffles", href: "/admin/emails?category=raffles" },
       { name: "System", href: "/admin/emails?category=system" },
     ],
   },

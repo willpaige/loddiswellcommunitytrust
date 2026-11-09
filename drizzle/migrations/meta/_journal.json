@@ -204,6 +204,13 @@
       "when": 1791828000000,
       "tag": "0028_booking_requirement_approval",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1794261022120,
+      "tag": "0029_raffles",
+      "breakpoints": true
     }
   ]
 }

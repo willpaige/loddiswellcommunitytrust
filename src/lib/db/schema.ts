@@ -206,7 +206,7 @@ export const auditLog = pgTable("audit_log", {
     enum: ["create", "update", "delete", "publish", "unpublish", "upload", "login"],
   }).notNull(),
   entity: text("entity", {
-    enum: ["event", "page", "facility", "document", "image", "lottery", "user", "booking", "requirement_set", "newsletter"],
+    enum: ["event", "page", "facility", "document", "image", "lottery", "user", "booking", "requirement_set", "newsletter", "raffle"],
   }).notNull(),
   entityId: text("entity_id"),
   description: text("description"),
@@ -731,7 +731,7 @@ export const emailTemplates = pgTable("email_templates", {
     .primaryKey()
     .$defaultFn(() => createId()),
   key: text("key").notNull().unique(),
-  category: text("category", { enum: ["bookings", "lottery", "system"] }).notNull(),
+  category: text("category", { enum: ["bookings", "lottery", "raffles", "system"] }).notNull(),
   name: text("name").notNull(),
   description: text("description"),
   subject: text("subject").notNull(),
@@ -796,4 +796,206 @@ export const lotteryPayments = pgTable(
     index("lottery_payments_ticket_idx").on(table.ticketId),
     index("lottery_payments_paid_at_idx").on(table.paidAt),
   ]
+);
+
+// ── Raffles ──
+//
+// One-off fundraising competitions, each with its own page, prizes, price,
+// optional ticket cap and draw. Everything that changes between raffles is a
+// row here, so a new raffle is admin data, not code.
+//
+// Times are real UTC instants (shown in Europe/London), unlike bookings, which
+// keep UK wall-clock values in UTC fields: the public countdown needs the
+// true instant.
+
+export type RafflePrize = {
+  rank: number;
+  title: string;
+  description?: string;
+  /** What the prize is worth, for the council return. */
+  valuePence: number;
+  /** What the Trust paid for it; 0 when donated. */
+  costPence: number;
+  donatedBy?: string;
+  imageUrl?: string;
+};
+
+export const raffles = pgTable(
+  "raffles",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    slug: text("slug").notNull(),
+    title: text("title").notNull(),
+    tagline: text("tagline"),
+    description: text("description").notNull().default("{}"),
+    heroImageUrl: text("hero_image_url"),
+    galleryImages: jsonb("gallery_images").$type<string[]>().notNull().default([]),
+    prizes: jsonb("prizes").$type<RafflePrize[]>().notNull().default([]),
+    // Lottery rules: every ticket costs the same, so there are no bundles.
+    ticketPricePence: integer("ticket_price_pence").notNull(),
+    maxTickets: integer("max_tickets"),
+    maxPerOrder: integer("max_per_order").notNull().default(50),
+    quickPicks: jsonb("quick_picks").$type<number[]>().notNull().default([1, 5, 10, 20]),
+    minAge: integer("min_age").notNull().default(16),
+    salesOpenAt: timestamp("sales_open_at", { mode: "date" }).notNull(),
+    salesCloseAt: timestamp("sales_close_at", { mode: "date" }).notNull(),
+    drawAt: timestamp("draw_at", { mode: "date" }).notNull(),
+    liveStreamUrl: text("live_stream_url"),
+    causeTitle: text("cause_title"),
+    causeGoalPence: integer("cause_goal_pence"),
+    claimInstructions: text("claim_instructions"),
+    claimDays: integer("claim_days").notNull().default(14),
+    smallPrint: text("small_print"),
+    published: boolean("published").notNull().default(false),
+    featured: boolean("featured").notNull().default(false),
+    cancelledAt: timestamp("cancelled_at"),
+    // Tickets held by pending checkouts plus tickets sold. The cap is enforced
+    // by a single conditional UPDATE on this counter (neon-http has no
+    // transactions), so concurrent buyers can never oversell.
+    ticketsReserved: integer("tickets_reserved").notNull().default(0),
+    // Last ticket number handed out. Numbers are taken from this counter by an
+    // atomic UPDATE, so they are unique within the raffle.
+    ticketsIssued: integer("tickets_issued").notNull().default(0),
+    openNotifiedAt: timestamp("open_notified_at"),
+    reminderSentAt: timestamp("reminder_sent_at"),
+    otherExpensesPence: integer("other_expenses_pence").notNull().default(0),
+    returnSubmittedAt: timestamp("return_submitted_at"),
+    createdBy: text("created_by").references(() => users.id),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex("raffles_slug_idx").on(table.slug)]
+);
+
+// One row per purchase, card or cash. Also the raffle's income-ledger row:
+// `paidAt` is when the money was taken (Stripe's payment time, or the date a
+// cash sale was taken), never when the row was written.
+export const raffleOrders = pgTable(
+  "raffle_orders",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    raffleId: text("raffle_id")
+      .notNull()
+      .references(() => raffles.id, { onDelete: "cascade" }),
+    source: text("source", { enum: ["stripe", "manual"] }).notNull(),
+    status: text("status", {
+      enum: ["pending", "paid", "expired", "refunded", "void"],
+    })
+      .notNull()
+      .default("pending"),
+    name: text("name").notNull(),
+    email: text("email"),
+    phone: text("phone"),
+    quantity: integer("quantity").notNull(),
+    amount: integer("amount").notNull(),
+    refundedAmount: integer("refunded_amount").notNull().default(0),
+    paymentMethod: text("payment_method", {
+      enum: ["card", "cash", "cheque", "transfer"],
+    }).notNull(),
+    stripeCheckoutSessionId: text("stripe_checkout_session_id"),
+    stripePaymentIntentId: text("stripe_payment_intent_id"),
+    stripeFeePence: integer("stripe_fee_pence").notNull().default(0),
+    soldBy: text("sold_by"),
+    ageConfirmed: boolean("age_confirmed").notNull().default(false),
+    marketingOptOut: boolean("marketing_opt_out").notNull().default(false),
+    expiresAt: timestamp("expires_at", { mode: "date" }),
+    paidAt: timestamp("paid_at", { mode: "date" }),
+    createdBy: text("created_by").references(() => users.id),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("raffle_orders_session_idx").on(table.stripeCheckoutSessionId),
+    index("raffle_orders_raffle_idx").on(table.raffleId, table.status),
+    index("raffle_orders_payment_intent_idx").on(table.stripePaymentIntentId),
+    index("raffle_orders_paid_at_idx").on(table.paidAt),
+  ]
+);
+
+export const raffleTickets = pgTable(
+  "raffle_tickets",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    raffleId: text("raffle_id")
+      .notNull()
+      .references(() => raffles.id, { onDelete: "cascade" }),
+    orderId: text("order_id")
+      .notNull()
+      .references(() => raffleOrders.id, { onDelete: "cascade" }),
+    // 1..quantity within the order. Unique with orderId, so allocating the
+    // same order twice (a redelivered webhook) cannot create extra tickets.
+    seq: integer("seq").notNull(),
+    ticketNumber: integer("ticket_number").notNull(),
+    // Refunded or voided tickets keep their number so it is never reissued.
+    void: boolean("void").notNull().default(false),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("raffle_tickets_number_idx").on(table.raffleId, table.ticketNumber),
+    uniqueIndex("raffle_tickets_order_seq_idx").on(table.orderId, table.seq),
+  ]
+);
+
+export type RaffleDrawHistory = {
+  ticketNumber: number;
+  reason: string;
+  by: string;
+  at: string;
+};
+
+export type RaffleDrawResult = {
+  rank: number;
+  prizeTitle: string;
+  ticketNumber: number;
+  orderId: string;
+  collectedAt?: string | null;
+  /** Earlier winners of this prize, replaced by a redraw. */
+  history: RaffleDrawHistory[];
+};
+
+export const raffleDraws = pgTable(
+  "raffle_draws",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    raffleId: text("raffle_id")
+      .notNull()
+      .references(() => raffles.id, { onDelete: "cascade" }),
+    method: text("method", { enum: ["system", "physical"] }).notNull(),
+    onePerPerson: boolean("one_per_person").notNull().default(true),
+    // The pool as it was when the draw ran: every eligible ticket number,
+    // with a checksum. Redraws pick from this, never from live data.
+    poolSize: integer("pool_size").notNull(),
+    poolChecksum: text("pool_checksum").notNull(),
+    poolSnapshot: jsonb("pool_snapshot").$type<number[]>().notNull(),
+    results: jsonb("results").$type<RaffleDrawResult[]>().notNull(),
+    drawnAt: timestamp("drawn_at").notNull(),
+    drawnBy: text("drawn_by").references(() => users.id),
+    publishedAt: timestamp("published_at"),
+    notifiedAt: timestamp("notified_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex("raffle_draws_raffle_idx").on(table.raffleId)]
+);
+
+// "Remind me" sign-ups. raffleId null means "tell me about the next raffle".
+export const raffleInterest = pgTable(
+  "raffle_interest",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    raffleId: text("raffle_id").references(() => raffles.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    notifiedAt: timestamp("notified_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex("raffle_interest_email_idx").on(table.raffleId, table.email)]
 );
