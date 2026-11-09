@@ -24,6 +24,10 @@ Completed answers apply to every unchanged session in a series. Changing a quest
 
 The page also reports upcoming ready/outstanding counts, recorded completions before the first session and manual interventions in the last 30 days. Historical forms without recorded completion timestamps are excluded from completion-timing figures. This dashboard does not claim that delivered email was read.
 
+Managers can use **Information checked offline** on a confirmed booking's edit page after checking its information and documents outside the website. A reason is required. The sign-off records the manager, timestamp and reason atomically with an audit entry, retains the customer's actual answers, and stops requirement reminders across the series. The customer sees that nothing further is required. Managers can reopen the information with a reason. Changes to relevant booking details or questions invalidate the old approval and require a fresh review.
+
+Deploy migration `0028_booking_requirement_approval` before deploying code that reads the new approval fields. Operational sign-offs can be previewed with `scripts/approve-booking-information.ts`; `--apply` is only for a sign-off already authorized by the booking manager.
+
 ## Validation
 
 - `npm test`: isolated PostgreSQL-compatible database tests run the actual new migration, actions, reminder logic and email rendering; authentication, Blob and Postmark are controlled substitutes.

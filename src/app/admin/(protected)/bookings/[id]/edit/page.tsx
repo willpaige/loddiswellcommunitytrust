@@ -18,6 +18,7 @@ import { BookingOccurrenceActions } from "@/components/admin/booking-occurrence-
 import { formatBookingDate } from "@/lib/booking-time";
 import { money } from "@/lib/bookings";
 import { CustomBookingScheduleEditor } from "@/components/admin/custom-booking-schedule-editor";
+import { RequirementApprovalForm } from "@/components/admin/requirement-approval-form";
 
 export const dynamic = "force-dynamic";
 
@@ -122,6 +123,12 @@ export default async function AdminEditBookingPage({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {requirements.approval.at && <div className="rounded-md bg-muted p-3 text-sm">
+              <p className="font-medium">{requirements.approvedOffline ? "Information approved offline" : "Previous offline approval — review needed"}</p>
+              <p>{requirements.approval.by} · {requirements.approval.at.toLocaleString("en-GB", { timeZone: "Europe/London" })}</p>
+              <p className="mt-1 whitespace-pre-wrap">{requirements.approval.note}</p>
+            </div>}
+            {booking.status === "confirmed" && <RequirementApprovalForm bookingId={booking.id} approved={Boolean(requirements.approvedOffline)} />}
             {requirements.questions.map((question) => (
               <div key={question.questionId} className="border-b pb-3 last:border-b-0 last:pb-0">
                 <p className="text-sm font-medium">{question.label}</p>

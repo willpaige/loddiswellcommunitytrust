@@ -34,3 +34,12 @@ export function requirementAnswerCurrent(
 ) {
   return Boolean(response && (!question.updatedAt || !response.updatedAt || response.updatedAt >= question.updatedAt));
 }
+
+export function requirementApprovalCurrent(
+  approvedAt: Date | null | undefined,
+  reviewAfter: Date | null | undefined,
+  questions: { updatedAt: Date }[],
+) {
+  return Boolean(approvedAt && (!reviewAfter || approvedAt >= reviewAfter)
+    && questions.every(question => approvedAt >= question.updatedAt));
+}

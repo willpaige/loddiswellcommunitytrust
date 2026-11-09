@@ -18,6 +18,7 @@ import {
 } from "@/lib/db/schema";
 import { assertRequirementsEditable, getNextRequirementSessions } from "@/lib/requirement-schedule";
 import { REQUIREMENT_UPLOAD_LIMIT, REQUIREMENT_UPLOAD_TYPES, requirementNow } from "@/lib/requirement-policy";
+import { recordRequirementApproval } from "@/lib/booking-requirement-approval";
 import {
   getBookingRequirementDetail,
 } from "@/lib/booking-requirements";
@@ -362,10 +363,31 @@ export async function assignRequirementSetToOffering(formData: FormData) {
 export async function getAdminBookingRequirements(bookingId: string) {
   await requireAdmin();
   const [booking] = await db
-    .select({ requirementSetId: bookings.requirementSetId })
+    .select({ requirementSetId: bookings.requirementSetId, approvedAt: bookings.requirementApprovedAt, approvedBy: bookings.requirementApprovedBy, approvalNote: bookings.requirementApprovalNote })
     .from(bookings)
     .where(eq(bookings.id, bookingId))
     .limit(1);
   if (!booking) return null;
-  return getBookingRequirementDetail(bookingId, booking.requirementSetId);
+  return { ...await getBookingRequirementDetail(bookingId, booking.requirementSetId), approval: {
+    at: booking.approvedAt, by: booking.approvedBy, note: booking.approvalNote,
+  } };
+}
+
+export async function setBookingRequirementApproval(_previous: { message: string; error: boolean }, form: FormData) {
+  const session = await requireAdmin();
+  try {
+    const bookingId = String(form.get("bookingId") || "");
+    const intent = String(form.get("intent") || "");
+    if (!["approve", "revoke"].includes(intent)) throw new Error("Choose whether to approve or reopen the information.");
+    await recordRequirementApproval({ bookingId, approve: intent === "approve", note: String(form.get("note") || ""),
+      actor: { userId: session.user!.id ?? null, email: session.user!.email ?? null, label: session.user!.email || session.user!.id! } });
+    revalidatePath("/admin/bookings");
+    revalidatePath("/admin/bookings/requirements/outstanding");
+    revalidatePath(`/admin/bookings/${bookingId}/edit`);
+    revalidatePath("/account/bookings");
+    revalidatePath(`/account/bookings/${bookingId}/requirements`);
+    return { message: intent === "approve" ? "Information signed off. Reminders have stopped for this booking." : "Offline sign-off removed. The saved answers now determine what is outstanding.", error: false };
+  } catch (error) {
+    return { message: error instanceof Error ? error.message : "Unable to save the sign-off.", error: true };
+  }
 }

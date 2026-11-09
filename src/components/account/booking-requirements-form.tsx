@@ -86,6 +86,11 @@ export function BookingRequirementsForm({ bookingId, detail, locked, confirmed =
     } catch { setError("The document could not be removed. Please try again."); }
   }
 
+  if (saved.approvedOffline) return <div role="status" className="rounded-md border border-green-600/30 bg-green-50 p-4 text-green-800">
+    <p className="font-medium">Your required information has been checked by the booking team.</p>
+    <p className="mt-1 text-sm">There is nothing further to submit for this booking. Please contact us if your plans change.</p>
+  </div>;
+
   return <div className="space-y-6">
     <div role="status" aria-live="polite" className={`rounded-md border p-4 ${complete ? "border-green-600/30 bg-green-50 text-green-800" : "bg-muted/40"}`}>
       {complete ? <><p className="flex items-center gap-2 font-medium"><CheckCircle2 className="h-5 w-5" />{confirmed ? "Required information complete — ready for hire" : "Required information complete"}</p><p className="mt-1 text-sm">Your answers and required documents have been saved. Thank you. They apply to all sessions in this booking.</p></>

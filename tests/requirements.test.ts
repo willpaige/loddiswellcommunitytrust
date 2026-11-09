@@ -16,7 +16,7 @@ vi.mock("@vercel/blob", () => ({ head: state.head, del: state.removeBlob }));
 vi.mock("postmark", () => ({ ServerClient: class { sendEmail = state.send; getOutboundMessageDetails = state.delivery; } }));
 
 import { getBookingRequirementDetail, getBookingRequirementStatuses } from "@/lib/booking-requirements";
-import { saveRequirementAnswers, uploadRequirementDocument, deleteRequirementDocument, getCustomerBookingRequirements, authorizeRequirementUpload } from "@/actions/booking-requirements";
+import { saveRequirementAnswers, uploadRequirementDocument, deleteRequirementDocument, getCustomerBookingRequirements, authorizeRequirementUpload, setBookingRequirementApproval } from "@/actions/booking-requirements";
 import { getNextRequirementSessions } from "@/lib/requirement-schedule";
 import { requirementStage, requirementNow, requirementRetryAt } from "@/lib/requirement-policy";
 import { sendDueRequirementReminders, sendRequirementRequest } from "@/lib/requirement-reminders";
@@ -34,6 +34,62 @@ beforeAll(async () => {
   await pg.exec(exported.slice(exported.indexOf("CREATE TABLE")));
   await pg.exec('DROP TABLE booking_requirement_messages; ALTER TABLE bookings DROP COLUMN requirement_completed_at, DROP COLUMN requirement_review_after; DROP INDEX booking_requirement_documents_url_idx;');
   await pg.exec(readFileSync("drizzle/migrations/0027_booking_requirement_flow.sql", "utf8"));
+  await pg.exec('ALTER TABLE bookings DROP COLUMN requirement_approved_at, DROP COLUMN requirement_approved_by, DROP COLUMN requirement_approval_note;');
+  await pg.exec(readFileSync("drizzle/migrations/0028_booking_requirement_approval.sql", "utf8"));
+});
+
+describe("offline information sign-off", () => {
+  function approval(intent = "approve") {
+    const form = new FormData();
+    form.set("bookingId", "booking"); form.set("intent", intent);
+    form.set("note", "Booking manager has checked the information offline.");
+    return form;
+  }
+  it("requires a manager and reason, and rejects cancelled bookings", async () => {
+    await booking();
+    await expect(setBookingRequirementApproval({ message: "", error: false }, approval())).rejects.toThrow("Unauthorized");
+    state.session = null;
+    await expect(setBookingRequirementApproval({ message: "", error: false }, approval())).rejects.toThrow("Unauthorized");
+    state.session = { user: { id: "guest", email: "guest@example.test", role: "editor" } };
+    const missing = approval(); missing.delete("note");
+    expect((await setBookingRequirementApproval({ message: "", error: false }, missing)).error).toBe(true);
+    await state.db.update(schema.bookings).set({ status: "cancelled" });
+    expect((await setBookingRequirementApproval({ message: "", error: false }, approval())).error).toBe(true);
+    expect(await state.db.select().from(schema.auditLog)).toHaveLength(0);
+  });
+  it("stops reminders and clears the queue without inventing answers, and can be reopened", async () => {
+    await booking(); state.session!.user.role = "admin";
+    expect((await setBookingRequirementApproval({ message: "", error: false }, approval())).error).toBe(false);
+    expect(await state.db.select().from(schema.bookingRequirementResponses)).toHaveLength(0);
+    expect(await getBookingRequirementDetail("booking", "set")).toMatchObject({ complete: true, approvedOffline: true, questionnaireComplete: false });
+    expect((await getBookingRequirementStatuses(["booking"])).get("booking")?.complete).toBe(true);
+    expect((await getRequirementQueue()).rows).toHaveLength(0);
+    expect((await getRequirementQueue()).ready).toBe(1);
+    expect((await sendRequirementRequest("booking")).sent).toBe(0);
+    expect(state.send).not.toHaveBeenCalled();
+    const [audit] = await state.db.select().from(schema.auditLog);
+    expect(audit).toMatchObject({ userId: "guest", entityId: "booking", metadata: { purpose: "requirements_approved_offline" } });
+    expect((await setBookingRequirementApproval({ message: "", error: false }, approval("revoke"))).error).toBe(false);
+    expect((await getBookingRequirementDetail("booking", "set")).complete).toBe(false);
+    expect((await getBookingRequirementStatuses(["booking"])).get("booking")?.complete).toBe(false);
+    expect((await getRequirementQueue()).rows).toHaveLength(1);
+    expect(await state.db.select().from(schema.auditLog)).toHaveLength(2);
+  });
+  it.each(["question", "booking"])("invalidates approval after a %s change", async (change) => {
+    await booking(); state.session!.user.role = "admin";
+    await setBookingRequirementApproval({ message: "", error: false }, approval());
+    vi.setSystemTime(new Date(now.getTime() + 60_000));
+    if (change === "question") await state.db.update(schema.requirementQuestions).set({ updatedAt: new Date() }).where(eq(schema.requirementQuestions.id, "purpose"));
+    else await state.db.update(schema.bookings).set({ requirementReviewAfter: new Date() });
+    expect((await getBookingRequirementDetail("booking", "set")).complete).toBe(false);
+    expect((await getBookingRequirementStatuses(["booking"])).get("booking")?.complete).toBe(false);
+    expect((await sendRequirementRequest("booking")).sent).toBe(1);
+  });
+  it("rolls back the sign-off if its audit entry cannot be recorded", async () => {
+    await booking(); state.session = { user: { id: "missing-user", email: "admin@example.test", role: "admin" } };
+    expect((await setBookingRequirementApproval({ message: "", error: false }, approval())).error).toBe(true);
+    expect((await state.db.select().from(schema.bookings))[0].requirementApprovedAt).toBeNull();
+  });
 });
 afterAll(async () => { vi.useRealTimers(); await pg?.close(); });
 beforeEach(async () => {

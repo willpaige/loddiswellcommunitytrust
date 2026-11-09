@@ -1,6 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { requirementAnswerCurrent } from "@/lib/requirement-policy";
+import { requirementAnswerCurrent, requirementApprovalCurrent } from "@/lib/requirement-policy";
 import {
   bookingRequirementDocuments,
   bookingRequirementResponses,
@@ -34,6 +34,7 @@ export type BookingRequirementDetail = {
   questionnaireComplete: boolean;
   documentsComplete: boolean;
   complete: boolean;
+  approvedOffline?: boolean;
   questions: RequirementQuestionState[];
 };
 
@@ -86,7 +87,7 @@ export async function getBookingRequirementDetail(
       .select()
       .from(bookingRequirementDocuments)
       .where(eq(bookingRequirementDocuments.bookingId, bookingId)),
-    db.select({ reviewAfter: bookings.requirementReviewAfter }).from(bookings).where(eq(bookings.id, bookingId)).limit(1),
+    db.select({ reviewAfter: bookings.requirementReviewAfter, approvedAt: bookings.requirementApprovedAt }).from(bookings).where(eq(bookings.id, bookingId)).limit(1),
   ]);
 
   if (questions.length === 0) return EMPTY;
@@ -124,12 +125,14 @@ export async function getBookingRequirementDetail(
 
   const questionnaireComplete = states.every((s) => s.answered);
   const documentsComplete = states.every((s) => !s.needsDocument || s.documents.length > 0);
+  const approvedOffline = requirementApprovalCurrent(bookingRows[0]?.approvedAt, bookingRows[0]?.reviewAfter, questions);
 
   return {
     hasRequirements: true,
     questionnaireComplete,
     documentsComplete,
-    complete: questionnaireComplete && documentsComplete,
+    complete: approvedOffline || (questionnaireComplete && documentsComplete),
+    approvedOffline,
     questions: states,
   };
 }
@@ -143,7 +146,7 @@ export async function getBookingRequirementStatuses(
   if (bookingIds.length === 0) return result;
 
   const bookingRows = await db
-    .select({ id: bookings.id, requirementSetId: bookings.requirementSetId, reviewAfter: bookings.requirementReviewAfter })
+    .select({ id: bookings.id, requirementSetId: bookings.requirementSetId, reviewAfter: bookings.requirementReviewAfter, approvedAt: bookings.requirementApprovedAt })
     .from(bookings)
     .where(inArray(bookings.id, bookingIds));
 
@@ -210,7 +213,7 @@ export async function getBookingRequirementStatuses(
         break;
       }
     }
-    result.set(booking.id, { hasRequirements: true, complete });
+    result.set(booking.id, { hasRequirements: true, complete: complete || requirementApprovalCurrent(booking.approvedAt, booking.reviewAfter, setQuestions) });
   }
 
   return result;

@@ -1,5 +1,13 @@
 import { test, expect } from '@playwright/test';
 
+test('offline approval tells the customer nothing further is required', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('requirements', JSON.stringify({ hasRequirements: true,
+    questionnaireComplete: false, documentsComplete: true, complete: true, approvedOffline: true, questions: [] })));
+  await page.goto('/');
+  await expect(page.getByText('Your required information has been checked by the booking team.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Save answers', exact: true })).toHaveCount(0);
+});
+
 test('autosave, conditional 9 MB upload, completion receipt and reload', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('radio', { name: 'Yes', exact: true }).check();
