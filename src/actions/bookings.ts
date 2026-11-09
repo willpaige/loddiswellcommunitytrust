@@ -38,6 +38,7 @@ import { sendTemplateEmail } from "@/lib/email/send";
 import { sendRequirementRequest } from "@/lib/requirement-reminders";
 import { getBookingRequirementDetail } from "@/lib/booking-requirements";
 import { getNextRequirementSessions } from "@/lib/requirement-schedule";
+import { findInvoiceCoveringSessions } from "@/lib/booking-invoice-coverage";
 import { requirementDeadline } from "@/lib/requirement-policy";
 import { upsertCustomerRecord } from "@/actions/customer-records";
 import { validateBookingDiscountCode } from "@/actions/booking-discount-codes";
@@ -889,7 +890,7 @@ async function issueMonthlyBookingInvoice(
       )
     )
     .limit(1);
-  if (live && live.status !== "draft") return live;
+  if (live && live.status !== "draft") return { ...live, newlyIssued: false };
 
   const sessions = await db
     .select({ id: bookingOccurrences.id, startDate: bookingOccurrences.startDate, endDate: bookingOccurrences.endDate })
@@ -904,6 +905,9 @@ async function issueMonthlyBookingInvoice(
     )
     .orderBy(asc(bookingOccurrences.startDate));
   if (sessions.length === 0) return null;
+
+  const covered = await findInvoiceCoveringSessions(bookingId, period, sessions, live?.id);
+  if (covered) return { ...covered, newlyIssued: false };
 
   const variableDuration = !booking.offeringEndTime;
   const hours = variableDuration ? differenceInHours(booking.endDate, booking.startDate) : 1;
@@ -1002,7 +1006,7 @@ async function issueMonthlyBookingInvoice(
     entityId: bookingId,
     description: `Issued monthly invoice for ${label} (${moneyText(amount)}, ${sessions.length} sessions)`,
   });
-  return row;
+  return { ...row, newlyIssued: true };
 }
 
 // The first invoice covers the booking's first session through the end of that
@@ -1307,7 +1311,7 @@ export async function runMonthlyInvoiceCycle() {
       const dueDate = period.start > today ? period.start : addUtcDays(today, 1);
       try {
         const row = await issueMonthlyBookingInvoice(booking.id, period, dueDate);
-        if (row) result.issued += 1;
+        if (row?.newlyIssued) result.issued += 1;
       } catch (error) {
         result.errors.push(`issue ${booking.id} ${periodLabel(period)}: ${error instanceof Error ? error.message : String(error)}`);
       }
