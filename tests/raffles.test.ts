@@ -7,7 +7,7 @@ import * as schema from "@/lib/db/schema";
 
 const state = vi.hoisted(() => ({ db: null as unknown as ReturnType<typeof drizzle<typeof schema>>,
   session: { user: { id: "admin", email: "admin@example.test", role: "admin" } } as null | { user: { id: string; email: string; role: string } },
-  send: vi.fn(), createSession: vi.fn(), retrieveIntent: vi.fn() }));
+  send: vi.fn(), createSession: vi.fn(), retrieveIntent: vi.fn(), createRefund: vi.fn() }));
 vi.mock("@/lib/db", () => ({ get db() { return state.db; } }));
 vi.mock("@/lib/auth", () => ({ auth: async () => state.session }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -16,6 +16,7 @@ vi.mock("postmark", () => ({ ServerClient: class { sendEmail = state.send; } }))
 vi.mock("@/lib/stripe", () => ({ getStripe: () => ({
   checkout: { sessions: { create: state.createSession } },
   paymentIntents: { retrieve: state.retrieveIntent },
+  refunds: { create: state.createRefund },
 }) }));
 
 import { deriveRaffleState, ticketsRemaining } from "@/lib/raffles/state";
@@ -27,6 +28,7 @@ import { createRaffle, updateRaffle, duplicateRaffle } from "@/actions/raffles";
 import { applyRaffleRefund, completeRaffleOrder, expireRaffleOrder, releaseStaleRaffleOrders, startRaffleCheckout } from "@/lib/raffles/orders";
 import { getIncomeTotals } from "@/lib/reports/queries";
 import type Stripe from "stripe";
+import { recordCashSale, refundRaffleOrder, resendRaffleTickets, updateCashSale, voidCashSale } from "@/actions/raffle-orders";
 
 let pg: PGlite;
 beforeAll(async () => {
@@ -42,6 +44,7 @@ beforeEach(async () => {
   state.session = { user: { id: "admin", email: "admin@example.test", role: "admin" } };
   state.send.mockReset().mockResolvedValue({ MessageID: "msg" });
   state.createSession.mockReset().mockImplementation(async () => ({ id: `cs_${Math.random().toString(36).slice(2)}`, url: "https://checkout.stripe.test/pay" }));
+  state.createRefund.mockReset().mockResolvedValue({ id: "re_1" });
   state.retrieveIntent.mockReset().mockResolvedValue({ latest_charge: { balance_transaction: { fee: 35 } } });
   vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(NOW);
 });
@@ -313,5 +316,86 @@ describe("income ledger", () => {
     await order({ status: "paid", paidAt: new Date("2026-10-30T10:00:00Z"), amount: 200 });
     const totals = await getIncomeTotals(new Date("2026-11-01T00:00:00Z"), new Date("2026-12-01T00:00:00Z"));
     expect(totals).toMatchObject({ raffle: 1400, total: 1400, card: 1000, offline: 400, payments: 3 });
+  });
+});
+
+function cashForm(patch: Record<string, string | null> = {}) {
+  const values: Record<string, string | null> = {
+    name: "Barbara Hughes", phone: "07700 900123", email: "", quantity: "3", paymentMethod: "cash",
+    paidOn: "2026-11-08", soldBy: "Quiz night", ageConfirmed: "on", emailNumbers: "on", ...patch,
+  };
+  const form = new FormData();
+  for (const [k, v] of Object.entries(values)) if (v !== null) form.set(k, v);
+  return form;
+}
+
+describe("cash sales", () => {
+  it("needs a name and a phone or email, an 18+ confirmation, and a real date", async () => {
+    await raffle();
+    expect((await recordCashSale("r1", { error: null }, cashForm({ name: "" }))).error).toMatch(/name/);
+    expect((await recordCashSale("r1", { error: null }, cashForm({ phone: "", email: "" }))).error).toMatch(/phone number or an email/);
+    expect((await recordCashSale("r1", { error: null }, cashForm({ email: "not-an-email" }))).error).toMatch(/email/);
+    expect((await recordCashSale("r1", { error: null }, cashForm({ ageConfirmed: null }))).error).toMatch(/18/);
+    expect((await recordCashSale("r1", { error: null }, cashForm({ paidOn: "2026-12-25" }))).error).toMatch(/future/);
+    expect(await state.db.select().from(schema.raffleOrders)).toHaveLength(0);
+  });
+  it("accepts a phone-only buyer, dates it when taken, numbers it and counts it against the cap", async () => {
+    await raffle();
+    const result = await recordCashSale("r1", { error: null }, cashForm());
+    expect(result).toEqual({ error: null, added: { name: "Barbara Hughes", quantity: 3, numbers: "0001–0003" } });
+    const [row] = await state.db.select().from(schema.raffleOrders);
+    expect(row).toMatchObject({ source: "manual", status: "paid", paymentMethod: "cash", phone: "07700 900123", email: null, amount: 600, soldBy: "Quiz night" });
+    expect(row.paidAt?.toISOString()).toBe("2026-11-08T12:00:00.000Z");
+    expect(state.send).not.toHaveBeenCalled();
+    expect((await recordCashSale("r1", { error: null }, cashForm({ quantity: "8" }))).error).toMatch(/Only 7 tickets/);
+  });
+  it("emails the numbers when an email is given, and can be resent on request", async () => {
+    await raffle();
+    await recordCashSale("r1", { error: null }, cashForm({ email: "barbara@example.test" }));
+    expect(state.send).toHaveBeenCalledTimes(1);
+    const [row] = await state.db.select().from(schema.raffleOrders);
+    await resendRaffleTickets(row.id);
+    expect(state.send).toHaveBeenCalledTimes(2);
+  });
+  it("edits contact details, and voids with the numbers kept but out of the draw", async () => {
+    await raffle();
+    await recordCashSale("r1", { error: null }, cashForm());
+    const [row] = await state.db.select().from(schema.raffleOrders);
+    expect((await updateCashSale(row.id, { error: null }, cashForm({ phone: "", email: "" }))).error).toMatch(/phone/);
+    expect((await updateCashSale(row.id, { error: null }, cashForm({ email: "b@example.test" }))).error).toBeNull();
+    await expect(voidCashSale(row.id, " ")).rejects.toThrow("reason");
+    await voidCashSale(row.id, "Entered twice");
+    expect((await state.db.select().from(schema.raffleOrders))[0]).toMatchObject({ status: "void", email: "b@example.test" });
+    expect((await state.db.select().from(schema.raffleTickets)).every((t) => t.void)).toBe(true);
+    expect((await state.db.select().from(schema.raffles))[0].ticketsReserved).toBe(0);
+    await recordCashSale("r1", { error: null }, cashForm({ quantity: "1" }));
+    const fresh = (await state.db.select().from(schema.raffleTickets)).filter((t) => !t.void);
+    expect(fresh.map((t) => t.ticketNumber)).toEqual([4]);
+  });
+  it("locks sales, voids and refunds once the draw has run", async () => {
+    await raffle();
+    await recordCashSale("r1", { error: null }, cashForm());
+    const [cash] = await state.db.select().from(schema.raffleOrders);
+    await state.db.insert(schema.raffleDraws).values({ raffleId: "r1", method: "system", poolSize: 3, poolChecksum: "x",
+      poolSnapshot: [1, 2, 3], results: [], drawnAt: NOW });
+    expect((await recordCashSale("r1", { error: null }, cashForm())).error).toMatch(/draw has already run/);
+    await expect(voidCashSale(cash.id, "late")).rejects.toThrow("draw has already run");
+  });
+});
+
+describe("refunds from the admin", () => {
+  it("refunds a card order through Stripe once, then voids its tickets", async () => {
+    await raffle();
+    const { order } = await checkout();
+    await completeRaffleOrder(completedSession(order), NOW);
+    await refundRaffleOrder(order.id);
+    expect(state.createRefund).toHaveBeenCalledWith({ payment_intent: "pi_1" }, { idempotencyKey: `raffle-refund-${order.id}` });
+    expect((await state.db.select().from(schema.raffleOrders))[0].status).toBe("refunded");
+    await expect(refundRaffleOrder(order.id)).rejects.toThrow("Only paid card orders");
+  });
+  it("is staff only", async () => {
+    state.session = { user: { id: "c", email: "c@example.test", role: "customer" } };
+    await expect(refundRaffleOrder("any")).rejects.toThrow("Unauthorized");
+    await expect(recordCashSale("r1", { error: null }, cashForm())).rejects.toThrow("Unauthorized");
   });
 });

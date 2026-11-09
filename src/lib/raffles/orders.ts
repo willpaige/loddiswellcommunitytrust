@@ -140,8 +140,11 @@ async function stripeFee(paymentIntentId: string | null) {
   }
 }
 
-/** Sends the ticket confirmation once per order. */
-export async function sendRaffleTicketsEmail(orderId: string) {
+/**
+ * Sends the ticket confirmation once per order. `resend` sends it again on
+ * an admin's request even though it has already gone.
+ */
+export async function sendRaffleTicketsEmail(orderId: string, { resend = false }: { resend?: boolean } = {}) {
   const [row] = await db
     .select({ order: raffleOrders, raffle: raffles })
     .from(raffleOrders)
@@ -170,6 +173,7 @@ export async function sendRaffleTicketsEmail(orderId: string) {
     },
     relatedEntityType: "raffle_order",
     relatedEntityId: `${orderId}:tickets`,
+    dedupe: !resend,
   });
 }
 
