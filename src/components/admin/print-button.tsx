@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-export function PrintButton({ backHref }: { backHref?: string }) {
+export function PrintButton({ backHref, label = "Print" }: { backHref?: string; label?: string }) {
   return (
     <>
       {backHref && (
@@ -13,7 +13,7 @@ export function PrintButton({ backHref }: { backHref?: string }) {
         </Button>
       )}
       <Button type="button" onClick={() => window.print()}>
-        <Printer className="h-4 w-4" aria-hidden="true" /> Print poster
+        <Printer className="h-4 w-4" aria-hidden="true" /> {label}
       </Button>
     </>
   );

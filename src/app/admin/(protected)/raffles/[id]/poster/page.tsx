@@ -26,7 +26,7 @@ export default async function RafflePosterPage({ params }: { params: Promise<{ i
     <div className="fixed inset-0 z-50 overflow-auto bg-muted print:static print:bg-white">
       <style>{`@page { size: A4; margin: 0 } @media print { body * { visibility: hidden } .raffle-poster, .raffle-poster * { visibility: visible } .raffle-poster { position: absolute; left: 0; top: 0 } }`}</style>
       <div className="mx-auto flex max-w-[210mm] justify-end gap-2 p-4 print:hidden">
-        <PrintButton />
+        <PrintButton label="Print poster" />
       </div>
       <article className="raffle-poster mx-auto flex h-[297mm] w-[210mm] flex-col bg-white p-[14mm] text-sage-950 shadow-lg print:shadow-none">
         <p className="text-sm font-bold uppercase tracking-[0.3em] text-copper-700">Loddiswell village raffle</p>

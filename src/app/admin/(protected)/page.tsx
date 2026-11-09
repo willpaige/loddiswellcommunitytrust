@@ -10,7 +10,11 @@ import {
   Settings,
   BarChart3,
   Newspaper,
+  Gift,
+  AlertTriangle,
 } from "lucide-react";
+import { getDueRaffleReturns } from "@/actions/raffle-return";
+import { formatUk } from "@/lib/raffles/time";
 import {
   Card,
   CardDescription,
@@ -68,6 +72,12 @@ const quickActions = [
     description: "View lottery ticket holders",
   },
   {
+    name: "Raffles",
+    href: "/admin/raffles",
+    icon: Gift,
+    description: "Set up raffles, record cash sales and run draws",
+  },
+  {
     name: "Newsletter",
     href: "/admin/newsletter",
     icon: Newspaper,
@@ -81,13 +91,37 @@ const quickActions = [
   },
 ];
 
-export default function AdminDashboard() {
+export const dynamic = "force-dynamic";
+
+export default async function AdminDashboard() {
+  const dueReturns = await getDueRaffleReturns();
   return (
     <div>
       <h1 className="text-3xl font-bold">Dashboard</h1>
       <p className="mt-2 text-muted-foreground">
         Welcome to the Loddiswell Community Trust admin area.
       </p>
+
+      {dueReturns.length > 0 && (
+        <Card className="mt-8 border-copper-300 bg-copper-50/50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <AlertTriangle className="h-4 w-4 text-copper-700" aria-hidden="true" />
+              Raffle returns due to South Hams
+            </CardTitle>
+            <CardDescription>
+              {dueReturns.map((r) => (
+                <span key={r.id} className="block">
+                  <Link href={`/admin/raffles/${r.id}/return`} className="font-medium text-foreground underline">
+                    {r.title}
+                  </Link>{" "}
+                  · {r.overdue ? "overdue since" : "due by"} {formatUk(r.dueBy, "d MMMM yyyy")}
+                </span>
+              ))}
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      )}
 
       <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {quickActions.map((action) => (

@@ -37,6 +37,8 @@ import { getRafflePromo, rafflePromoText, resetRafflePromoMemo } from "@/lib/raf
 import { unsubscribeToken, verifyUnsubscribeToken } from "@/lib/raffles/unsubscribe";
 import { sendTemplateEmail } from "@/lib/email/send";
 import { readFileSync } from "node:fs";
+import { computeRaffleReturn } from "@/lib/raffles/limits";
+import { getDueRaffleReturns, getRaffleReturn } from "@/actions/raffle-return";
 
 let pg: PGlite;
 beforeAll(async () => {
@@ -49,7 +51,7 @@ beforeAll(async () => {
 });
 afterAll(async () => { await pg?.close(); });
 beforeEach(async () => {
-  await pg.exec("TRUNCATE raffles, raffle_orders, raffle_tickets, raffle_draws, raffle_interest, email_logs, email_templates, audit_log CASCADE");
+  await pg.exec("TRUNCATE raffles, raffle_orders, raffle_tickets, raffle_draws, raffle_interest, email_logs, email_templates, audit_log, lottery_tickets, lottery_payments CASCADE");
   state.session = { user: { id: "admin", email: "admin@example.test", role: "admin" } };
   state.send.mockReset().mockResolvedValue({ MessageID: "msg" });
   state.createSession.mockReset().mockImplementation(async () => ({ id: `cs_${Math.random().toString(36).slice(2)}`, url: "https://checkout.stripe.test/pay" }));
@@ -664,5 +666,52 @@ describe("cross-selling the raffle", () => {
     expect(welcome.body).toBe("Edited by a trustee.\n\n{{rafflePromo}}");
     expect(welcome.variables).toEqual(["name", "rafflePromo"]);
     expect(rows.find((r) => r.key === "booking_confirmation")!.body).toBe("Already {{rafflePromo}}");
+  });
+});
+
+describe("council return", () => {
+  const prizes = [
+    { rank: 1, title: "Booze", valuePence: 15000, costPence: 0 },
+    { rank: 2, title: "Voucher", valuePence: 2500, costPence: 2500 },
+  ];
+  it("works out proceeds, costs and the share to the Trust's purposes", () => {
+    const r = computeRaffleReturn({
+      prizes, drawAt: new Date("2026-11-30T20:00:00Z"), otherExpensesPence: 600, yearProceeds: 741_400,
+      orders: [
+        { quantity: 400, amount: 80_000, refundedAmount: 0, stripeFeePence: 1800, status: "paid" },
+        { quantity: 100, amount: 20_000, refundedAmount: 0, stripeFeePence: 0, status: "paid" },
+        { quantity: 3, amount: 600, refundedAmount: 600, stripeFeePence: 30, status: "refunded" },
+      ],
+    });
+    expect(r).toMatchObject({ ticketsSold: 500, proceeds: 100_000, prizesBought: 2500, prizesDonatedValue: 15000, stripeFees: 1830, otherExpenses: 600 });
+    expect(r.toPurposes).toBe(100_000 - 2500 - 1830 - 600);
+    expect(r.shareToPurposes).toBeCloseTo(0.9507, 3);
+    expect(r.dueBy.toISOString()).toBe("2027-02-28T20:00:00.000Z");
+    expect(r.checks.every((c) => c.ok)).toBe(true);
+  });
+  it("flags a lottery that breaks the limits", () => {
+    const r = computeRaffleReturn({
+      prizes: [{ rank: 1, title: "Car", valuePence: 3_000_000, costPence: 2_500_000 }],
+      drawAt: new Date("2026-11-30T20:00:00Z"), otherExpensesPence: 0, yearProceeds: 26_000_000,
+      orders: [{ quantity: 10_500, amount: 2_100_000, refundedAmount: 0, stripeFeePence: 0, status: "paid" }],
+    });
+    expect(r.checks.map((c) => c.ok)).toEqual([false, false, false, false]);
+  });
+  it("includes the monthly lottery in the year total, and reminds about unsubmitted returns", async () => {
+    await raffle({ prizes });
+    await order({ status: "paid", paidAt: NOW, amount: 1000 });
+    const [ticket] = await state.db.insert(schema.lotteryTickets).values({ source: "manual", name: "L", email: "l@example.test",
+      amount: 1200, expiryDate: new Date("2027-11-01") }).returning();
+    await state.db.insert(schema.lotteryPayments).values({ ticketId: ticket.id, source: "manual", reference: "x", amount: 1200, paidAt: NOW });
+    const data = await getRaffleReturn("r1");
+    expect(data?.figures).toMatchObject({ proceeds: 1000, yearProceeds: 2200 });
+
+    expect(await getDueRaffleReturns(new Date("2027-01-15T00:00:00Z"))).toHaveLength(0);
+    await state.db.insert(schema.raffleDraws).values({ raffleId: "r1", method: "system", poolSize: 5, poolChecksum: "x", poolSnapshot: [], results: [], drawnAt: NOW });
+    expect(await getDueRaffleReturns(new Date("2027-01-15T00:00:00Z"))).toHaveLength(0);
+    expect(await getDueRaffleReturns(new Date("2027-02-10T00:00:00Z"))).toMatchObject([{ id: "r1", overdue: false }]);
+    expect(await getDueRaffleReturns(new Date("2027-03-10T00:00:00Z"))).toMatchObject([{ id: "r1", overdue: true }]);
+    await state.db.update(schema.raffles).set({ returnSubmittedAt: NOW });
+    expect(await getDueRaffleReturns(new Date("2027-03-10T00:00:00Z"))).toHaveLength(0);
   });
 });
