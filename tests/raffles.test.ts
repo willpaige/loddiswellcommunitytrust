@@ -29,6 +29,8 @@ import { applyRaffleRefund, completeRaffleOrder, expireRaffleOrder, releaseStale
 import { getIncomeTotals } from "@/lib/reports/queries";
 import type Stripe from "stripe";
 import { recordCashSale, refundRaffleOrder, resendRaffleTickets, updateCashSale, voidCashSale } from "@/actions/raffle-orders";
+import { checkRaffleTicket, publishRaffleResults, redrawRafflePrize, retryRaffleDrawEmails, startRaffleDraw } from "@/actions/raffle-draws";
+import { publicName } from "@/lib/raffles/draw";
 
 let pg: PGlite;
 beforeAll(async () => {
@@ -397,5 +399,171 @@ describe("refunds from the admin", () => {
     state.session = { user: { id: "c", email: "c@example.test", role: "customer" } };
     await expect(refundRaffleOrder("any")).rejects.toThrow("Unauthorized");
     await expect(recordCashSale("r1", { error: null }, cashForm())).rejects.toThrow("Unauthorized");
+  });
+});
+
+const AFTER_CLOSE = new Date("2026-11-30T19:30:00Z");
+
+/** Three buyers: Sam (email, 3 tickets), Jo (email, 2), Barbara (phone only, 1). */
+async function drawableRaffle(prizes = 3) {
+  await raffle({ maxTickets: null, prizes: Array.from({ length: prizes }, (_, i) => ({ rank: i + 1, title: `Prize ${i + 1}`, valuePence: 1000, costPence: 0 })) });
+  for (const [name, email, phone, quantity] of [
+    ["Sam Taylor", "sam@example.test", null, 3],
+    ["Jo Smith", "jo@example.test", null, 2],
+    ["Barbara Hughes", null, "07700 900123", 1],
+  ] as const) {
+    const o = await order({ name, email, phone, quantity, amount: quantity * 200, status: "pending" });
+    await markOrderPaid(o.id, { paidAt: NOW });
+    await ensureRaffleTickets(o.id);
+  }
+  await state.db.insert(schema.siteSettings).values({ emailAddress: "trust@example.test" });
+  vi.setSystemTime(AFTER_CLOSE);
+}
+
+async function theDraw() {
+  const [draw] = await state.db.select().from(schema.raffleDraws);
+  return draw;
+}
+
+const drawInput = (patch: Partial<Parameters<typeof startRaffleDraw>[0]> = {}) => ({
+  raffleId: "r1", method: "system" as const, onePerPerson: true, prizeOrder: [3, 2, 1], ...patch,
+});
+
+describe("running the draw", () => {
+  beforeEach(async () => { await pg.exec("TRUNCATE site_settings CASCADE"); });
+
+  it("won't draw before sales close or while a checkout is in progress", async () => {
+    await drawableRaffle();
+    vi.setSystemTime(NOW);
+    expect((await startRaffleDraw(drawInput())).error).toMatch(/Sales haven't closed/);
+    vi.setSystemTime(AFTER_CLOSE);
+    await order({ status: "pending", expiresAt: new Date(AFTER_CLOSE.getTime() + 60_000) });
+    expect((await startRaffleDraw(drawInput())).error).toMatch(/checkout\(s\) are still in progress/);
+    expect(await state.db.select().from(schema.raffleDraws)).toHaveLength(0);
+  });
+
+  it("draws once, saves winners in draw order, one prize per person, from paid non-void tickets only", async () => {
+    await drawableRaffle();
+    // A refunded order's tickets must never win.
+    const refunded = await order({ name: "Refunded", email: "r@example.test", quantity: 10, status: "pending" });
+    await markOrderPaid(refunded.id, { paidAt: NOW });
+    await ensureRaffleTickets(refunded.id);
+    await state.db.update(schema.raffleOrders).set({ status: "refunded" }).where(eq(schema.raffleOrders.id, refunded.id));
+    await state.db.update(schema.raffleTickets).set({ void: true }).where(eq(schema.raffleTickets.orderId, refunded.id));
+
+    expect((await startRaffleDraw(drawInput())).error).toBeNull();
+    const draw = await theDraw();
+    expect(draw.results.map((r) => r.rank)).toEqual([3, 2, 1]);
+    expect(draw.poolSize).toBe(6);
+    expect(draw.poolSnapshot.sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(new Set(draw.results.map((r) => r.orderId)).size).toBe(3);
+    expect(draw.results.every((r) => r.orderId !== refunded.id)).toBe(true);
+    expect((await startRaffleDraw(drawInput())).error).toMatch(/already been drawn/);
+  });
+
+  it("records a physical draw, checking every number", async () => {
+    await drawableRaffle(2);
+    const input = (nums: number[], onePerPerson = true) => drawInput({ method: "physical", prizeOrder: [1, 2], physicalNumbers: nums, onePerPerson });
+    expect((await startRaffleDraw(input([1, 99]))).error).toMatch(/#0099 isn't a valid ticket/);
+    expect((await startRaffleDraw(input([1, 1]))).error).toMatch(/twice/);
+    expect((await startRaffleDraw(input([1, 2]))).error).toMatch(/only win once/);
+    expect((await startRaffleDraw(input([1, 2], false))).error).toBeNull();
+    expect((await theDraw()).results.map((r) => r.ticketNumber)).toEqual([1, 2]);
+  });
+
+  it("redraws from the frozen pool, skipping everyone who has won, and keeps the history", async () => {
+    await drawableRaffle(2);
+    await startRaffleDraw(drawInput({ prizeOrder: [1, 2] }));
+    const before = await theDraw();
+    expect((await redrawRafflePrize("r1", 1, " ")).error).toMatch(/reason/);
+    expect((await redrawRafflePrize("r1", 1, "Winner is under 18")).error).toBeNull();
+    const after = await theDraw();
+    const first = after.results.find((r) => r.rank === 1)!;
+    const others = before.results.map((r) => r.orderId);
+    expect(others).not.toContain(first.orderId);
+    expect(first.history).toEqual([expect.objectContaining({ ticketNumber: before.results[0].ticketNumber, reason: "Winner is under 18" })]);
+    // Three entrants, two prizes: after one redraw nobody is left.
+    expect((await redrawRafflePrize("r1", 1, "No reply by the claim date")).error).toMatch(/nobody left/);
+  });
+
+  it("publishes: one email per person, winners get the winner email instead, trustees get the summary", async () => {
+    await drawableRaffle();
+    await startRaffleDraw(drawInput());
+    const result = await publishRaffleResults("r1");
+    expect(result.error).toBeNull();
+    const sent = state.send.mock.calls.map((c) => c[0] as { To: string; Subject: string; TextBody: string });
+    const to = sent.map((m) => m.To).sort();
+    // Sam and Jo both won (3 entrants, 3 prizes, one each), Barbara has no email.
+    expect(to).toEqual(["jo@example.test", "sam@example.test", "trust@example.test"]);
+    expect(sent.filter((m) => m.Subject.startsWith("You've won"))).toHaveLength(2);
+    const manager = sent.find((m) => m.To === "trust@example.test")!;
+    expect(manager.TextBody).toContain("Barbara Hughes");
+    expect(manager.TextBody).toContain("07700 900123");
+    expect(result.summary?.noEmail).toEqual([expect.objectContaining({ name: "Barbara Hughes", prize: expect.any(String) })]);
+    expect((await theDraw()).publishedAt).not.toBeNull();
+
+    state.send.mockClear();
+    expect((await retryRaffleDrawEmails("r1")).error).toBeNull();
+    expect(state.send).not.toHaveBeenCalled();
+  });
+
+  it("sends the results email to non-winners with their own numbers, and retries only failures", async () => {
+    await drawableRaffle(1);
+    // Pin the winner: Jo holds tickets 4 and 5.
+    await startRaffleDraw(drawInput({ method: "physical", prizeOrder: [1], physicalNumbers: [4] }));
+    state.send.mockImplementation(async ({ To }: { To: string }) => {
+      if (To === "jo@example.test") throw new Error("Inactive recipient");
+      return { MessageID: "m" };
+    });
+    const result = await publishRaffleResults("r1");
+    expect(result.summary).toMatchObject({ winnerEmails: 1, resultsEmails: 1, failed: 1 });
+    const mails = state.send.mock.calls.map((c) => c[0] as { To: string; Subject: string; TextBody: string });
+    const sam = mails.find((m) => m.To === "sam@example.test")!;
+    expect(sam.Subject).toContain("did you win");
+    expect(sam.TextBody).toContain("0001–0003");
+    expect(sam.TextBody).toContain("#0004 · Jo S.");
+    const jo = mails.find((m) => m.To === "jo@example.test")!;
+    expect(jo.Subject).toBe("You've won Prize 1!");
+    expect(jo.TextBody).toContain("Your other tickets in this draw: 0005");
+    expect(jo.TextBody).toContain("photo ID");
+
+    state.send.mockReset().mockResolvedValue({ MessageID: "retry" });
+    await retryRaffleDrawEmails("r1");
+    expect(state.send.mock.calls.map((c) => c[0].To)).toEqual(["jo@example.test"]);
+  });
+
+  it("after publishing, a redraw emails only the new winner", async () => {
+    await drawableRaffle(1);
+    await startRaffleDraw(drawInput({ prizeOrder: [1] }));
+    await publishRaffleResults("r1");
+    state.send.mockClear();
+    await redrawRafflePrize("r1", 1, "Winner declined the prize");
+    const draw = await theDraw();
+    const [newWinner] = await state.db.select().from(schema.raffleOrders).where(eq(schema.raffleOrders.id, draw.results[0].orderId));
+    const calls = state.send.mock.calls.map((c) => c[0]);
+    if (newWinner.email) {
+      expect(calls).toHaveLength(1);
+      expect(calls[0]).toMatchObject({ To: newWinner.email, Subject: expect.stringContaining("You've won") });
+    } else {
+      expect(calls).toHaveLength(0);
+    }
+  });
+
+  it("checks tickets publicly only once results are published", async () => {
+    await drawableRaffle(1);
+    await startRaffleDraw(drawInput({ prizeOrder: [1] }));
+    const winning = (await theDraw()).results[0].ticketNumber;
+    expect(await checkRaffleTicket("r1", String(winning))).toEqual({ status: "unknown" });
+    await publishRaffleResults("r1");
+    expect(await checkRaffleTicket("r1", `#${winning}`)).toMatchObject({ status: "won", prize: "Prize 1" });
+    const losing = [1, 2, 3, 4, 5, 6].find((n) => n !== winning)!;
+    expect(await checkRaffleTicket("r1", String(losing))).toEqual({ status: "lost" });
+    expect(await checkRaffleTicket("r1", "999")).toEqual({ status: "unknown" });
+  });
+
+  it("shows winners publicly as first name and initial", () => {
+    expect(publicName("Jo Smith")).toBe("Jo S.");
+    expect(publicName("  mary anne  o'brien ")).toBe("mary O.");
+    expect(publicName("Cher")).toBe("Cher");
   });
 });
