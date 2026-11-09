@@ -8,6 +8,7 @@ import { AccountPortalShell } from "@/components/account/portal-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { RafflePromoCard } from "@/components/raffles/raffle-promo-card";
 
 export const dynamic = "force-dynamic";
 
@@ -106,6 +107,7 @@ export default async function AccountOverviewPage() {
             </div>
           </CardContent>
         </Card>
+        <RafflePromoCard className="lg:col-span-2" />
       </div>
     </AccountPortalShell>
   );

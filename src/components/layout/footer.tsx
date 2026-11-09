@@ -94,6 +94,14 @@ export async function Footer() {
               </li>
               <li>
                 <Link
+                  href="/raffles"
+                  className="text-sm text-sage-300 hover:text-white no-underline transition-colors"
+                >
+                  Raffles
+                </Link>
+              </li>
+              <li>
+                <Link
                   href="/about"
                   className="text-sm text-sage-300 hover:text-white no-underline transition-colors"
                 >

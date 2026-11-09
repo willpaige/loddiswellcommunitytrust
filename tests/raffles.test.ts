@@ -31,10 +31,17 @@ import type Stripe from "stripe";
 import { recordCashSale, refundRaffleOrder, resendRaffleTickets, updateCashSale, voidCashSale } from "@/actions/raffle-orders";
 import { checkRaffleTicket, publishRaffleResults, redrawRafflePrize, retryRaffleDrawEmails, startRaffleDraw } from "@/actions/raffle-draws";
 import { publicName } from "@/lib/raffles/draw";
+import { registerRaffleInterest } from "@/actions/raffle-interest";
+import { sendRaffleDrawReminders, sendRaffleOnSaleEmails } from "@/lib/raffles/jobs";
+import { getRafflePromo, rafflePromoText, resetRafflePromoMemo } from "@/lib/raffles/promo";
+import { unsubscribeToken, verifyUnsubscribeToken } from "@/lib/raffles/unsubscribe";
+import { sendTemplateEmail } from "@/lib/email/send";
+import { readFileSync } from "node:fs";
 
 let pg: PGlite;
 beforeAll(async () => {
   process.env.POSTMARK_API_KEY = "test";
+  process.env.AUTH_SECRET = "test-secret";
   pg = new PGlite(); state.db = drizzle(pg, { schema });
   const exported = execFileSync(process.execPath, ["node_modules/drizzle-kit/bin.cjs", "export"], { encoding: "utf8" });
   await pg.exec(exported.slice(exported.indexOf("CREATE TABLE")));
@@ -49,6 +56,7 @@ beforeEach(async () => {
   state.createRefund.mockReset().mockResolvedValue({ id: "re_1" });
   state.retrieveIntent.mockReset().mockResolvedValue({ latest_charge: { balance_transaction: { fee: 35 } } });
   vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(NOW);
+  resetRafflePromoMemo();
 });
 
 const NOW = new Date("2026-11-10T12:00:00Z");
@@ -565,5 +573,96 @@ describe("running the draw", () => {
     expect(publicName("Jo Smith")).toBe("Jo S.");
     expect(publicName("  mary anne  o'brien ")).toBe("mary O.");
     expect(publicName("Cher")).toBe("Cher");
+  });
+});
+
+function interestForm(email: string, raffleId = "") {
+  const form = new FormData();
+  form.set("email", email);
+  form.set("raffleId", raffleId);
+  return form;
+}
+
+describe("notify me and the hourly raffle emails", () => {
+  it("records a reminder sign-up once, and rejects bad input", async () => {
+    await raffle({ salesOpenAt: new Date("2026-11-20T09:00:00Z") });
+    expect((await registerRaffleInterest({ ok: false, message: "" }, interestForm("nope"))).ok).toBe(false);
+    expect((await registerRaffleInterest({ ok: false, message: "" }, interestForm("a@example.test", "missing"))).ok).toBe(false);
+    await registerRaffleInterest({ ok: false, message: "" }, interestForm("A@Example.test", "r1"));
+    await registerRaffleInterest({ ok: false, message: "" }, interestForm("a@example.test", "r1"));
+    await registerRaffleInterest({ ok: false, message: "" }, interestForm("next@example.test"));
+    await registerRaffleInterest({ ok: false, message: "" }, interestForm("next@example.test"));
+    const rows = await state.db.select().from(schema.raffleInterest);
+    expect(rows.map((r) => r.email).sort()).toEqual(["a@example.test", "next@example.test"]);
+  });
+
+  it("emails sign-ups and past entrants once when sales open, skipping anyone who opted out", async () => {
+    await raffle({ id: "old", slug: "old", salesOpenAt: new Date("2026-10-01T09:00:00Z"), salesCloseAt: new Date("2026-10-30T19:00:00Z"), drawAt: new Date("2026-10-30T20:00:00Z") });
+    await raffle({ salesOpenAt: new Date("2026-11-20T09:00:00Z") });
+    await order({ raffleId: "old", email: "fan@example.test", status: "paid", paidAt: NOW });
+    await order({ raffleId: "old", email: "quiet@example.test", status: "paid", paidAt: NOW, marketingOptOut: true });
+    await registerRaffleInterest({ ok: false, message: "" }, interestForm("asked@example.test", "r1"));
+    await registerRaffleInterest({ ok: false, message: "" }, interestForm("quiet@example.test"));
+
+    expect(await sendRaffleOnSaleEmails(new Date("2026-11-20T08:00:00Z"))).toBe(0);
+    expect(await sendRaffleOnSaleEmails(new Date("2026-11-20T09:30:00Z"))).toBe(2);
+    const to = state.send.mock.calls.map((c) => c[0].To).sort();
+    expect(to).toEqual(["asked@example.test", "fan@example.test"]);
+    expect(state.send.mock.calls[0][0].TextBody).toContain("/raffles/unsubscribe?e=");
+    expect(await sendRaffleOnSaleEmails(new Date("2026-11-20T10:30:00Z"))).toBe(0);
+  });
+
+  it("reminds entrants on the morning of the draw only, once, with their numbers", async () => {
+    await raffle({ maxTickets: null });
+    const o = await order({ email: "sam@example.test", quantity: 2, status: "pending" });
+    await markOrderPaid(o.id, { paidAt: NOW });
+    await ensureRaffleTickets(o.id);
+    expect(await sendRaffleDrawReminders(new Date("2026-11-29T10:00:00Z"))).toBe(0);
+    expect(await sendRaffleDrawReminders(new Date("2026-11-30T08:00:00Z"))).toBe(0);
+    expect(await sendRaffleDrawReminders(new Date("2026-11-30T10:00:00Z"))).toBe(1);
+    expect(state.send.mock.calls[0][0].TextBody).toContain("0001–0002");
+    expect(await sendRaffleDrawReminders(new Date("2026-11-30T11:00:00Z"))).toBe(0);
+  });
+
+  it("only unsubscribes with a valid signed link", () => {
+    const token = unsubscribeToken("Sam@Example.test");
+    expect(verifyUnsubscribeToken("sam@example.test", token)).toBe(true);
+    expect(verifyUnsubscribeToken("someone@example.test", token)).toBe(false);
+    expect(verifyUnsubscribeToken("sam@example.test", "forged")).toBe(false);
+  });
+});
+
+describe("cross-selling the raffle", () => {
+  it("promotes the featured raffle with an urgent label, and nothing when none is on", async () => {
+    expect(await getRafflePromo()).toBeNull();
+    await raffle({ featured: true, maxTickets: 100, ticketsReserved: 95 });
+    expect(await getRafflePromo()).toMatchObject({ slug: "november", price: "£2", label: "Only 5 left", onSale: true });
+  });
+
+  it("adds the raffle line to emails that ask for {{rafflePromo}}, and tidies it away when there's none", async () => {
+    await sendTemplateEmail({ key: "lottery_welcome", to: "a@example.test", variables: { name: "A", quantity: 1, ticketNumbers: "7" } });
+    const without = state.send.mock.calls[0][0].TextBody as string;
+    expect(without.endsWith("Every ticket helps maintain our village facilities.")).toBe(true);
+
+    await raffle({ featured: true });
+    resetRafflePromoMemo();
+    expect(await rafflePromoText()).toContain("/raffles/november");
+    await sendTemplateEmail({ key: "lottery_welcome", to: "b@example.test", variables: { name: "B", quantity: 1, ticketNumbers: "8" } });
+    expect(state.send.mock.calls[1][0].TextBody).toContain("This month's raffle: Win a wheelbarrow of booze. £2 a ticket");
+  });
+
+  it("migration 0030 adds the line to stored templates once, keeping edited wording", async () => {
+    await state.db.insert(schema.emailTemplates).values([
+      { key: "lottery_welcome", category: "lottery", name: "x", description: "x", subject: "s", body: "Edited by a trustee.", variables: ["name"] },
+      { key: "booking_confirmation", category: "bookings", name: "x", description: "x", subject: "s", body: "Already {{rafflePromo}}", variables: ["rafflePromo"] },
+    ]);
+    const sqlText = readFileSync("drizzle/migrations/0030_raffle_email_promo.sql", "utf8");
+    await pg.exec(sqlText);
+    await pg.exec(sqlText);
+    const rows = await state.db.select().from(schema.emailTemplates);
+    const welcome = rows.find((r) => r.key === "lottery_welcome")!;
+    expect(welcome.body).toBe("Edited by a trustee.\n\n{{rafflePromo}}");
+    expect(welcome.variables).toEqual(["name", "rafflePromo"]);
+    expect(rows.find((r) => r.key === "booking_confirmation")!.body).toBe("Already {{rafflePromo}}");
   });
 });

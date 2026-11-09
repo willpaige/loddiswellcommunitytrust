@@ -13,6 +13,7 @@ import { SectionLabel } from "@/components/ui/section-label";
 import { getPageContent } from "@/lib/cms/get-page-content";
 import { renderInline, renderRichText } from "@/lib/cms/render";
 import { getFacilities } from "@/actions/facilities";
+import { RafflePromoCard } from "@/components/raffles/raffle-promo-card";
 
 export const dynamic = "force-dynamic";
 
@@ -312,6 +313,9 @@ export default async function HomePage() {
               Buy Lottery Tickets
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
+          </div>
+          <div className="mx-auto mt-10 max-w-xl text-left">
+            <RafflePromoCard eyebrow="Also this month" />
           </div>
         </div>
       </section>

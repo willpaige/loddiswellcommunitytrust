@@ -15,6 +15,7 @@ import { sendBulkTemplateEmails, type BulkEmail } from "@/lib/email/bulk-send";
 import { compressRanges, formatPence, formatTicket } from "@/lib/raffles/numbers";
 import { formatUk } from "@/lib/raffles/time";
 import { addDays } from "date-fns";
+import { unsubscribeUrl } from "@/lib/raffles/unsubscribe";
 
 // The draw. Winners are picked on the server and saved before anything is
 // shown, so the reveal screen only ever plays back a recorded result.
@@ -356,7 +357,7 @@ export async function sendDrawEmails(raffleId: string, { onlyWinners = false }: 
           totalRaised: formatPence(raised),
           cause,
           resultsUrl,
-          nextRaffle: entry.optOut ? "" : nextRaffleText,
+          nextRaffle: entry.optOut || !nextRaffleText ? "" : `${nextRaffleText}\nDon't want raffle news? ${unsubscribeUrl(address)}`,
         },
       });
     }

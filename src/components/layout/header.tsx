@@ -6,8 +6,10 @@ import { useState, useEffect } from "react";
 import { Menu, X } from "lucide-react";
 import { FiUser } from "react-icons/fi";
 import { BrandLogo } from "@/components/layout/brand-logo";
+import { RaffleStrip } from "@/components/raffles/raffle-strip";
+import type { RafflePromo } from "@/lib/raffles/promo";
 
-const navigation = [
+const baseNavigation = [
   { name: "About", href: "/about" },
   { name: "Facilities", href: "/facilities" },
   { name: "Events", href: "/events" },
@@ -15,8 +17,14 @@ const navigation = [
   { name: "Contact", href: "/contact" },
 ];
 
-export function Header() {
+export function Header({ rafflePromo = null }: { rafflePromo?: RafflePromo | null }) {
   const pathname = usePathname();
+  // The raffle gets a nav link while one is promoted, and a strip above the
+  // header everywhere except its own pages.
+  const navigation = rafflePromo
+    ? [...baseNavigation.slice(0, 4), { name: "Raffle", href: "/raffles" }, ...baseNavigation.slice(4)]
+    : baseNavigation;
+  const showStrip = !!rafflePromo && !pathname.startsWith("/raffles");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
@@ -42,6 +50,7 @@ export function Header() {
       }`}
       role="banner"
     >
+      {showStrip && <RaffleStrip promo={rafflePromo!} />}
       <nav
         className="mx-auto flex max-w-7xl items-center justify-between px-4 py-5 sm:px-6 lg:px-8"
         aria-label="Main navigation"

@@ -8,6 +8,7 @@ import { getNextRequirementSessions } from "@/lib/requirement-schedule";
 import { requirementDeadline } from "@/lib/requirement-policy";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { RafflePromoCard } from "@/components/raffles/raffle-promo-card";
 
 export const dynamic = "force-dynamic";
 
@@ -70,6 +71,7 @@ export default async function BookingSuccessPage({
           </CardContent>
         </Card>
 
+        <div className="space-y-6">
         <Card>
           <CardHeader>
             <Ticket className="h-8 w-8 text-copper-500" aria-hidden="true" />
@@ -84,6 +86,8 @@ export default async function BookingSuccessPage({
             </Button>
           </CardContent>
         </Card>
+        <RafflePromoCard />
+        </div>
         </div>
       </section>
     </main>

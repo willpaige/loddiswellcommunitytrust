@@ -4,6 +4,7 @@ import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { SiteChrome } from "@/components/layout/site-chrome";
 import { NewsletterSignup } from "@/components/newsletter-signup";
+import { getRafflePromo } from "@/lib/raffles/promo";
 import "./globals.css";
 
 export const dynamic = "force-dynamic";
@@ -75,11 +76,12 @@ const websiteJsonLd = {
   creator: { "@type": "Organization", name: "Evolve AI", url: "https://evolve-ai.co" },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const rafflePromo = await getRafflePromo();
   return (
     <html lang="en" className={`${dmSerifDisplay.variable} ${dmSans.variable}`}>
       <head>
@@ -97,7 +99,7 @@ export default function RootLayout({
           Skip to main content
         </a>
         <SiteChrome>
-          <Header />
+          <Header rafflePromo={rafflePromo} />
         </SiteChrome>
         <main id="main-content" className="flex-1">
           {children}

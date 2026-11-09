@@ -6,6 +6,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { emailLogs, emailTemplates, siteSettings } from "@/lib/db/schema";
 import { renderBodyTextAsHtml } from "@/lib/email/render";
+import { rafflePromoText } from "@/lib/raffles/promo";
 import {
   emailTemplateDefaults,
   type EmailTemplateKey,
@@ -115,8 +116,15 @@ export async function sendTemplateEmail({
   if (!template?.enabled) return { sent: false, skipped: true, reason: "disabled" };
 
   const [settings] = await db.select().from(siteSettings).limit(1);
-  const subject = interpolate(template.subject, variables);
-  const body = interpolate(template.body, variables);
+  // Cross-sell: any template can include {{rafflePromo}}, which is the current
+  // raffle's one-liner, or nothing when no raffle is on sale.
+  const allVariables =
+    template.body.includes("{{rafflePromo}}") && variables.rafflePromo === undefined
+      ? { ...variables, rafflePromo: await rafflePromoText() }
+      : variables;
+  const subject = interpolate(template.subject, allVariables);
+  // An empty variable can leave a run of blank lines; tidy them up.
+  const body = interpolate(template.body, allVariables).replace(/\n{3,}/g, "\n\n").trim();
   const html = brandedEmailHtml(renderBodyTextAsHtml(body));
 
   try {

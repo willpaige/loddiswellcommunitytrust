@@ -9,6 +9,7 @@ import { raffleDraws, raffleOrders, raffles, type RafflePrize } from "@/lib/db/s
 import { logAudit } from "@/lib/audit";
 import { requireStaff } from "@/lib/raffles/auth";
 import { ukInputToDate } from "@/lib/raffles/time";
+import { resetRafflePromoMemo } from "@/lib/raffles/promo";
 
 export type RaffleFormState = { error: string | null };
 
@@ -143,6 +144,7 @@ async function clearOtherFeatured(id: string) {
 }
 
 function revalidateRaffles(slug?: string) {
+  resetRafflePromoMemo();
   revalidatePath("/admin/raffles");
   revalidatePath("/raffles");
   if (slug) revalidatePath(`/raffles/${slug}`);

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { CheckCircle } from "lucide-react";
+import { RafflePromoCard } from "@/components/raffles/raffle-promo-card";
 
 export const metadata: Metadata = {
   title: "Subscription confirmed",
@@ -55,6 +56,9 @@ export default async function LotterySuccessPage({
             >
               {ctaLabel}
             </Link>
+          </div>
+          <div className="mt-10 text-left">
+            <RafflePromoCard eyebrow="Fancy another chance to win?" />
           </div>
         </div>
       </section>

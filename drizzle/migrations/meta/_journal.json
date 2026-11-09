@@ -211,6 +211,13 @@
       "when": 1794261022120,
       "tag": "0029_raffles",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1794262628020,
+      "tag": "0030_raffle_email_promo",
+      "breakpoints": true
     }
   ]
 }

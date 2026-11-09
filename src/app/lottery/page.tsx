@@ -7,6 +7,7 @@ import { getPageContent } from "@/lib/cms/get-page-content";
 import { renderInline, renderRichText } from "@/lib/cms/render";
 import { getPublishedDraws } from "@/actions/lottery-draws";
 import { LOTTERY_SMALL_PRINT } from "@/lib/lottery/small-print";
+import { RafflePromoCard } from "@/components/raffles/raffle-promo-card";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { title, metaDescription } = await getPageContent("lottery");
@@ -224,6 +225,11 @@ export default async function LotteryPage() {
           </div>
         </div>
       </section>
+
+      <RafflePromoCard
+        eyebrow="Also this month: a one-off raffle"
+        containerClassName="mx-auto max-w-2xl bg-background px-4 pt-16 sm:px-6 lg:px-8"
+      />
 
       {draws.length > 0 && (
         <section id="recent-draws" className="py-20 sm:py-24 bg-background">
