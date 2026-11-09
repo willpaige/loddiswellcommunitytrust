@@ -50,6 +50,9 @@
      simulation. Validated against a white chart surface. */
   --color-series-bookings: #1B7FA8;
   --color-series-lottery: #B5654A;
+  /* Raffles: a deep sage, kept apart from both by lightness rather than hue,
+     which holds under every colour-vision simulation. */
+  --color-series-raffle: #2E3826;
   --color-series-muted: #B5AFA5;
 
   --font-sans: var(--font-dm-sans, "DM Sans"), ui-sans-serif, system-ui, sans-serif;

@@ -36,7 +36,8 @@ function num(value: unknown): number {
  *  - the part of a booking settled outside Stripe — cash, cheque, bank transfer,
  *    or a manual booking the office marked as paid — which is what the booking
  *    records as paid beyond its Stripe payments;
- *  - lottery payments, first sale and every renewal alike.
+ *  - lottery payments, first sale and every renewal alike;
+ *  - raffle orders, card and cash, dated when the money was taken.
  *
  * Refunds are netted against the payment they came off, so they reduce income in
  * the period the money was taken rather than the period it went back. That keeps
@@ -69,6 +70,13 @@ const incomeLedger = sql`
            case when lp.source = 'manual' then 'offline' else 'card' end,
            (lp.amount - lp.refunded_amount)
     from lottery_payments lp
+    union all
+    select ro.paid_at,
+           'raffle'::text,
+           case when ro.source = 'manual' then 'offline' else 'card' end,
+           (ro.amount - ro.refunded_amount)
+    from raffle_orders ro
+    where ro.status in ('paid', 'refunded') and ro.paid_at is not null
   )
 `;
 
@@ -80,6 +88,7 @@ export type IncomeTotals = {
   total: number;
   bookings: number;
   lottery: number;
+  raffle: number;
   card: number;
   offline: number;
   payments: number;
@@ -89,6 +98,7 @@ export type IncomeBucket = {
   bucket: string;
   bookings: number;
   lottery: number;
+  raffle: number;
 };
 
 export async function getIncomeTotals(start: Date, end: Date): Promise<IncomeTotals> {
@@ -97,6 +107,7 @@ export async function getIncomeTotals(start: Date, end: Date): Promise<IncomeTot
     total: string;
     bookings: string;
     lottery: string;
+    raffle: string;
     card: string;
     offline: string;
     payments: string;
@@ -106,6 +117,7 @@ export async function getIncomeTotals(start: Date, end: Date): Promise<IncomeTot
       coalesce(sum(amount), 0) as total,
       coalesce(sum(amount) filter (where source = 'bookings'), 0) as bookings,
       coalesce(sum(amount) filter (where source = 'lottery'), 0) as lottery,
+      coalesce(sum(amount) filter (where source = 'raffle'), 0) as raffle,
       coalesce(sum(amount) filter (where method = 'card'), 0) as card,
       coalesce(sum(amount) filter (where method = 'offline'), 0) as offline,
       count(*) as payments
@@ -117,6 +129,7 @@ export async function getIncomeTotals(start: Date, end: Date): Promise<IncomeTot
     total: num(row?.total),
     bookings: num(row?.bookings),
     lottery: num(row?.lottery),
+    raffle: num(row?.raffle),
     card: num(row?.card),
     offline: num(row?.offline),
     payments: num(row?.payments),
@@ -127,12 +140,13 @@ export async function getIncomeByBucket(period: ReportPeriod): Promise<IncomeBuc
   await requireAdmin();
   const unit = truncExpr(period.granularity);
   return (
-    await rows<{ bucket: string; bookings: string; lottery: string }>(sql`
+    await rows<{ bucket: string; bookings: string; lottery: string; raffle: string }>(sql`
       ${incomeLedger}
       select
         to_char(date_trunc(${unit}, paid_at), 'YYYY-MM-DD') as bucket,
         coalesce(sum(amount) filter (where source = 'bookings'), 0) as bookings,
-        coalesce(sum(amount) filter (where source = 'lottery'), 0) as lottery
+        coalesce(sum(amount) filter (where source = 'lottery'), 0) as lottery,
+        coalesce(sum(amount) filter (where source = 'raffle'), 0) as raffle
       from ledger
       where paid_at >= ${period.start} and paid_at < ${period.end}
       group by 1
@@ -142,6 +156,7 @@ export async function getIncomeByBucket(period: ReportPeriod): Promise<IncomeBuc
     bucket: row.bucket,
     bookings: num(row.bookings),
     lottery: num(row.lottery),
+    raffle: num(row.raffle),
   }));
 }
 
@@ -810,6 +825,19 @@ export async function getIncomeLedgerRows(start: Date, end: Date): Promise<Expor
     from lottery_payments lp
     join lottery_tickets t on t.id = lp.ticket_id
     where lp.paid_at >= ${start} and lp.paid_at < ${end}
+    union all
+    select
+      to_char(ro.paid_at, 'YYYY-MM-DD'),
+      'Raffle',
+      case when ro.source = 'manual' then 'Offline' else 'Card' end,
+      ro.name,
+      r.title || ': ' || ro.quantity || ' ticket(s)',
+      (ro.amount - ro.refunded_amount) / 100.0,
+      ro.refunded_amount / 100.0,
+      coalesce(ro.stripe_payment_intent_id, 'raffle:' || ro.id)
+    from raffle_orders ro
+    join raffles r on r.id = ro.raffle_id
+    where ro.status in ('paid', 'refunded') and ro.paid_at >= ${start} and ro.paid_at < ${end}
     order by 1
   `);
   return result.map((row) => ({
@@ -899,6 +927,43 @@ export async function getLotteryExportRows(start: Date, end: Date): Promise<Expo
     Status: String(row.status ?? ""),
     Renews: String(row.renews ?? ""),
     "Amount (£)": Number(row.amount ?? 0).toFixed(2),
+    Reference: String(row.reference ?? ""),
+  }));
+}
+
+export async function getRaffleExportRows(start: Date, end: Date): Promise<ExportRow[]> {
+  await requireAdmin();
+  const result = await rows<Record<string, unknown>>(sql`
+    select
+      to_char(ro.paid_at, 'YYYY-MM-DD') as paid_on,
+      r.title,
+      ro.name,
+      coalesce(ro.email, '') as email,
+      coalesce(ro.phone, '') as phone,
+      ro.quantity,
+      ro.payment_method,
+      ro.status,
+      (ro.amount - ro.refunded_amount) / 100.0 as amount,
+      ro.stripe_fee_pence / 100.0 as fee,
+      coalesce(ro.sold_by, '') as sold_by,
+      coalesce(ro.stripe_payment_intent_id, 'raffle:' || ro.id) as reference
+    from raffle_orders ro
+    join raffles r on r.id = ro.raffle_id
+    where ro.status in ('paid', 'refunded') and ro.paid_at >= ${start} and ro.paid_at < ${end}
+    order by ro.paid_at
+  `);
+  return result.map((row) => ({
+    "Paid on": String(row.paid_on ?? ""),
+    Raffle: String(row.title ?? ""),
+    Name: String(row.name ?? ""),
+    Email: String(row.email ?? ""),
+    Phone: String(row.phone ?? ""),
+    Tickets: Number(row.quantity ?? 0),
+    Method: String(row.payment_method ?? ""),
+    Status: String(row.status ?? ""),
+    "Amount (£)": Number(row.amount ?? 0).toFixed(2),
+    "Stripe fee (£)": Number(row.fee ?? 0).toFixed(2),
+    "Sold by": String(row.sold_by ?? ""),
     Reference: String(row.reference ?? ""),
   }));
 }

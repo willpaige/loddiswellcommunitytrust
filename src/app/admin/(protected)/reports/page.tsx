@@ -99,6 +99,12 @@ export default async function ReportsOverviewPage({
         value: bucket.row?.lottery ?? 0,
         className: "bg-series-lottery",
       },
+      {
+        key: "raffle",
+        label: "Raffles",
+        value: bucket.row?.raffle ?? 0,
+        className: "bg-series-raffle",
+      },
     ],
   }));
 
@@ -138,7 +144,7 @@ export default async function ReportsOverviewPage({
       <div className="mb-6">
         <h1 className="text-3xl font-bold">Reports</h1>
         <p className="mt-1 text-muted-foreground">
-          Income, bookings and lottery performance for {period.label}.
+          Income, bookings, lottery and raffle performance for {period.label}.
         </p>
       </div>
 
@@ -175,7 +181,7 @@ export default async function ReportsOverviewPage({
             </p>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
               <StatTile
                 label="Bookings income"
                 value={money(income.bookings)}
@@ -197,6 +203,17 @@ export default async function ReportsOverviewPage({
                 }
                 deltaLabel="vs previous"
                 hint={`${Math.round((income.lottery / Math.max(1, income.total)) * 100)}% of income`}
+              />
+              <StatTile
+                label="Raffle income"
+                value={money(income.raffle)}
+                delta={
+                  previousIncome && previousIncome.total > 0
+                    ? percentChange(income.raffle, previousIncome.raffle)
+                    : undefined
+                }
+                deltaLabel="vs previous"
+                hint={`${Math.round((income.raffle / Math.max(1, income.total)) * 100)}% of income`}
               />
               <StatTile
                 label="Taken by card"
@@ -257,18 +274,20 @@ export default async function ReportsOverviewPage({
               items={[
                 { label: "Bookings", className: "bg-series-bookings" },
                 { label: "Lottery", className: "bg-series-lottery" },
+                { label: "Raffles", className: "bg-series-raffle" },
               ]}
             />
           </CardHeader>
           <CardContent>
             <ColumnChart data={columns} />
             <DataTable
-              columns={["Period", "Bookings", "Lottery", "Total"]}
+              columns={["Period", "Bookings", "Lottery", "Raffles", "Total"]}
               rows={aligned.map((bucket) => [
                 bucket.title,
                 money(bucket.row?.bookings ?? 0),
                 money(bucket.row?.lottery ?? 0),
-                money((bucket.row?.bookings ?? 0) + (bucket.row?.lottery ?? 0)),
+                money(bucket.row?.raffle ?? 0),
+                money((bucket.row?.bookings ?? 0) + (bucket.row?.lottery ?? 0) + (bucket.row?.raffle ?? 0)),
               ])}
             />
             <ReportNote>
@@ -381,6 +400,7 @@ export default async function ReportsOverviewPage({
               items={[
                 { key: "bookings", label: "Bookings", value: income.bookings },
                 { key: "lottery", label: "Lottery", value: income.lottery },
+                { key: "raffle", label: "Raffles", value: income.raffle },
               ]}
             />
             <ReportNote>

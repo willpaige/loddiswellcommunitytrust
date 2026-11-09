@@ -6,6 +6,7 @@ import {
   getBookingExportRows,
   getIncomeLedgerRows,
   getLotteryExportRows,
+  getRaffleExportRows,
 } from "@/lib/reports/queries";
 
 // The treasurer's route out of the admin and into a spreadsheet. It reads the
@@ -34,7 +35,9 @@ export async function GET(request: NextRequest) {
       ? await getBookingExportRows(period.start, period.end)
       : report === "lottery"
         ? await getLotteryExportRows(period.start, period.end)
-        : await getIncomeLedgerRows(period.start, period.end);
+        : report === "raffles"
+          ? await getRaffleExportRows(period.start, period.end)
+          : await getIncomeLedgerRows(period.start, period.end);
 
   // An empty result still gets a file with headings, so an empty period reads as
   // "nothing happened" rather than "the export is broken".
@@ -46,7 +49,9 @@ export async function GET(request: NextRequest) {
           ? ["Booked on", "Starts", "Facility", "Customer", "Amount (£)", "Paid (£)"]
           : report === "lottery"
             ? ["Paid on", "Name", "Email", "Tickets", "Amount (£)"]
-            : ["Date", "Source", "Method", "Payer", "Detail", "Amount (£)"],
+            : report === "raffles"
+              ? ["Paid on", "Raffle", "Name", "Tickets", "Amount (£)"]
+              : ["Date", "Source", "Method", "Payer", "Detail", "Amount (£)"],
   });
 
   const filename = `loddiswell-${report}-${toIsoDate(period.start)}-to-${toIsoDate(

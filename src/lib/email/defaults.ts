@@ -20,9 +20,15 @@ export type EmailTemplateKey =
   | "booking_invoice_overdue"
   | "booking_invoice_overdue_manager"
   | "booking_invoice_released"
-  | "booking_invoice_released_manager";
+  | "booking_invoice_released_manager"
+  | "raffle_tickets"
+  | "raffle_winner"
+  | "raffle_results"
+  | "raffle_draw_manager"
+  | "raffle_on_sale"
+  | "raffle_draw_reminder";
 
-export type EmailTemplateCategory = "bookings" | "lottery" | "system";
+export type EmailTemplateCategory = "bookings" | "lottery" | "raffles" | "system";
 
 export type EmailTemplateDefault = {
   key: EmailTemplateKey;
@@ -232,5 +238,59 @@ export const emailTemplateDefaults: EmailTemplateDefault[] = [
     subject: "Manage your Loddiswell lottery subscription",
     body: "Hi,\n\nUse the link below to manage your Loddiswell Community Lottery subscription, update payment details, cancel, or download invoices.\n\n{{manageUrl}}\n\nThis link will expire shortly.",
     variables: ["manageUrl"],
+  },
+  {
+    key: "raffle_tickets",
+    category: "raffles",
+    name: "Raffle tickets",
+    description: "Sent when someone buys raffle tickets online, or a cash sale is entered with an email.",
+    subject: "Your {{raffleTitle}} tickets: {{ticketNumbers}}",
+    body: "Hi {{name}},\n\nThank you for supporting {{cause}}. You're in the {{raffleTitle}} raffle.\n\nYour ticket numbers: {{ticketNumbers}}\nTickets: {{quantity}} · Paid: {{amount}}\n\nThe draw is on {{drawDate}}. We'll email you the results.\n\n{{raffleUrl}}\n\n{{smallPrint}}",
+    variables: ["name", "raffleTitle", "ticketNumbers", "quantity", "amount", "drawDate", "cause", "raffleUrl", "smallPrint"],
+  },
+  {
+    key: "raffle_winner",
+    category: "raffles",
+    name: "Raffle winner",
+    description: "Sent to each winner when draw results are published, instead of the results email.",
+    subject: "You've won {{prizeName}}!",
+    body: "Hi {{name}},\n\nCongratulations! Ticket {{ticketNumber}} was drawn for {{prizeRank}} prize: {{prizeName}} in the {{raffleTitle}} raffle on {{drawDate}}.\n\nHow to claim\n{{claimInstructions}}\nPlease claim by {{claimBy}}.\n\n{{ageNotice}}\n\nPrizes not claimed by that date may be redrawn, under the raffle terms.\n\n{{otherTickets}}\n\nThank you for supporting {{cause}}!",
+    variables: ["name", "ticketNumber", "prizeRank", "prizeName", "raffleTitle", "drawDate", "claimInstructions", "claimBy", "ageNotice", "otherTickets", "cause"],
+  },
+  {
+    key: "raffle_results",
+    category: "raffles",
+    name: "Raffle results",
+    description: "Sent to every other entrant when draw results are published.",
+    subject: "{{raffleTitle}} results: did you win?",
+    body: "Hi {{name}},\n\nThe {{raffleTitle}} raffle was drawn on {{drawDate}}. Your tickets {{yourTickets}} weren't picked this time.\n\nThe winners\n{{winners}}\n\nTogether we raised {{totalRaised}} for {{cause}}. Thank you!\n\nSee the full results: {{resultsUrl}}\n\n{{nextRaffle}}",
+    variables: ["name", "raffleTitle", "drawDate", "yourTickets", "winners", "totalRaised", "cause", "resultsUrl", "nextRaffle"],
+  },
+  {
+    key: "raffle_draw_manager",
+    category: "raffles",
+    name: "Raffle draw summary (trustees)",
+    description: "Sent to the Trust's inbox when draw results are published.",
+    subject: "Raffle drawn: {{raffleTitle}} ({{proceeds}})",
+    body: "{{raffleTitle}} was drawn {{drawnAt}} by {{drawnBy}}. {{poolSize}} tickets in the draw.\n\nWinners to contact\n{{winnersFull}}\n\nEmails\n{{emailSummary}}\n\nEntrants with no email (phone them)\n{{noEmailList}}\n\nProceeds: {{proceeds}}\n\n{{adminUrl}}",
+    variables: ["raffleTitle", "drawnAt", "drawnBy", "poolSize", "winnersFull", "emailSummary", "noEmailList", "proceeds", "adminUrl"],
+  },
+  {
+    key: "raffle_on_sale",
+    category: "raffles",
+    name: "Raffle on sale",
+    description: "Sent to people who asked to be told when a raffle's tickets go on sale.",
+    subject: "Tickets on sale now: {{raffleTitle}}",
+    body: "Hello,\n\nYou asked us to let you know: tickets for {{raffleTitle}} are on sale now at {{price}} each.\n\n{{tagline}}\n\nThe draw is on {{drawDate}}.\n\n{{raffleUrl}}",
+    variables: ["raffleTitle", "price", "tagline", "drawDate", "raffleUrl"],
+  },
+  {
+    key: "raffle_draw_reminder",
+    category: "raffles",
+    name: "Raffle draw reminder",
+    description: "Sent to entrants on the morning of the draw.",
+    subject: "The {{raffleTitle}} draw is today",
+    body: "Hi {{name}},\n\nThe {{raffleTitle}} raffle is drawn today at {{drawTime}}. Your tickets: {{yourTickets}}.\n\n{{liveStream}}\n\nGood luck!\n\n{{raffleUrl}}",
+    variables: ["name", "raffleTitle", "drawTime", "yourTickets", "liveStream", "raffleUrl"],
   },
 ];

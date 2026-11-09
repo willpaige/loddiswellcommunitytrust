@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 const categoryLabels: Record<string, string> = {
   bookings: "Bookings",
   lottery: "Lottery",
+  raffles: "Raffles",
   system: "System",
 };
 
@@ -19,7 +20,7 @@ export default async function AdminEmailsPage({
   const params = await searchParams;
   const activeCategory = params.category;
   const templates = await getEmailTemplates(activeCategory);
-  const categories = activeCategory ? [activeCategory] : ["bookings", "lottery", "system"];
+  const categories = activeCategory ? [activeCategory] : ["bookings", "lottery", "raffles", "system"];
 
   return (
     <div>
@@ -46,7 +47,9 @@ export default async function AdminEmailsPage({
                     ? "Customer and booking manager messages."
                     : category === "lottery"
                       ? "Lottery subscription, draw, and payment messages."
-                      : "Account and operational email templates."}
+                      : category === "raffles"
+                        ? "Raffle tickets, results, winner and reminder messages."
+                        : "Account and operational email templates."}
                 </CardDescription>
               </CardHeader>
               <CardContent className="divide-y">

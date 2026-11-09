@@ -18,6 +18,7 @@ import { ensureLotteryTicketNumbers, ticketNumbersText } from "@/actions/lottery
 import { sendTemplateEmail } from "@/lib/email/send";
 import { upsertCustomerRecord } from "@/actions/customer-records";
 import { recordLotteryPayment } from "@/lib/lottery/payments";
+import { applyRaffleRefund, completeRaffleOrder, expireRaffleOrder } from "@/lib/raffles/orders";
 
 type SubStatus = "active" | "expired" | "refunded" | "canceled" | "past_due";
 
@@ -244,6 +245,12 @@ export async function POST(req: NextRequest) {
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
+        // Raffle tickets are one-off payments; they must be handled before the
+        // subscription fall-through at the end of this case ignores them.
+        if (session.metadata?.type === "raffle_entry") {
+          await completeRaffleOrder(session, new Date(event.created * 1000));
+          break;
+        }
         // A top-up settles the difference after a booking changed, so it adds to
         // what has been paid rather than replacing it, and leaves the booking's
         // original payment references alone.
@@ -341,6 +348,22 @@ export async function POST(req: NextRequest) {
 
         await upsertFromSubscription(sub, { name, email, phone });
         await recordLotteryCheckoutPayment(subId, session);
+        break;
+      }
+      case "checkout.session.expired": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        if (session.metadata?.type === "raffle_entry") {
+          await expireRaffleOrder(session.id);
+        }
+        break;
+      }
+      case "charge.refunded": {
+        const charge = event.data.object as Stripe.Charge;
+        const intentId =
+          typeof charge.payment_intent === "string" ? charge.payment_intent : charge.payment_intent?.id;
+        // Only raffle orders are matched by payment intent here; booking
+        // refunds are recorded by the admin action that issues them.
+        if (intentId) await applyRaffleRefund(intentId, charge.amount_refunded);
         break;
       }
       case "customer.subscription.updated":

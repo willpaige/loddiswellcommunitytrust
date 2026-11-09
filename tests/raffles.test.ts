@@ -7,12 +7,16 @@ import * as schema from "@/lib/db/schema";
 
 const state = vi.hoisted(() => ({ db: null as unknown as ReturnType<typeof drizzle<typeof schema>>,
   session: { user: { id: "admin", email: "admin@example.test", role: "admin" } } as null | { user: { id: string; email: string; role: string } },
-  send: vi.fn() }));
+  send: vi.fn(), createSession: vi.fn(), retrieveIntent: vi.fn() }));
 vi.mock("@/lib/db", () => ({ get db() { return state.db; } }));
 vi.mock("@/lib/auth", () => ({ auth: async () => state.session }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => ({ redirect: (url: string) => { throw Object.assign(new Error("NEXT_REDIRECT"), { url }); } }));
 vi.mock("postmark", () => ({ ServerClient: class { sendEmail = state.send; } }));
+vi.mock("@/lib/stripe", () => ({ getStripe: () => ({
+  checkout: { sessions: { create: state.createSession } },
+  paymentIntents: { retrieve: state.retrieveIntent },
+}) }));
 
 import { deriveRaffleState, ticketsRemaining } from "@/lib/raffles/state";
 import { compressRanges, formatTicket } from "@/lib/raffles/numbers";
@@ -20,6 +24,9 @@ import { ukInputToDate, dateToUkInput } from "@/lib/raffles/time";
 import { reserveTickets, releaseTickets } from "@/lib/raffles/capacity";
 import { ensureRaffleTickets, markOrderPaid } from "@/lib/raffles/allocate";
 import { createRaffle, updateRaffle, duplicateRaffle } from "@/actions/raffles";
+import { applyRaffleRefund, completeRaffleOrder, expireRaffleOrder, releaseStaleRaffleOrders, startRaffleCheckout } from "@/lib/raffles/orders";
+import { getIncomeTotals } from "@/lib/reports/queries";
+import type Stripe from "stripe";
 
 let pg: PGlite;
 beforeAll(async () => {
@@ -34,6 +41,9 @@ beforeEach(async () => {
   await pg.exec("TRUNCATE raffles, raffle_orders, raffle_tickets, raffle_draws, raffle_interest, email_logs, email_templates, audit_log CASCADE");
   state.session = { user: { id: "admin", email: "admin@example.test", role: "admin" } };
   state.send.mockReset().mockResolvedValue({ MessageID: "msg" });
+  state.createSession.mockReset().mockImplementation(async () => ({ id: `cs_${Math.random().toString(36).slice(2)}`, url: "https://checkout.stripe.test/pay" }));
+  state.retrieveIntent.mockReset().mockResolvedValue({ latest_charge: { balance_transaction: { fee: 35 } } });
+  vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(NOW);
 });
 
 const NOW = new Date("2026-11-10T12:00:00Z");
@@ -185,5 +195,123 @@ describe("creating and editing raffles", () => {
     const [copy] = await state.db.select().from(schema.raffles).where(eq(schema.raffles.slug, "november-copy"));
     expect(copy).toMatchObject({ published: false, featured: false, prizes: [], ticketsReserved: 0, ticketsIssued: 0, ticketPricePence: 200 });
     expect(copy.drawAt.toISOString()).toBe("2026-12-30T20:00:00.000Z");
+  });
+});
+
+function completedSession(order: { id: string; stripeCheckoutSessionId: string | null }, patch: Partial<Stripe.Checkout.Session> = {}) {
+  return {
+    id: order.stripeCheckoutSessionId,
+    metadata: { type: "raffle_entry", raffleId: "r1", orderId: order.id },
+    amount_total: 1000,
+    payment_intent: "pi_1",
+    customer_details: { email: "Sam@Example.test", name: "Card Name", phone: null },
+    custom_fields: [
+      { key: "full_name", text: { value: "Sam Taylor" } },
+      { key: "phone", text: { value: "07700 900123" } },
+    ],
+    ...patch,
+  } as unknown as Stripe.Checkout.Session;
+}
+
+async function checkout(quantity = 5, extra: Partial<Parameters<typeof startRaffleCheckout>[0]> = {}) {
+  const result = await startRaffleCheckout({ raffleId: "r1", quantity, ageConfirmed: true, marketingOptOut: false, ...extra }, NOW);
+  const [order] = await state.db.select().from(schema.raffleOrders).orderBy(schema.raffleOrders.createdAt);
+  return { result, order };
+}
+
+describe("online checkout", () => {
+  it("holds the tickets, records a pending order and opens a 30-minute Stripe session", async () => {
+    await raffle();
+    const { result, order } = await checkout();
+    expect(result).toEqual({ url: "https://checkout.stripe.test/pay" });
+    expect(order).toMatchObject({ status: "pending", quantity: 5, amount: 1000, ageConfirmed: true });
+    expect(order.stripeCheckoutSessionId).toMatch(/^cs_/);
+    const params = state.createSession.mock.calls[0][0];
+    expect(params).toMatchObject({ mode: "payment", metadata: { type: "raffle_entry", orderId: order.id } });
+    expect(params.line_items[0]).toMatchObject({ quantity: 5, price_data: { currency: "gbp", unit_amount: 200 } });
+    expect(params.expires_at).toBe(Math.floor(NOW.getTime() / 1000) + 30 * 60);
+    expect((await state.db.select().from(schema.raffles))[0].ticketsReserved).toBe(5);
+  });
+  it("refuses a missing age confirmation, too many tickets, and sales outside the window", async () => {
+    await raffle();
+    expect((await checkout(1, { ageConfirmed: false })).result).toMatchObject({ status: 400 });
+    expect((await checkout(51)).result).toMatchObject({ status: 400 });
+    expect((await checkout(11)).result).toMatchObject({ status: 409, error: "Only 10 tickets are left." });
+    await state.db.update(schema.raffles).set({ salesCloseAt: new Date("2026-11-09T00:00:00Z") });
+    expect((await checkout(1)).result).toMatchObject({ status: 409 });
+    expect(state.createSession).not.toHaveBeenCalled();
+  });
+  it("gives the hold back when Stripe fails", async () => {
+    await raffle();
+    state.createSession.mockRejectedValueOnce(new Error("Stripe down"));
+    const { result, order } = await checkout();
+    expect(result).toMatchObject({ status: 502 });
+    expect(order.status).toBe("expired");
+    expect((await state.db.select().from(schema.raffles))[0].ticketsReserved).toBe(0);
+  });
+});
+
+describe("Stripe webhook handling", () => {
+  it("completes an order once: buyer details, numbers, fee, customer record and one email", async () => {
+    await raffle();
+    const { order } = await checkout();
+    const session = completedSession(order);
+    const paidAt = new Date("2026-11-10T12:05:00Z");
+    await completeRaffleOrder(session, paidAt);
+    await completeRaffleOrder(session, paidAt);
+
+    const [paid] = await state.db.select().from(schema.raffleOrders);
+    expect(paid).toMatchObject({ status: "paid", name: "Sam Taylor", email: "sam@example.test", phone: "07700 900123",
+      stripePaymentIntentId: "pi_1", stripeFeePence: 35 });
+    expect(paid.paidAt?.toISOString()).toBe(paidAt.toISOString());
+    expect((await state.db.select().from(schema.raffleTickets)).map((t) => t.ticketNumber).sort()).toEqual([1, 2, 3, 4, 5]);
+    expect(state.send).toHaveBeenCalledTimes(1);
+    expect(state.send.mock.calls[0][0]).toMatchObject({ To: "sam@example.test", Subject: expect.stringContaining("0001–0005") });
+    expect(await state.db.select().from(schema.users).where(eq(schema.users.email, "sam@example.test"))).toHaveLength(1);
+  });
+  it("releases the hold when a session expires, once", async () => {
+    await raffle();
+    const { order } = await checkout();
+    await expireRaffleOrder(order.stripeCheckoutSessionId!);
+    await expireRaffleOrder(order.stripeCheckoutSessionId!);
+    expect((await state.db.select().from(schema.raffles))[0].ticketsReserved).toBe(0);
+    expect((await state.db.select().from(schema.raffleOrders))[0].status).toBe("expired");
+  });
+  it("backstops missed expiry events after a grace period, and still honours a late payment", async () => {
+    await raffle();
+    const { order } = await checkout();
+    expect(await releaseStaleRaffleOrders(new Date("2026-11-10T12:40:00Z"))).toBe(0);
+    expect(await releaseStaleRaffleOrders(new Date("2026-11-10T12:50:00Z"))).toBe(1);
+    expect((await state.db.select().from(schema.raffles))[0].ticketsReserved).toBe(0);
+    await completeRaffleOrder(completedSession(order), new Date("2026-11-10T12:51:00Z"));
+    expect((await state.db.select().from(schema.raffleOrders))[0].status).toBe("paid");
+    expect((await state.db.select().from(schema.raffles))[0].ticketsReserved).toBe(5);
+    expect(await state.db.select().from(schema.raffleTickets)).toHaveLength(5);
+  });
+  it("voids tickets and frees them on a full refund, keeps them on a partial one", async () => {
+    await raffle();
+    const { order } = await checkout();
+    await completeRaffleOrder(completedSession(order), NOW);
+    expect(await applyRaffleRefund("pi_1", 400)).toBe(true);
+    expect((await state.db.select().from(schema.raffleTickets)).every((t) => !t.void)).toBe(true);
+    await applyRaffleRefund("pi_1", 1000);
+    const [refunded] = await state.db.select().from(schema.raffleOrders);
+    expect(refunded).toMatchObject({ status: "refunded", refundedAmount: 1000 });
+    expect((await state.db.select().from(schema.raffleTickets)).every((t) => t.void)).toBe(true);
+    expect((await state.db.select().from(schema.raffles))[0].ticketsReserved).toBe(0);
+    expect(await applyRaffleRefund("pi_unknown", 100)).toBe(false);
+  });
+});
+
+describe("income ledger", () => {
+  it("counts each raffle order once, on the day paid, net of refunds, split card/offline", async () => {
+    await raffle({ maxTickets: null });
+    await order({ status: "paid", paidAt: new Date("2026-11-03T10:00:00Z"), amount: 1000 });
+    await order({ status: "paid", source: "manual", paymentMethod: "cash", paidAt: new Date("2026-11-04T10:00:00Z"), amount: 400 });
+    await order({ status: "refunded", paidAt: new Date("2026-11-05T10:00:00Z"), amount: 600, refundedAmount: 600 });
+    await order({ status: "pending", amount: 999 });
+    await order({ status: "paid", paidAt: new Date("2026-10-30T10:00:00Z"), amount: 200 });
+    const totals = await getIncomeTotals(new Date("2026-11-01T00:00:00Z"), new Date("2026-12-01T00:00:00Z"));
+    expect(totals).toMatchObject({ raffle: 1400, total: 1400, card: 1000, offline: 400, payments: 3 });
   });
 });
