@@ -21,23 +21,26 @@ type Props = {
   drawId: string;
   recipientCount: number;
   notifiedAt: Date | null;
+  /** Recipients whose send failed and never succeeded. */
+  undeliveredCount?: number;
 };
 
 export function SendDrawNotificationsButton({
   drawId,
   recipientCount,
   notifiedAt,
+  undeliveredCount = 0,
 }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleSend() {
+  async function handleSend(retry = false) {
     setLoading(true);
     setError(null);
     try {
-      const r = await sendDrawNotifications(drawId);
+      const r = await sendDrawNotifications(drawId, { retry });
       if (r.alreadySent) {
         setResult("This draw was already notified.");
       } else if (r.failed > 0) {
@@ -57,12 +60,44 @@ export function SendDrawNotificationsButton({
 
   if (notifiedAt) {
     return (
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <CheckCircle2
-          className="h-4 w-4 text-sage-600"
-          aria-hidden="true"
-        />
-        Notifications sent {new Date(notifiedAt).toLocaleString("en-GB")}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <CheckCircle2
+            className="h-4 w-4 text-sage-600"
+            aria-hidden="true"
+          />
+          Notifications sent {new Date(notifiedAt).toLocaleString("en-GB")}
+        </div>
+        {undeliveredCount > 0 && (
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">
+              {undeliveredCount} email{undeliveredCount === 1 ? "" : "s"} could
+              not be delivered. Retrying only sends to these addresses.
+            </p>
+            <Button
+              variant="outline"
+              disabled={loading}
+              onClick={() => handleSend(true)}
+            >
+              {loading ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Mail className="h-4 w-4" aria-hidden="true" />
+              )}
+              Retry {undeliveredCount} failed
+            </Button>
+          </div>
+        )}
+        {result && (
+          <p className="text-sm text-sage-700" role="status">
+            {result}
+          </p>
+        )}
+        {error && (
+          <p className="text-sm text-red-600" role="alert">
+            {error}
+          </p>
+        )}
       </div>
     );
   }
@@ -100,7 +135,7 @@ export function SendDrawNotificationsButton({
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleSend}
+              onClick={() => handleSend()}
               className="bg-sage-700 hover:bg-sage-800 text-white"
             >
               Send to {recipientCount} subscriber

@@ -12,6 +12,7 @@ import { SendDrawNotificationsButton } from "@/components/admin/send-draw-notifi
 import { getDraw, updateDraw } from "@/actions/lottery-draws";
 import { db } from "@/lib/db";
 import { lotteryTickets } from "@/lib/db/schema";
+import { countUndeliveredInBatch } from "@/lib/email/bulk-send";
 
 export default async function EditLotteryDrawPage({
   params,
@@ -34,6 +35,9 @@ export default async function EditLotteryDrawPage({
       .map((r) => r.email.toLowerCase().trim())
       .filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))
   ).size;
+  const undeliveredCount = draw.notifiedAt
+    ? await countUndeliveredInBatch("lottery_draw", `${draw.id}:`)
+    : 0;
 
   return (
     <div>
@@ -73,6 +77,7 @@ export default async function EditLotteryDrawPage({
               drawId={draw.id}
               recipientCount={recipientCount}
               notifiedAt={draw.notifiedAt}
+              undeliveredCount={undeliveredCount}
             />
           </CardContent>
         </Card>

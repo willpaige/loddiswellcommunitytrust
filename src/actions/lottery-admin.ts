@@ -18,6 +18,8 @@ import {
 import { sendTemplateEmail } from "@/lib/email/send";
 import { upsertCustomerRecord } from "@/actions/customer-records";
 import { recordLotteryPayment, syncManualLotteryPayment } from "@/lib/lottery/payments";
+import { pickWinners } from "@/lib/draw/random";
+import { sendBulkTemplateEmails } from "@/lib/email/bulk-send";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -442,26 +444,13 @@ export async function drawRandomWinners(
     ticketNumber: row.ticketNumber,
   }));
 
-  // Fisher-Yates shuffle
-  for (let i = pool.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [pool[i], pool[j]] = [pool[j], pool[i]];
-  }
-
-  // Walk shuffled list picking one prize per ticket holder. A holder is a
-  // (payer email, holder name) pair, so a family sharing one email can win
-  // more than once in a draw if they hold separately named tickets.
-  const holderKey = (entry: DrawWinner) =>
-    `${entry.email}|${entry.name.trim().toLowerCase().replace(/\s+/g, " ")}`;
-  const winners: DrawWinner[] = [];
-  const seen = new Set<string>();
-  for (const entry of pool) {
-    const key = holderKey(entry);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    winners.push(entry);
-    if (winners.length >= prizeCount) break;
-  }
+  // One prize per ticket holder. A holder is a (payer email, holder name)
+  // pair, so a family sharing one email can win more than once in a draw if
+  // they hold separately named tickets.
+  const winners = pickWinners(pool, prizeCount, {
+    holderKey: (entry) =>
+      `${entry.email}|${entry.name.trim().toLowerCase().replace(/\s+/g, " ")}`,
+  });
 
   return {
     winners,
@@ -476,8 +465,11 @@ function ordinal(n: number): string {
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 
+// `retry` re-runs the batch after some sends failed. Addresses already sent
+// for this draw are skipped by the email log, so nobody gets it twice.
 export async function sendDrawNotifications(
-  drawId: string
+  drawId: string,
+  { retry = false }: { retry?: boolean } = {}
 ): Promise<{ sent: number; failed: number; alreadySent?: boolean }> {
   const session = await auth();
   if (!session?.user) throw new Error("Unauthorized");
@@ -489,7 +481,7 @@ export async function sendDrawNotifications(
     .limit(1);
   const draw = drawRows[0];
   if (!draw) throw new Error("Draw not found");
-  if (draw.notifiedAt) {
+  if (draw.notifiedAt && !retry) {
     return { sent: 0, failed: 0, alreadySent: true };
   }
 
@@ -522,39 +514,32 @@ export async function sendDrawNotifications(
       return `${ordinal(r.rank)}: ${r.winner}${ticket} — ${r.prize}`;
     })
     .join("\n");
-  let sent = 0;
-  let failed = 0;
-  for (const recipient of recipients) {
-    try {
-      const result = await sendTemplateEmail({
-        key: "lottery_draw_results",
-        to: recipient.email,
-        variables: {
-          drawDate: format(draw.drawDate, "MMMM yyyy"),
-          winners: winnersText,
-          notes: draw.notes || "",
-        },
-        relatedEntityType: "lottery_draw",
-        relatedEntityId: `${drawId}:${recipient.email}`,
-      });
-      if (result.sent) sent += 1;
-    } catch {
-      // Failure is recorded in email_logs by sendTemplateEmail;
-      // a bad address (e.g. Postmark suppression) must not abort the run.
-      failed += 1;
-    }
-  }
+  const { sent, failed } = await sendBulkTemplateEmails(
+    recipients.map((recipient) => ({
+      key: "lottery_draw_results" as const,
+      to: recipient.email,
+      variables: {
+        drawDate: format(draw.drawDate, "MMMM yyyy"),
+        winners: winnersText,
+        notes: draw.notes || "",
+      },
+      relatedEntityId: `${drawId}:${recipient.email}`,
+    })),
+    "lottery_draw"
+  );
 
-  await db
-    .update(lotteryDraws)
-    .set({ notifiedAt: new Date() })
-    .where(eq(lotteryDraws.id, drawId));
+  if (!draw.notifiedAt) {
+    await db
+      .update(lotteryDraws)
+      .set({ notifiedAt: new Date() })
+      .where(eq(lotteryDraws.id, drawId));
+  }
 
   await logAudit({
     action: "update",
     entity: "lottery",
     entityId: drawId,
-    description: `Sent draw notifications to ${sent} subscribers${failed ? ` (${failed} failed)` : ""}`,
+    description: `${retry ? "Retried" : "Sent"} draw notifications: ${sent} sent${failed ? `, ${failed} failed` : ""}`,
   });
 
   revalidatePath("/admin/lottery");
