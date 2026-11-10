@@ -39,6 +39,8 @@ import { sendTemplateEmail } from "@/lib/email/send";
 import { readFileSync } from "node:fs";
 import { computeRaffleReturn } from "@/lib/raffles/limits";
 import { getDueRaffleReturns, getRaffleReturn } from "@/actions/raffle-return";
+import { rafflesEmailSection } from "@/lib/raffles/email-section";
+import { getRaffleSummaries, getRaffleTotals } from "@/lib/reports/queries";
 
 let pg: PGlite;
 beforeAll(async () => {
@@ -734,5 +736,40 @@ describe("council return", () => {
     expect(await getDueRaffleReturns(new Date("2027-03-10T00:00:00Z"))).toMatchObject([{ id: "r1", overdue: true }]);
     await state.db.update(schema.raffles).set({ returnSubmittedAt: NOW });
     expect(await getDueRaffleReturns(new Date("2027-03-10T00:00:00Z"))).toHaveLength(0);
+  });
+});
+
+describe("raffles in the lottery results email", () => {
+  it("says nothing when no raffle is running", async () => {
+    await raffle({ published: false });
+    expect(await rafflesEmailSection(NOW)).toBe("");
+  });
+
+  it("lists every running raffle with its price, draw and link", async () => {
+    await raffle({ causeTitle: "the pump track" });
+    await raffle({ id: "r2", slug: "spring", title: "Spring hamper", salesOpenAt: new Date("2026-12-01T09:00:00Z"), salesCloseAt: new Date("2026-12-20T19:00:00Z"), drawAt: new Date("2026-12-20T20:00:00Z") });
+    const text = await rafflesEmailSection(NOW);
+    expect(text).toContain("Win a wheelbarrow of booze: on sale now, £2 a ticket, for the pump track.");
+    expect(text).toContain("/raffles/november");
+    expect(text).toContain("Coming soon: Spring hamper. On sale Tuesday 1 December");
+    expect(text).toContain("18+ only");
+  });
+});
+
+describe("raffle report", () => {
+  it("totals sales in the period and nets each raffle off against fees and bought prizes", async () => {
+    await raffle({ prizes: [{ rank: 1, title: "Booze", valuePence: 15000, costPence: 4000 }] });
+    await order({ status: "paid", paidAt: NOW, quantity: 5, amount: 1000, stripeFeePence: 35 });
+    await order({ status: "paid", paidAt: NOW, source: "manual", paymentMethod: "cash", email: null, phone: "07700 900000", name: "Pat", quantity: 2, amount: 400 });
+    await order({ status: "refunded", paidAt: NOW, quantity: 1, amount: 200, refundedAmount: 200, email: "back@example.test" });
+    await order({ status: "pending", quantity: 3, amount: 600 });
+
+    const start = new Date("2026-11-01T00:00:00Z");
+    const end = new Date("2026-12-01T00:00:00Z");
+    const totals = await getRaffleTotals(start, end);
+    expect(totals).toMatchObject({ ticketsSold: 7, entrants: 2, onlineTickets: 5, inPersonTickets: 2, stripeFees: 35, refunded: 200 });
+
+    const [summary] = await getRaffleSummaries(start, end);
+    expect(summary).toMatchObject({ ticketsSold: 7, raised: 1400, stripeFees: 35, prizeCost: 4000, net: 1400 - 35 - 4000 });
   });
 });

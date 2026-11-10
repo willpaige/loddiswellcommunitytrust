@@ -118,3 +118,16 @@ export const getNextRaffleAfter = cache(async (raffleId: string) => {
   const [next] = await withStats(rows.filter((r) => r.id !== raffleId));
   return next ?? null;
 });
+
+/**
+ * Every published raffle that hasn't had its results published yet: coming
+ * soon, on sale, sold out or waiting for its draw. Soonest draw first.
+ */
+export async function getRunningRaffles(now = new Date()) {
+  const rows = await db
+    .select()
+    .from(raffles)
+    .where(and(eq(raffles.published, true), isNull(raffles.cancelledAt), gt(raffles.drawAt, new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000))))
+    .orderBy(asc(raffles.drawAt));
+  return (await withStats(rows, now)).filter((r) => ["coming_soon", "live", "last_few", "sold_out", "closed"].includes(r.state));
+}

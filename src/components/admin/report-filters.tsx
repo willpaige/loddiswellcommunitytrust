@@ -20,6 +20,7 @@ export function ReportTabs({ period, active }: { period: ReportPeriod; active: s
     { href: "/admin/reports", label: "Overview", key: "overview" },
     { href: "/admin/reports/bookings", label: "Bookings", key: "bookings" },
     { href: "/admin/reports/lottery", label: "Lottery", key: "lottery" },
+    { href: "/admin/reports/raffles", label: "Raffles", key: "raffles" },
   ];
   const query = periodSearch(period);
   return (
@@ -50,8 +51,8 @@ export function ReportFilters({
 }: {
   period: ReportPeriod;
   basePath: string;
-  /** Which CSV the Export button pulls: income, bookings or lottery. */
-  exportName: "income" | "bookings" | "lottery";
+  /** Which CSV the Export button pulls: income, bookings, lottery or raffles. */
+  exportName: "income" | "bookings" | "lottery" | "raffles";
 }) {
   // The end is exclusive, so the last day the user picked is the day before it.
   const lastDay = addUtcDays(period.end, -1);

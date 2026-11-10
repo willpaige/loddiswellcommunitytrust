@@ -967,3 +967,119 @@ export async function getRaffleExportRows(start: Date, end: Date): Promise<Expor
     Reference: String(row.reference ?? ""),
   }));
 }
+
+// ── Raffles ────────────────────────────────────────────────────────────────
+
+export type RaffleTotals = {
+  ticketsSold: number;
+  orders: number;
+  entrants: number;
+  onlineTickets: number;
+  inPersonTickets: number;
+  stripeFees: number;
+  refunded: number;
+};
+
+/** Raffle sales taken in the period, dated when the money was taken. */
+export async function getRaffleTotals(start: Date, end: Date): Promise<RaffleTotals> {
+  await requireAdmin();
+  const [row] = await rows<Record<string, string>>(sql`
+    select
+      coalesce(sum(quantity) filter (where status = 'paid'), 0) as tickets_sold,
+      count(*) filter (where status in ('paid', 'refunded')) as orders,
+      count(distinct coalesce(lower(email), phone, id)) filter (where status = 'paid') as entrants,
+      coalesce(sum(quantity) filter (where status = 'paid' and source = 'stripe'), 0) as online_tickets,
+      coalesce(sum(quantity) filter (where status = 'paid' and source = 'manual'), 0) as in_person_tickets,
+      coalesce(sum(stripe_fee_pence) filter (where status in ('paid', 'refunded')), 0) as stripe_fees,
+      coalesce(sum(refunded_amount), 0) as refunded
+    from raffle_orders
+    where status in ('paid', 'refunded') and paid_at >= ${start} and paid_at < ${end}
+  `);
+  return {
+    ticketsSold: num(row?.tickets_sold),
+    orders: num(row?.orders),
+    entrants: num(row?.entrants),
+    onlineTickets: num(row?.online_tickets),
+    inPersonTickets: num(row?.in_person_tickets),
+    stripeFees: num(row?.stripe_fees),
+    refunded: num(row?.refunded),
+  };
+}
+
+export type RaffleBucket = { bucket: string; amount: number; tickets: number };
+
+export async function getRaffleIncomeByBucket(period: ReportPeriod): Promise<RaffleBucket[]> {
+  await requireAdmin();
+  const unit = truncExpr(period.granularity);
+  return (
+    await rows<Record<string, string>>(sql`
+      select
+        to_char(date_trunc(${unit}, paid_at), 'YYYY-MM-DD') as bucket,
+        coalesce(sum(amount - refunded_amount), 0) as amount,
+        coalesce(sum(quantity) filter (where status = 'paid'), 0) as tickets
+      from raffle_orders
+      where status in ('paid', 'refunded') and paid_at >= ${period.start} and paid_at < ${period.end}
+      group by 1
+      order by 1
+    `)
+  ).map((row) => ({ bucket: String(row.bucket), amount: num(row.amount), tickets: num(row.tickets) }));
+}
+
+export type RaffleSummaryRow = {
+  id: string;
+  title: string;
+  published: boolean;
+  cancelled: boolean;
+  salesOpenAt: Date;
+  drawAt: Date;
+  drawn: boolean;
+  ticketsSold: number;
+  raised: number;
+  stripeFees: number;
+  prizeCost: number;
+  net: number;
+};
+
+/**
+ * Each raffle whose sales window overlaps the period, with its whole-life
+ * figures: a raffle's result only means something taken as a whole.
+ */
+export async function getRaffleSummaries(start: Date, end: Date): Promise<RaffleSummaryRow[]> {
+  await requireAdmin();
+  return (
+    await rows<Record<string, unknown>>(sql`
+      select
+        r.id, r.title, r.published, r.cancelled_at is not null as cancelled,
+        r.sales_open_at, r.draw_at,
+        exists (select 1 from raffle_draws d where d.raffle_id = r.id) as drawn,
+        coalesce(sum(o.quantity) filter (where o.status = 'paid'), 0) as tickets_sold,
+        coalesce(sum(o.amount - o.refunded_amount) filter (where o.status in ('paid', 'refunded')), 0) as raised,
+        coalesce(sum(o.stripe_fee_pence) filter (where o.status in ('paid', 'refunded')), 0) as stripe_fees,
+        (select coalesce(sum((p->>'costPence')::int), 0) from jsonb_array_elements(r.prizes) p) as prize_cost,
+        r.other_expenses_pence
+      from raffles r
+      left join raffle_orders o on o.raffle_id = r.id
+      where r.sales_open_at < ${end} and r.draw_at >= ${start}
+      group by r.id
+      order by r.draw_at desc
+    `)
+  ).map((row) => {
+    const raised = num(row.raised);
+    const stripeFees = num(row.stripe_fees);
+    const prizeCost = num(row.prize_cost);
+    return {
+      id: String(row.id),
+      title: String(row.title),
+      published: Boolean(row.published),
+      cancelled: Boolean(row.cancelled),
+      salesOpenAt: new Date(String(row.sales_open_at)),
+      drawAt: new Date(String(row.draw_at)),
+      drawn: Boolean(row.drawn),
+      ticketsSold: num(row.tickets_sold),
+      raised,
+      stripeFees,
+      prizeCost,
+      net: raised - stripeFees - prizeCost - num(row.other_expenses_pence),
+    };
+  });
+}

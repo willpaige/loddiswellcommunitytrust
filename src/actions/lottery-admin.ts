@@ -16,6 +16,7 @@ import {
   ticketNumbersText,
 } from "@/actions/lottery-ticket-numbers";
 import { sendTemplateEmail } from "@/lib/email/send";
+import { rafflesEmailSection } from "@/lib/raffles/email-section";
 import { upsertCustomerRecord } from "@/actions/customer-records";
 import { recordLotteryPayment, syncManualLotteryPayment } from "@/lib/lottery/payments";
 import { pickWinners } from "@/lib/draw/random";
@@ -514,6 +515,12 @@ export async function sendDrawNotifications(
       return `${ordinal(r.rank)}: ${r.winner}${ticket} — ${r.prize}`;
     })
     .join("\n");
+  // Built once for the whole send. A raffle problem must not stop the
+  // lottery results going out, so it falls back to saying nothing.
+  const raffles = await rafflesEmailSection().catch((error) => {
+    console.error("Could not build the raffles section for the lottery email", error);
+    return "";
+  });
   const { sent, failed } = await sendBulkTemplateEmails(
     recipients.map((recipient) => ({
       key: "lottery_draw_results" as const,
@@ -522,6 +529,7 @@ export async function sendDrawNotifications(
         drawDate: format(draw.drawDate, "MMMM yyyy"),
         winners: winnersText,
         notes: draw.notes || "",
+        raffles,
       },
       relatedEntityId: `${drawId}:${recipient.email}`,
     })),

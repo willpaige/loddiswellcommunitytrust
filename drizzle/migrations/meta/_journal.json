@@ -232,6 +232,13 @@
       "when": 1794305409591,
       "tag": "0032_raffle_launch_audience",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1794305643747,
+      "tag": "0033_lottery_results_raffles",
+      "breakpoints": true
     }
   ]
 }

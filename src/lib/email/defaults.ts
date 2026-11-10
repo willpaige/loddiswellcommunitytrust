@@ -227,8 +227,8 @@ export const emailTemplateDefaults: EmailTemplateDefault[] = [
     name: "Lottery draw results",
     description: "Sent to active subscribers when draw results are published.",
     subject: "Loddiswell lottery results for {{drawDate}}",
-    body: "Hello,\n\nHere are the results from the {{drawDate}} Loddiswell Community Lottery draw.\n\n{{winners}}\n\nThank you for supporting the lottery.\n\n{{rafflePromo}}",
-    variables: ["drawDate", "winners", "notes", "rafflePromo"],
+    body: "Hello,\n\nHere are the results from the {{drawDate}} Loddiswell Community Lottery draw.\n\n{{winners}}\n\nThank you for supporting the lottery.\n\n{{raffles}}",
+    variables: ["drawDate", "winners", "notes", "raffles"],
   },
   {
     key: "lottery_manage_link",
