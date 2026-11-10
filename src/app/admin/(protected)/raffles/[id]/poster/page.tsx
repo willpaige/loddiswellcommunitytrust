@@ -34,7 +34,7 @@ export default async function RafflePosterPage({ params }: { params: Promise<{ i
         {raffle.tagline && <p className="mt-3 text-xl leading-snug text-sage-800">{raffle.tagline}</p>}
         {raffle.heroImageUrl && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={raffle.heroImageUrl} alt="" className="mt-6 h-[85mm] w-full rounded-md object-cover" />
+          <img src={raffle.heroImageUrl} alt="" className="mt-6 max-h-[110mm] w-full rounded-md object-contain" />
         )}
         <div className="mt-6 grid grid-cols-3 gap-4 text-center">
           <div className="rounded-md bg-copper-50 p-3">

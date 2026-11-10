@@ -14,6 +14,7 @@ import { TicketPicker } from "@/components/raffles/ticket-picker";
 import { ShareButtons } from "@/components/raffles/share-buttons";
 import { RaffleResults } from "@/components/raffles/raffle-results";
 import { RaffleExtras } from "@/components/raffles/raffle-extras";
+import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -71,6 +72,9 @@ export default async function RafflePage(props: PageProps) {
   const url = `${appUrl()}/raffles/${raffle.slug}`;
   const [firstPrize, ...otherPrizes] = raffle.prizes;
   const cause = raffle.causeTitle || "Loddiswell's community facilities";
+  const heroAlt = [raffle.title, firstPrize?.title, `${formatPence(raffle.ticketPricePence)} a ticket`, `draw ${formatUk(raffle.drawAt, "d MMMM")}`]
+    .filter(Boolean)
+    .join(", ");
   const progress = raffle.maxTickets ? Math.min(100, Math.round((raffle.soldTickets / raffle.maxTickets) * 100)) : null;
 
   return (
@@ -89,15 +93,28 @@ export default async function RafflePage(props: PageProps) {
             </p>
             <h1 className="mt-3 font-serif text-4xl leading-tight tracking-tight sm:text-5xl">{raffle.title}</h1>
             {raffle.tagline && <p className="mt-4 max-w-2xl text-lg leading-relaxed text-sage-200">{raffle.tagline}</p>}
-            <div className="relative mt-8 aspect-[4/3] w-full overflow-hidden rounded-lg bg-sage-800 sm:aspect-[16/9]">
-              {raffle.heroImageUrl ? (
-                <Image src={raffle.heroImageUrl} alt={firstPrize?.title || raffle.title} fill priority className="object-cover" sizes="(min-width: 1024px) 60vw, 100vw" />
-              ) : (
-                <div className="flex h-full items-center justify-center text-sage-400">
-                  <Gift className="h-16 w-16" aria-hidden="true" />
-                </div>
-              )}
-            </div>
+            {raffle.heroImageUrl ? (
+              // Shown at the image's own shape, never cropped, because raffle
+              // artwork often has the price and date written on it.
+              <div className="mt-8 overflow-hidden rounded-lg bg-sage-800">
+                <Image
+                  src={raffle.heroImageUrl}
+                  alt={heroAlt}
+                  width={0}
+                  height={0}
+                  priority
+                  sizes="(min-width: 1024px) 60vw, 100vw"
+                  className={cn("h-auto w-full", raffle.heroImageMobileUrl && "hidden sm:block")}
+                />
+                {raffle.heroImageMobileUrl && (
+                  <Image src={raffle.heroImageMobileUrl} alt={heroAlt} width={0} height={0} priority sizes="100vw" className="h-auto w-full sm:hidden" />
+                )}
+              </div>
+            ) : (
+              <div className="relative mt-8 flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-lg bg-sage-800 text-sage-400 sm:aspect-[16/9]">
+                <Gift className="h-16 w-16" aria-hidden="true" />
+              </div>
+            )}
           </div>
 
           <aside className="lg:pt-10">

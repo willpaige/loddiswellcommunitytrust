@@ -218,6 +218,13 @@
       "when": 1794262628020,
       "tag": "0030_raffle_email_promo",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1794305104678,
+      "tag": "0031_raffle_mobile_hero",
+      "breakpoints": true
     }
   ]
 }

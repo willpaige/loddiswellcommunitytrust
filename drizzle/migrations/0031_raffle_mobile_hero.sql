@@ -1,0 +1,1 @@
+ALTER TABLE "raffles" ADD COLUMN "hero_image_mobile_url" text;

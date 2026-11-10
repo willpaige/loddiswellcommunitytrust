@@ -831,6 +831,9 @@ export const raffles = pgTable(
     tagline: text("tagline"),
     description: text("description").notNull().default("{}"),
     heroImageUrl: text("hero_image_url"),
+    // Optional portrait version of the hero for phones, for artwork with
+    // text in it that can't be cropped.
+    heroImageMobileUrl: text("hero_image_mobile_url"),
     galleryImages: jsonb("gallery_images").$type<string[]>().notNull().default([]),
     prizes: jsonb("prizes").$type<RafflePrize[]>().notNull().default([]),
     // Lottery rules: every ticket costs the same, so there are no bundles.

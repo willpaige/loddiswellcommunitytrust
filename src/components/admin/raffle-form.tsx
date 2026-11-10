@@ -19,6 +19,7 @@ export type RaffleFormValues = {
   tagline: string | null;
   description: string;
   heroImageUrl: string | null;
+  heroImageMobileUrl?: string | null;
   galleryImages: string[];
   prizes: RafflePrize[];
   ticketPricePence: number;
@@ -69,6 +70,7 @@ export function RaffleForm({
   const [state, formAction, pending] = useActionState(action, { error: null });
   const [description, setDescription] = useState(initial?.description || "{}");
   const [heroImageUrl, setHeroImageUrl] = useState<string | null>(initial?.heroImageUrl ?? null);
+  const [heroImageMobileUrl, setHeroImageMobileUrl] = useState<string | null>(initial?.heroImageMobileUrl ?? null);
   const [gallery, setGallery] = useState<(string | null)[]>(() => {
     const g: (string | null)[] = [...(initial?.galleryImages ?? [])];
     while (g.length < 3) g.push(null);
@@ -114,6 +116,7 @@ export function RaffleForm({
     const formData = new FormData(event.currentTarget);
     formData.set("description", description);
     formData.set("heroImageUrl", heroImageUrl ?? "");
+    formData.set("heroImageMobileUrl", heroImageMobileUrl ?? "");
     formData.set("galleryImages", JSON.stringify(gallery.filter(Boolean)));
     formData.set(
       "prizes",
@@ -164,8 +167,14 @@ export function RaffleForm({
               <RichTextEditor content={description} onChange={setDescription} />
             </div>
             <div className="space-y-2">
-              <Label>Main photo</Label>
+              <Label>Main image</Label>
               <ImageUploadInput value={heroImageUrl} onChange={setHeroImageUrl} folder="raffles" />
+              <p className="text-xs text-muted-foreground">Shown uncropped, so artwork with words on it is fine. A landscape image works best.</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Phone version (optional)</Label>
+              <ImageUploadInput value={heroImageMobileUrl} onChange={setHeroImageMobileUrl} folder="raffles" />
+              <p className="text-xs text-muted-foreground">A portrait version of the main image for phones. Leave empty to use the main image everywhere.</p>
             </div>
             <div className="space-y-2">
               <Label>More photos (optional)</Label>
