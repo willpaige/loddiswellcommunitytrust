@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { raffleInterest, raffleOrders } from "@/lib/db/schema";
+import { raffleEmailOptOuts, raffleInterest, raffleOrders } from "@/lib/db/schema";
 import { verifyUnsubscribeToken } from "@/lib/raffles/unsubscribe";
 import { Button } from "@/components/ui/button";
 
@@ -19,6 +19,7 @@ async function unsubscribe(formData: FormData) {
   if (!email || !verifyUnsubscribeToken(email, token)) return;
   // No more "on sale" or "next raffle" emails. Ticket confirmations and
   // results for raffles they have entered still come.
+  await db.insert(raffleEmailOptOuts).values({ email }).onConflictDoNothing();
   await db.update(raffleOrders).set({ marketingOptOut: true }).where(sql`lower(${raffleOrders.email}) = ${email}`);
   await db.delete(raffleInterest).where(eq(raffleInterest.email, email));
   redirect(`/raffles/unsubscribe?done=1`);

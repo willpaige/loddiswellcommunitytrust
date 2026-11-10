@@ -279,9 +279,9 @@ export const emailTemplateDefaults: EmailTemplateDefault[] = [
     key: "raffle_on_sale",
     category: "raffles",
     name: "Raffle on sale",
-    description: "Sent when a raffle's tickets go on sale, to people who asked and to past entrants who didn't opt out.",
+    description: "Sent when a raffle's tickets go on sale, to everyone the Trust has an email address for, except people who have unsubscribed.",
     subject: "Tickets on sale now: {{raffleTitle}}",
-    body: "Hello,\n\nTickets for {{raffleTitle}} are on sale now at {{price}} each.\n\n{{tagline}}\n\nThe draw is on {{drawDate}}.\n\n{{raffleUrl}}\n\nYou're getting this because you asked to hear about raffles or entered one before. Unsubscribe: {{unsubscribeUrl}}",
+    body: "Hello,\n\nTickets for {{raffleTitle}} are on sale now at {{price}} each.\n\n{{tagline}}\n\nThe draw is on {{drawDate}}.\n\n{{raffleUrl}}\n\nYou're getting this because you've supported Loddiswell Playing Field & Village Hall Trust, through the lottery, a booking, a raffle or our newsletter. Don't want raffle news? Unsubscribe: {{unsubscribeUrl}}",
     variables: ["raffleTitle", "price", "tagline", "drawDate", "raffleUrl", "unsubscribeUrl"],
   },
   {

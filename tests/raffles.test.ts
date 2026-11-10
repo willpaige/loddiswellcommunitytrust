@@ -51,7 +51,10 @@ beforeAll(async () => {
 });
 afterAll(async () => { await pg?.close(); });
 beforeEach(async () => {
-  await pg.exec("TRUNCATE raffles, raffle_orders, raffle_tickets, raffle_draws, raffle_interest, email_logs, email_templates, audit_log, lottery_tickets, lottery_payments CASCADE");
+  await pg.exec("TRUNCATE raffles, raffle_orders, raffle_tickets, raffle_draws, raffle_interest, raffle_email_opt_outs, newsletter_subscribers, email_logs, email_templates, audit_log, lottery_tickets, lottery_payments CASCADE");
+  // Buying tickets creates customer accounts, and accounts are part of the
+  // raffle launch audience, so start each test with just the admin.
+  await pg.exec("DELETE FROM users WHERE id <> 'admin'");
   state.session = { user: { id: "admin", email: "admin@example.test", role: "admin" } };
   state.send.mockReset().mockResolvedValue({ MessageID: "msg" });
   state.createSession.mockReset().mockImplementation(async () => ({ id: `cs_${Math.random().toString(36).slice(2)}`, url: "https://checkout.stripe.test/pay" }));
@@ -607,11 +610,29 @@ describe("notify me and the hourly raffle emails", () => {
     await registerRaffleInterest({ ok: false, message: "" }, interestForm("quiet@example.test"));
 
     expect(await sendRaffleOnSaleEmails(new Date("2026-11-20T08:00:00Z"))).toBe(0);
-    expect(await sendRaffleOnSaleEmails(new Date("2026-11-20T09:30:00Z"))).toBe(2);
+    expect(await sendRaffleOnSaleEmails(new Date("2026-11-20T09:30:00Z"))).toBe(3);
     const to = state.send.mock.calls.map((c) => c[0].To).sort();
-    expect(to).toEqual(["asked@example.test", "fan@example.test"]);
+    expect(to).toEqual(["admin@example.test", "asked@example.test", "fan@example.test"]);
     expect(state.send.mock.calls[0][0].TextBody).toContain("/raffles/unsubscribe?e=");
     expect(await sendRaffleOnSaleEmails(new Date("2026-11-20T10:30:00Z"))).toBe(0);
+  });
+
+  it("emails everyone the Trust holds an address for at launch, once each, minus unsubscribes", async () => {
+    await raffle({ salesOpenAt: new Date("2026-11-20T09:00:00Z") });
+    await state.db.insert(schema.lotteryTickets).values([
+      { name: "Lottery Player", email: "Player@Example.test", amount: 100, expiryDate: NOW },
+      { name: "Lottery Player", email: "player@example.test", amount: 100, expiryDate: NOW },
+      { name: "Gone", email: "gone@example.test", amount: 100, expiryDate: NOW },
+    ]);
+    await state.db.insert(schema.newsletterSubscribers).values([
+      { email: "reader@example.test" },
+      { email: "left@example.test", status: "unsubscribed" },
+    ]);
+    await state.db.insert(schema.raffleEmailOptOuts).values({ email: "gone@example.test" });
+
+    expect(await sendRaffleOnSaleEmails(new Date("2026-11-20T09:30:00Z"))).toBe(3);
+    const to = state.send.mock.calls.map((c) => c[0].To).sort();
+    expect(to).toEqual(["admin@example.test", "player@example.test", "reader@example.test"]);
   });
 
   it("reminds entrants on the morning of the draw only, once, with their numbers", async () => {

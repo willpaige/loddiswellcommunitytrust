@@ -1002,3 +1002,10 @@ export const raffleInterest = pgTable(
   },
   (table) => [uniqueIndex("raffle_interest_email_idx").on(table.raffleId, table.email)]
 );
+
+// Everyone who unsubscribed from raffle news, whatever list we had them from
+// (lottery, bookings, newsletter, a past raffle). Launch emails skip them.
+export const raffleEmailOptOuts = pgTable("raffle_email_opt_outs", {
+  email: text("email").primaryKey(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});

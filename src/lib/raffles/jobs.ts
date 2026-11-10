@@ -7,6 +7,7 @@ import { compressRanges, formatPence } from "@/lib/raffles/numbers";
 import { formatUk } from "@/lib/raffles/time";
 import { releaseStaleRaffleOrders } from "@/lib/raffles/orders";
 import { unsubscribeUrl } from "@/lib/raffles/unsubscribe";
+import { getRaffleLaunchAudience } from "@/lib/raffles/audience";
 
 // Run hourly by /api/cron/raffles. Each job stamps the raffle when it has
 // run, and every email is deduped in the email log, so overlapping or
@@ -16,19 +17,10 @@ function appUrl() {
   return process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 }
 
-/** Addresses that asked never to hear about raffles again. */
-async function optedOut() {
-  const rows = await db
-    .selectDistinct({ email: sql<string>`lower(${raffleOrders.email})` })
-    .from(raffleOrders)
-    .where(and(eq(raffleOrders.marketingOptOut, true), sql`${raffleOrders.email} is not null`));
-  return new Set(rows.map((r) => r.email));
-}
-
 /**
- * When sales open: email everyone who pressed "remind me" for this raffle or
- * "tell me about the next one", plus past entrants who didn't opt out at
- * checkout (they can unsubscribe from the email itself).
+ * When sales open: email everyone the Trust has an address for, apart from
+ * anyone who has opted out (see getRaffleLaunchAudience). Each email has a
+ * one-click unsubscribe link.
  */
 export async function sendRaffleOnSaleEmails(now = new Date()) {
   const due = await db
@@ -57,16 +49,9 @@ export async function sendRaffleOnSaleEmails(now = new Date()) {
       .select()
       .from(raffleInterest)
       .where(and(isNull(raffleInterest.notifiedAt), or(eq(raffleInterest.raffleId, raffle.id), isNull(raffleInterest.raffleId))));
-    const pastEntrants = await db
-      .selectDistinct({ email: sql<string>`lower(${raffleOrders.email})` })
-      .from(raffleOrders)
-      .where(and(eq(raffleOrders.status, "paid"), eq(raffleOrders.marketingOptOut, false), sql`${raffleOrders.email} is not null`));
-    const out = await optedOut();
-    const addresses = new Set<string>([...interest.map((i) => i.email), ...pastEntrants.map((p) => p.email)]);
+    const addresses = await getRaffleLaunchAudience(raffle.id);
 
-    const emails: BulkEmail[] = [...addresses]
-      .filter((a) => !out.has(a))
-      .map((email) => ({
+    const emails: BulkEmail[] = addresses.map((email) => ({
         key: "raffle_on_sale",
         to: email,
         relatedEntityId: `${raffle.id}:on_sale:${email}`,

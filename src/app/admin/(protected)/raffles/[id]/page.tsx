@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
-import { ArrowLeft, Copy, Download, ExternalLink, Pencil, QrCode, Square, Trophy } from "lucide-react";
+import { ArrowLeft, Copy, Download, ExternalLink, Mail, Pencil, QrCode, Square, Trophy } from "lucide-react";
 import { db } from "@/lib/db";
 import { raffleDraws } from "@/lib/db/schema";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { RaffleCashSaleForm } from "@/components/admin/raffle-cash-sale-form";
 import { RaffleOrdersTable } from "@/components/admin/raffle-orders-table";
 import { CopyLinkButton } from "@/components/admin/copy-link-button";
 import { previewUrl } from "@/lib/raffles/preview";
+import { getRaffleLaunchAudience } from "@/lib/raffles/audience";
 import { duplicateRaffle, getRaffleForAdmin } from "@/actions/raffles";
 import { closeRaffleSalesNow, getRaffleOrders, getRaffleSalesByDay, recordCashSale } from "@/actions/raffle-orders";
 import { deriveRaffleState } from "@/lib/raffles/state";
@@ -38,10 +39,11 @@ export default async function RaffleDashboardPage({
   if (!raffle) notFound();
   const tab = TABS.some((t) => t.key === tabParam) ? tabParam! : "overview";
 
-  const [orders, salesByDay, [draw]] = await Promise.all([
+  const [orders, salesByDay, [draw], launchAudience] = await Promise.all([
     getRaffleOrders(id),
     getRaffleSalesByDay(id),
     db.select().from(raffleDraws).where(eq(raffleDraws.raffleId, id)).limit(1),
+    raffle.openNotifiedAt ? Promise.resolve(null) : getRaffleLaunchAudience(id),
   ]);
   const state = deriveRaffleState(raffle, { drawPublished: !!draw?.publishedAt });
   const paid = orders.filter((o) => o.status === "paid");
@@ -145,6 +147,17 @@ export default async function RaffleDashboardPage({
 
       {tab === "overview" && (
         <div className="space-y-6">
+          <p className="flex items-start gap-2 rounded-md border bg-muted/40 px-4 py-3 text-sm">
+            <Mail className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" aria-hidden="true" />
+            {raffle.openNotifiedAt ? (
+              <span>Launch email sent {formatUk(raffle.openNotifiedAt, "d MMM 'at' HH:mm")}.</span>
+            ) : (
+              <span>
+                <strong>Launch email:</strong> {launchAudience?.length ?? 0} people will be emailed within the hour after this raffle is published and on
+                sale (lottery players, booking customers, newsletter subscribers, site accounts and past entrants, minus anyone who has unsubscribed).
+              </span>
+            )}
+          </p>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Card>
               <CardHeader className="pb-2">
