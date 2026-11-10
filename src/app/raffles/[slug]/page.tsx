@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CalendarClock, Gift, Heart, Radio, Ticket } from "lucide-react";
-import { getPublicRaffleBySlug } from "@/lib/raffles/public";
+import { CalendarClock, EyeOff, Gift, Heart, Radio, Ticket } from "lucide-react";
+import { getPreviewRaffleBySlug, getPublicRaffleBySlug } from "@/lib/raffles/public";
 import { ticketsRemaining } from "@/lib/raffles/state";
 import { formatPence } from "@/lib/raffles/numbers";
 import { formatUk } from "@/lib/raffles/time";
@@ -30,14 +30,26 @@ function parseDescription(raw: string): TiptapJSON | null {
   }
 }
 
+type PageProps = { params: Promise<{ slug: string }>; searchParams: Promise<{ preview?: string }> };
+
+// The published page, or a draft for someone holding its private preview link.
+async function loadRaffle({ params, searchParams }: PageProps) {
+  const [{ slug }, { preview }] = await Promise.all([params, searchParams]);
+  const raffle = await getPublicRaffleBySlug(slug);
+  if (raffle) return { raffle, isPreview: false };
+  const draft = typeof preview === "string" ? await getPreviewRaffleBySlug(slug, preview) : null;
+  return draft ? { raffle: draft, isPreview: true } : null;
+}
+
 function ordinal(n: number) {
   return n === 1 ? "1st" : n === 2 ? "2nd" : n === 3 ? "3rd" : `${n}th`;
 }
 
-export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
-  const { slug } = await params;
-  const raffle = await getPublicRaffleBySlug(slug);
-  if (!raffle) return { title: "Raffle" };
+export async function generateMetadata(props: PageProps): Promise<Metadata> {
+  const loaded = await loadRaffle(props);
+  if (!loaded) return { title: "Raffle" };
+  const { raffle, isPreview } = loaded;
+  if (isPreview) return { title: `Preview: ${raffle.title}`, robots: { index: false, follow: false } };
   const description =
     raffle.tagline ||
     `${formatPence(raffle.ticketPricePence)} a ticket. Draw ${formatUk(raffle.drawAt, "d MMMM")}. Supporting ${raffle.causeTitle || "Loddiswell's community facilities"}.`;
@@ -48,10 +60,10 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   };
 }
 
-export default async function RafflePage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
-  const raffle = await getPublicRaffleBySlug(slug);
-  if (!raffle) notFound();
+export default async function RafflePage(props: PageProps) {
+  const loaded = await loadRaffle(props);
+  if (!loaded) notFound();
+  const { raffle, isPreview } = loaded;
 
   const { state } = raffle;
   const remaining = ticketsRemaining(raffle);
@@ -66,6 +78,12 @@ export default async function RafflePage({ params }: { params: Promise<{ slug: s
       <section className="relative overflow-hidden bg-sage-900 text-sage-50 pt-32 sm:pt-36 pb-12 sm:pb-16">
         <div className="relative mx-auto grid max-w-7xl gap-10 px-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_420px] lg:px-8">
           <div className="min-w-0">
+            {isPreview && (
+              <p className="mb-6 flex items-start gap-2 rounded-md bg-copper-600 px-4 py-3 text-sm font-semibold text-white">
+                <EyeOff className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
+                Preview only. This raffle isn&apos;t on the website yet, and tickets can&apos;t be bought from this link.
+              </p>
+            )}
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-copper-300">
               Raffle · Draw {formatUk(raffle.drawAt, "EEE d MMMM, h:mmaaa")}
             </p>
@@ -90,7 +108,7 @@ export default async function RafflePage({ params }: { params: Promise<{ slug: s
                   <p className="text-sm text-muted-foreground">
                     On sale {formatUk(raffle.salesOpenAt, "EEEE d MMMM 'at' h:mmaaa")}, {formatPence(raffle.ticketPricePence)} a ticket.
                   </p>
-                  <RaffleExtras raffleId={raffle.id} variant="notify" />
+                  {!isPreview && <RaffleExtras raffleId={raffle.id} variant="notify" />}
                 </div>
               )}
 
@@ -124,16 +142,22 @@ export default async function RafflePage({ params }: { params: Promise<{ slug: s
                     )}
                   </div>
                   <div className="border-t pt-5">
-                    <TicketPicker
-                      raffleId={raffle.id}
-                      pricePence={raffle.ticketPricePence}
-                      quickPicks={raffle.quickPicks}
-                      maxPerOrder={raffle.maxPerOrder}
-                      remaining={remaining}
-                      minAge={raffle.minAge}
-                    />
+                    {isPreview ? (
+                      <p className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">
+                        The ticket picker appears here once the raffle is published.
+                      </p>
+                    ) : (
+                      <TicketPicker
+                        raffleId={raffle.id}
+                        pricePence={raffle.ticketPricePence}
+                        quickPicks={raffle.quickPicks}
+                        maxPerOrder={raffle.maxPerOrder}
+                        remaining={remaining}
+                        minAge={raffle.minAge}
+                      />
+                    )}
                   </div>
-                  <RaffleExtras raffleId={raffle.id} variant="activity" />
+                  {!isPreview && <RaffleExtras raffleId={raffle.id} variant="activity" />}
                 </div>
               )}
 
@@ -243,10 +267,12 @@ export default async function RafflePage({ params }: { params: Promise<{ slug: s
                 </p>
               </div>
             </div>
-            <div className="space-y-3">
-              <h2 className="font-serif text-xl">Tell the village</h2>
-              <ShareButtons url={url} text={`${raffle.title}: ${formatPence(raffle.ticketPricePence)} a ticket, all for ${cause}!`} />
-            </div>
+            {!isPreview && (
+              <div className="space-y-3">
+                <h2 className="font-serif text-xl">Tell the village</h2>
+                <ShareButtons url={url} text={`${raffle.title}: ${formatPence(raffle.ticketPricePence)} a ticket, all for ${cause}!`} />
+              </div>
+            )}
             <div className="flex gap-4 rounded-lg border p-5">
               <CalendarClock className="h-6 w-6 flex-shrink-0 text-copper-600" aria-hidden="true" />
               <div className="text-sm">

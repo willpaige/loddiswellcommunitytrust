@@ -3,6 +3,7 @@ import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, sql } from "drizzle
 import { db } from "@/lib/db";
 import { raffleDraws, raffleOrders, raffles } from "@/lib/db/schema";
 import { deriveRaffleState, type RaffleState } from "@/lib/raffles/state";
+import { verifyPreviewToken } from "@/lib/raffles/preview";
 
 // Read-only queries for the public site. Wrapped in React cache() so the
 // layout strip, header and page can all ask without repeating the query.
@@ -55,6 +56,19 @@ export const getPublicRaffleBySlug = cache(async (slug: string) => {
     .limit(1);
   const [raffle] = await withStats(rows);
   return raffle ?? null;
+});
+
+/**
+ * A raffle by slug for someone holding its preview link, published or not.
+ * Drafts are shown as they will look once published, so the state is worked
+ * out as if they were. Returns null for a missing raffle or a wrong token.
+ */
+export const getPreviewRaffleBySlug = cache(async (slug: string, token: string) => {
+  const rows = await db.select().from(raffles).where(eq(raffles.slug, slug)).limit(1);
+  const [row] = rows;
+  if (!row || !verifyPreviewToken(row.id, token)) return null;
+  const [raffle] = await withStats([{ ...row, published: true }]);
+  return raffle ? { ...raffle, published: row.published } : null;
 });
 
 /**

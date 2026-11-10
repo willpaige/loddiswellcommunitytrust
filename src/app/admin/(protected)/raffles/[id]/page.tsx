@@ -9,6 +9,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { RaffleStateBadge } from "@/components/admin/raffle-state-badge";
 import { RaffleCashSaleForm } from "@/components/admin/raffle-cash-sale-form";
 import { RaffleOrdersTable } from "@/components/admin/raffle-orders-table";
+import { CopyLinkButton } from "@/components/admin/copy-link-button";
+import { previewUrl } from "@/lib/raffles/preview";
 import { duplicateRaffle, getRaffleForAdmin } from "@/actions/raffles";
 import { closeRaffleSalesNow, getRaffleOrders, getRaffleSalesByDay, recordCashSale } from "@/actions/raffle-orders";
 import { deriveRaffleState } from "@/lib/raffles/state";
@@ -83,10 +85,11 @@ export default async function RaffleDashboardPage({
         </div>
         <div className="flex flex-wrap gap-2">
           <Button asChild variant="outline">
-            <Link href={`/raffles/${raffle.slug}`} target="_blank">
-              <ExternalLink className="h-4 w-4" aria-hidden="true" /> View page
+            <Link href={raffle.published ? `/raffles/${raffle.slug}` : previewUrl(raffle)} target="_blank">
+              <ExternalLink className="h-4 w-4" aria-hidden="true" /> {raffle.published ? "View page" : "Preview page"}
             </Link>
           </Button>
+          {!raffle.published && <CopyLinkButton url={previewUrl(raffle)} label="Copy preview link" />}
           <Button asChild variant="outline">
             <Link href={`/admin/raffles/${raffle.id}/poster`} target="_blank">
               <QrCode className="h-4 w-4" aria-hidden="true" /> Poster
