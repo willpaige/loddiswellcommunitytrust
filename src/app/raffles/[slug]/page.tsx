@@ -226,7 +226,7 @@ export default async function RafflePage(props: PageProps) {
         <div className="mx-auto grid max-w-7xl gap-12 px-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_420px] lg:px-8">
           <div className="min-w-0 space-y-10">
             {firstPrize && (
-              <div>
+              <div id="prizes" className="scroll-mt-32">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-copper-600">The prizes</p>
                 <h2 className="mt-2 font-serif text-3xl">{firstPrize.title}</h2>
                 {firstPrize.donatedBy && <p className="mt-1 text-muted-foreground">Kindly donated by {firstPrize.donatedBy}</p>}

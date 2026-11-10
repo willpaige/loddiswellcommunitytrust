@@ -58,7 +58,7 @@ export default async function LotterySuccessPage({
             </Link>
           </div>
           <div className="mt-10 text-left">
-            <RafflePromoCard eyebrow="Fancy another chance to win?" />
+            <RafflePromoCard audience="lottery" eyebrow="Village raffle" />
           </div>
         </div>
       </section>

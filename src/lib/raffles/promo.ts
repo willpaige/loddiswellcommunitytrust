@@ -10,11 +10,27 @@ import { formatUk } from "@/lib/raffles/time";
 // nav link, homepage and success-page cards, and {{rafflePromo}} in emails.
 
 export type RafflePromo = {
+  raffleId: string;
   slug: string;
   title: string;
   tagline: string | null;
   heroImageUrl: string | null;
+  heroImageMobileUrl: string | null;
+  causeTitle: string | null;
+  state: "coming_soon" | "live" | "last_few" | "sold_out" | "closed";
   price: string;
+  /** "Draw Mon 21 Dec". */
+  drawLabel: string;
+  /** The day of the draw, UK time, when the banner comes back once more. */
+  drawDay: boolean;
+  /** Banner colour: copper normally, red for the last few, green on draw day. */
+  tone: "default" | "urgent" | "draw";
+  minAge: number;
+  liveStreamUrl: string | null;
+  soldTickets: number;
+  maxTickets: number | null;
+  raisedPence: number;
+  causeGoalPence: number | null;
   /** Short, urgent line: "6 days left", "Only 23 left", "Draw tonight 8pm". */
   label: string;
   cta: string;
@@ -64,12 +80,26 @@ export const getRafflePromo = cache(async (): Promise<RafflePromo | null> => {
       return null;
   }
 
+  const drawDay = differenceInCalendarDays(ukDay(raffle.drawAt), ukDay(now)) === 0;
   return {
+    raffleId: raffle.id,
     slug: raffle.slug,
     title: raffle.title,
     tagline: raffle.tagline,
     heroImageUrl: raffle.heroImageUrl,
+    heroImageMobileUrl: raffle.heroImageMobileUrl,
+    causeTitle: raffle.causeTitle,
+    state: raffle.state as RafflePromo["state"],
     price,
+    drawLabel: `Draw ${formatUk(raffle.drawAt, "EEE d MMM")}`,
+    drawDay,
+    tone: drawDay ? "draw" : raffle.state === "last_few" ? "urgent" : "default",
+    minAge: raffle.minAge,
+    liveStreamUrl: raffle.liveStreamUrl,
+    soldTickets: raffle.soldTickets,
+    maxTickets: raffle.maxTickets,
+    raisedPence: raffle.raisedPence,
+    causeGoalPence: raffle.causeGoalPence,
     label,
     cta,
     onSale: raffle.state === "live" || raffle.state === "last_few",

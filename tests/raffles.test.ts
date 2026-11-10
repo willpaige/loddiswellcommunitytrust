@@ -40,6 +40,7 @@ import { readFileSync } from "node:fs";
 import { computeRaffleReturn } from "@/lib/raffles/limits";
 import { getDueRaffleReturns, getRaffleReturn } from "@/actions/raffle-return";
 import { rafflesEmailSection } from "@/lib/raffles/email-section";
+import { getRaffleTicketsForEmail } from "@/lib/raffles/public";
 import { getRaffleSummaries, getRaffleTotals } from "@/lib/reports/queries";
 
 let pg: PGlite;
@@ -771,5 +772,34 @@ describe("raffle report", () => {
 
     const [summary] = await getRaffleSummaries(start, end);
     expect(summary).toMatchObject({ ticketsSold: 7, raised: 1400, stripeFees: 35, prizeCost: 4000, net: 1400 - 35 - 4000 });
+  });
+});
+
+describe("raffle upsell placements", () => {
+  it("colours the banner by urgency and brings it back on draw day", async () => {
+    await raffle({ maxTickets: 10, causeTitle: "the pump track" });
+    let promo = await getRafflePromo();
+    expect(promo).toMatchObject({ tone: "default", drawDay: false, causeTitle: "the pump track", drawLabel: "Draw Mon 30 Nov" });
+
+    await order({ status: "paid", paidAt: NOW, quantity: 9 });
+    await state.db.update(schema.raffles).set({ ticketsReserved: 9 }).where(eq(schema.raffles.id, "r1"));
+    promo = await getRafflePromo();
+    expect(promo?.tone).toBe("urgent");
+
+    vi.setSystemTime(new Date("2026-11-30T12:00:00Z"));
+    promo = await getRafflePromo();
+    expect(promo).toMatchObject({ tone: "draw", drawDay: true });
+  });
+
+  it("finds someone's own valid ticket numbers by email, for the account card", async () => {
+    await raffle({ maxTickets: null });
+    const mine = await order({ email: "Sam@Example.test", quantity: 3, status: "pending" });
+    await markOrderPaid(mine.id, { paidAt: NOW });
+    await ensureRaffleTickets(mine.id);
+    const theirs = await order({ email: "other@example.test", quantity: 2, status: "pending" });
+    await markOrderPaid(theirs.id, { paidAt: NOW });
+    await ensureRaffleTickets(theirs.id);
+    expect(await getRaffleTicketsForEmail("r1", "sam@example.test")).toEqual([1, 2, 3]);
+    expect(await getRaffleTicketsForEmail("r1", "nobody@example.test")).toEqual([]);
   });
 });

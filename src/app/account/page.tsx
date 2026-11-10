@@ -9,14 +9,24 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { RafflePromoCard } from "@/components/raffles/raffle-promo-card";
+import { auth } from "@/lib/auth";
+import { getRafflePromo } from "@/lib/raffles/promo";
+import { getRaffleTicketsForEmail } from "@/lib/raffles/public";
 
 export const dynamic = "force-dynamic";
 
 export default async function AccountOverviewPage() {
-  const [bookings, lotteryEntries] = await Promise.all([
+  const [bookings, lotteryEntries, session, promo] = await Promise.all([
     getCustomerBookings(),
     getCustomerLotteryEntries(),
+    auth(),
+    getRafflePromo(),
   ]);
+  const email = session?.user?.email;
+  const raffleTickets = promo && email ? await getRaffleTicketsForEmail(promo.raffleId, email) : [];
+  // Lottery players get the lottery line (it reads better than the booking
+  // one for people who do both); hirers get the booking line.
+  const audience = lotteryEntries.length > 0 ? "lottery" : bookings.length > 0 ? "booker" : null;
   const nextBooking = bookings.find((booking) => booking.status !== "cancelled");
   const activeLotteryEntries = lotteryEntries.filter((entry) => entry.status === "active");
   const activeTicketCount = activeLotteryEntries.reduce((total, entry) => total + entry.quantity, 0);
@@ -26,6 +36,7 @@ export default async function AccountOverviewPage() {
       title="Your portal"
       description="Manage facility bookings and lottery entries from one place."
     >
+      <RafflePromoCard containerClassName="mb-6" audience={audience} tickets={raffleTickets} eyebrow="Village raffle" />
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
@@ -107,7 +118,6 @@ export default async function AccountOverviewPage() {
             </div>
           </CardContent>
         </Card>
-        <RafflePromoCard className="lg:col-span-2" />
       </div>
     </AccountPortalShell>
   );

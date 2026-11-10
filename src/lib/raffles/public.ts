@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { raffleDraws, raffleOrders, raffles } from "@/lib/db/schema";
+import { raffleDraws, raffleOrders, raffleTickets, raffles } from "@/lib/db/schema";
 import { deriveRaffleState, type RaffleState } from "@/lib/raffles/state";
 import { verifyPreviewToken } from "@/lib/raffles/preview";
 
@@ -130,4 +130,22 @@ export async function getRunningRaffles(now = new Date()) {
     .where(and(eq(raffles.published, true), isNull(raffles.cancelledAt), gt(raffles.drawAt, new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000))))
     .orderBy(asc(raffles.drawAt));
   return (await withStats(rows, now)).filter((r) => ["coming_soon", "live", "last_few", "sold_out", "closed"].includes(r.state));
+}
+
+/** Someone's valid ticket numbers in a raffle, found by their email. */
+export async function getRaffleTicketsForEmail(raffleId: string, email: string): Promise<number[]> {
+  const rows = await db
+    .select({ n: raffleTickets.ticketNumber })
+    .from(raffleTickets)
+    .innerJoin(raffleOrders, eq(raffleOrders.id, raffleTickets.orderId))
+    .where(
+      and(
+        eq(raffleTickets.raffleId, raffleId),
+        eq(raffleTickets.void, false),
+        eq(raffleOrders.status, "paid"),
+        sql`lower(${raffleOrders.email}) = ${email.trim().toLowerCase()}`
+      )
+    )
+    .orderBy(asc(raffleTickets.ticketNumber));
+  return rows.map((r) => r.n);
 }

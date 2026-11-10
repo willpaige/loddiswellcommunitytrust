@@ -86,7 +86,7 @@ export default async function BookingSuccessPage({
             </Button>
           </CardContent>
         </Card>
-        <RafflePromoCard />
+        <RafflePromoCard audience="booker" eyebrow="Village raffle" />
         </div>
         </div>
       </section>
