@@ -31,7 +31,7 @@ export function formatPence(pence: number) {
   return pence % 100 === 0 ? `£${(pence / 100).toFixed(0)}` : `£${(pence / 100).toFixed(2)}`;
 }
 
-/** A raffle's public lottery number: 1 → "L001", 1234 → "L1234". */
+/** A raffle's public raffle number: 1 → "R001", 1234 → "R1234". */
 export function formatRaffleSerial(serialNumber: number) {
-  return `L${String(serialNumber).padStart(3, "0")}`;
+  return `R${String(serialNumber).padStart(3, "0")}`;
 }

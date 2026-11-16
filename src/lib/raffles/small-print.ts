@@ -8,9 +8,9 @@ export const DEFAULT_RAFFLE_SMALL_PRINT =
   "Promoted by Zoë Crockford on behalf of Loddiswell Playing Fields & Village Hall Trust, The Village Hall, TQ7 4RH. Registered with South Hams District Council under the Gambling Act 2005, to raise funds for LPFVHT. Tickets {price} each. Draw {drawDate}.";
 
 /**
- * The raffle's lottery number always appears: where the trustees' wording puts
- * {serial}, or at the start when it doesn't, so custom small print written
- * before serial numbers existed still carries one.
+ * The raffle number always appears: where the trustees' wording puts {serial},
+ * or as "Raffle number R001." at the end when it doesn't, so custom small
+ * print written before raffle numbers existed still carries one.
  */
 export function renderSmallPrint(
   template: string | null | undefined,
@@ -18,7 +18,7 @@ export function renderSmallPrint(
 ) {
   const serial = formatRaffleSerial(raffle.serialNumber);
   const text = template || DEFAULT_RAFFLE_SMALL_PRINT;
-  const withSerial = text.includes("{serial}") ? text : `Lottery ${serial}. ${text}`;
+  const withSerial = text.includes("{serial}") ? text : `${text} Raffle number ${serial}.`;
   return withSerial
     .replaceAll("{serial}", serial)
     .replaceAll("{price}", formatPence(raffle.ticketPricePence))

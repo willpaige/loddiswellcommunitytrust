@@ -16,11 +16,16 @@ export default async function RaffleShareImage({ params }: { params: Promise<{ s
   const price = raffle ? `${formatPence(raffle.ticketPricePence)} a ticket` : "";
   const draw = raffle ? `Draw ${formatUk(raffle.drawAt, "EEE d MMMM")}` : "";
   const cause = raffle?.causeTitle ? `For ${raffle.causeTitle}` : "For Loddiswell's community facilities";
+  // The image renderer fetches the picture itself, so a site-relative path
+  // (an image kept in /public) needs the full address.
+  const hero = raffle?.heroImageUrl
+    ? new URL(raffle.heroImageUrl, process.env.NEXT_PUBLIC_APP_URL || "https://loddiswellcommunitytrust.org").toString()
+    : null;
 
   return new ImageResponse(
     (
       <div style={{ width: "100%", height: "100%", display: "flex", background: "#1F2619", color: "#F2F4EF" }}>
-        <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", padding: "56px", width: raffle?.heroImageUrl ? "56%" : "100%" }}>
+        <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", padding: "56px", width: hero ? "56%" : "100%" }}>
           <div style={{ display: "flex", flexDirection: "column" }}>
             <div style={{ fontSize: 26, letterSpacing: 6, textTransform: "uppercase", color: "#D49A7D", fontWeight: 700 }}>Loddiswell raffle</div>
             <div style={{ marginTop: 22, fontSize: title.length > 40 ? 58 : 72, lineHeight: 1.05, fontWeight: 800 }}>{title}</div>
@@ -33,9 +38,9 @@ export default async function RaffleShareImage({ params }: { params: Promise<{ s
             <div style={{ fontSize: 26, color: "#C4CDB6" }}>{cause}</div>
           </div>
         </div>
-        {raffle?.heroImageUrl && (
+        {hero && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={raffle.heroImageUrl} alt="" width={528} height={630} style={{ width: "44%", height: "100%", objectFit: "cover" }} />
+          <img src={hero} alt="" width={528} height={630} style={{ width: "44%", height: "100%", objectFit: "cover" }} />
         )}
       </div>
     ),

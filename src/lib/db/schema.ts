@@ -826,7 +826,7 @@ export const raffles = pgTable(
     id: text("id")
       .primaryKey()
       .$defaultFn(() => createId()),
-    // The public lottery number, shown as L001, L002 and so on. Postgres hands
+    // The public raffle number, shown as R001, R002 and so on. Postgres hands
     // out the next one on insert, so every raffle (duplicates included) is
     // numbered without the app counting anything.
     serialNumber: integer("serial_number").notNull().generatedByDefaultAsIdentity(),

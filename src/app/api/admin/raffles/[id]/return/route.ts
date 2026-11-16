@@ -21,7 +21,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const csv = Papa.unparse([
     { Item: "Raffle", Value: raffle.title },
-    { Item: "Lottery number", Value: formatRaffleSerial(raffle.serialNumber) },
+    { Item: "Raffle number", Value: formatRaffleSerial(raffle.serialNumber) },
     { Item: "Sales opened", Value: formatUk(raffle.salesOpenAt, "yyyy-MM-dd") },
     { Item: "Sales closed", Value: formatUk(raffle.salesCloseAt, "yyyy-MM-dd") },
     { Item: "Draw date", Value: formatUk(raffle.drawAt, "yyyy-MM-dd") },

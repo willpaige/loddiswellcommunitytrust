@@ -1,4 +1,4 @@
--- Every raffle gets a public lottery number (shown as L001, L002, ...).
+-- Every raffle gets a public raffle number (shown as R001, R002, ...).
 -- Existing raffles are numbered in the order they were created, then Postgres
 -- takes over: the identity sequence continues from the highest number, so
 -- each new raffle (duplicates included) gets the next one on insert.

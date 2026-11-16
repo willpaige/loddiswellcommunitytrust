@@ -351,7 +351,7 @@ export function RaffleForm({
               <Label htmlFor="smallPrint">Small print</Label>
               <Textarea id="smallPrint" name="smallPrint" rows={4} defaultValue={initial?.smallPrint ?? DEFAULT_RAFFLE_SMALL_PRINT} />
               <p className="text-xs text-muted-foreground">
-                {"{price}"}, {"{drawDate}"} and {"{serial}"} (the lottery number, e.g. L001) are filled in automatically. The lottery number is added at the start if you leave {"{serial}"} out. Society lottery tickets must name the promoter, price and draw date.
+                {"{price}"}, {"{drawDate}"} and {"{serial}"} (the raffle number, e.g. R001) are filled in automatically. "Raffle number R001." is added at the end if you leave {"{serial}"} out. Society lottery tickets must name the promoter, price and draw date.
               </p>
             </div>
           </CardContent>
