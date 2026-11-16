@@ -246,6 +246,13 @@
       "when": 1794840489342,
       "tag": "0034_raffle_serial_number",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1794847567980,
+      "tag": "0035_raffle_follow_ups",
+      "breakpoints": true
     }
   ]
 }

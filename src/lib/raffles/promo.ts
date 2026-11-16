@@ -5,6 +5,7 @@ import { getPromotedRaffle } from "@/lib/raffles/public";
 import { ticketsRemaining } from "@/lib/raffles/state";
 import { formatPence } from "@/lib/raffles/numbers";
 import { formatUk } from "@/lib/raffles/time";
+import type { EmailPromoCard } from "@/lib/email/layout";
 
 // What the rest of the site says about the current raffle: the header strip,
 // nav link, homepage and success-page cards, and {{rafflePromo}} in emails.
@@ -107,23 +108,43 @@ export const getRafflePromo = cache(async (): Promise<RafflePromo | null> => {
 });
 
 // Bulk sends (e.g. lottery results to every subscriber) run outside a React
-// render, where cache() does nothing, so remember the text for a minute.
-let memo: { text: string; at: number } | null = null;
+// render, where cache() does nothing, so remember the promo for a minute.
+type PromoForEmail = { text: string; card: EmailPromoCard | null };
+let memo: (PromoForEmail & { at: number }) | null = null;
 
 /** Forget the remembered promo, e.g. straight after a raffle is edited. */
 export function resetRafflePromoMemo() {
   memo = null;
 }
 
-/** The plain-text promo appended to lottery and booking emails, or "". */
-export async function rafflePromoText(now = Date.now()) {
-  if (memo && now - memo.at < 60_000) return memo.text;
+/**
+ * The promo appended to lottery and booking emails: plain text for the
+ * {{rafflePromo}} variable, and a card with the artwork for the HTML version.
+ * Both are empty when no raffle is on sale.
+ */
+export async function rafflePromoForEmail(now = Date.now()): Promise<PromoForEmail> {
+  if (memo && now - memo.at < 60_000) return memo;
   const promo = await getRafflePromo();
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://loddiswellcommunitytrust.org";
-  const text =
+  const url = promo ? `${appUrl}/raffles/${promo.slug}` : "";
+  const result: PromoForEmail =
     promo && promo.onSale
-      ? `This month's raffle: ${promo.title}. ${promo.price} a ticket, ${promo.label.toLowerCase()}. ${appUrl}/raffles/${promo.slug}`
-      : "";
-  memo = { text, at: now };
-  return text;
+      ? {
+          text: `This month's raffle: ${promo.title}. ${promo.price} a ticket, ${promo.label.toLowerCase()}. ${url}`,
+          card: {
+            eyebrow: "Raffle on now",
+            title: promo.title,
+            text: `${promo.price} a ticket. ${promo.drawLabel}.`,
+            url,
+            imageUrl: promo.heroImageUrl,
+          },
+        }
+      : { text: "", card: null };
+  memo = { ...result, at: now };
+  return result;
+}
+
+/** The plain-text promo appended to lottery and booking emails, or "". */
+export async function rafflePromoText(now = Date.now()) {
+  return (await rafflePromoForEmail(now)).text;
 }

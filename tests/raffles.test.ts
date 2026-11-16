@@ -32,7 +32,7 @@ import { recordCashSale, refundRaffleOrder, resendRaffleTickets, updateCashSale,
 import { checkRaffleTicket, publishRaffleResults, redrawRafflePrize, retryRaffleDrawEmails, startRaffleDraw } from "@/actions/raffle-draws";
 import { publicName } from "@/lib/raffles/draw";
 import { registerRaffleInterest } from "@/actions/raffle-interest";
-import { sendRaffleDrawReminders, sendRaffleOnSaleEmails } from "@/lib/raffles/jobs";
+import { sendRaffleDrawReminders, sendRaffleFollowUps, sendRaffleOnSaleEmails } from "@/lib/raffles/jobs";
 import { getRafflePromo, rafflePromoText, resetRafflePromoMemo } from "@/lib/raffles/promo";
 import { unsubscribeToken, verifyUnsubscribeToken } from "@/lib/raffles/unsubscribe";
 import { sendTemplateEmail } from "@/lib/email/send";
@@ -648,6 +648,36 @@ describe("notify me and the hourly raffle emails", () => {
     expect(await sendRaffleDrawReminders(new Date("2026-11-30T10:00:00Z"))).toBe(1);
     expect(state.send.mock.calls[0][0].TextBody).toContain("0001–0002");
     expect(await sendRaffleDrawReminders(new Date("2026-11-30T11:00:00Z"))).toBe(0);
+  });
+
+  it("follows up a week and a day before sales close, to everyone on the list", async () => {
+    // Sales close Mon 30 Nov 19:00 UTC; launched 1 Nov.
+    await raffle({ maxTickets: null, openNotifiedAt: new Date("2026-11-01T09:00:00Z") });
+    await state.db.insert(schema.newsletterSubscribers).values([{ email: "reader@example.test" }, { email: "buyer@example.test" }]);
+    await order({ email: "buyer@example.test", status: "paid", paidAt: NOW });
+
+    expect(await sendRaffleFollowUps(new Date("2026-11-22T12:00:00Z"))).toBe(0); // 8 days out
+    expect(await sendRaffleFollowUps(new Date("2026-11-23T09:00:00Z"))).toBe(0); // before 10am
+    expect(await sendRaffleFollowUps(new Date("2026-11-23T10:30:00Z"))).toBe(3);
+    expect(state.send.mock.calls.map((c) => c[0].To).sort()).toEqual(["admin@example.test", "buyer@example.test", "reader@example.test"]);
+    const week = state.send.mock.calls[0][0];
+    expect(week.Subject).toContain("One week left");
+    expect(week.HtmlBody).toContain("Buy tickets");
+    expect(week.HtmlBody).toContain("One week left");
+    expect(week.Headers).toEqual([{ Name: "List-Unsubscribe", Value: expect.stringContaining("/raffles/unsubscribe?e=") }]);
+    expect(await sendRaffleFollowUps(new Date("2026-11-23T15:00:00Z"))).toBe(0);
+
+    state.send.mockClear();
+    expect(await sendRaffleFollowUps(new Date("2026-11-29T10:30:00Z"))).toBe(3);
+    expect(state.send.mock.calls[0][0].Subject).toContain("Last chance");
+    expect(await sendRaffleFollowUps(new Date("2026-11-29T18:00:00Z"))).toBe(0);
+  });
+
+  it("skips a follow-up whose day has passed, or that would land within a day of the launch", async () => {
+    await raffle({ maxTickets: null, openNotifiedAt: new Date("2026-11-23T09:30:00Z") });
+    expect(await sendRaffleFollowUps(new Date("2026-11-23T10:30:00Z"))).toBe(0);
+    expect(await sendRaffleFollowUps(new Date("2026-11-24T10:30:00Z"))).toBe(0);
+    expect(await sendRaffleFollowUps(new Date("2026-11-29T10:30:00Z"))).toBe(1);
   });
 
   it("only unsubscribes with a valid signed link", () => {

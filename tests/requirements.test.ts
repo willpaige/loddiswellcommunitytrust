@@ -21,7 +21,7 @@ import { getNextRequirementSessions } from "@/lib/requirement-schedule";
 import { requirementStage, requirementNow, requirementRetryAt } from "@/lib/requirement-policy";
 import { sendDueRequirementReminders, sendRequirementRequest } from "@/lib/requirement-reminders";
 import { getRequirementQueue, resendRequirementRequest } from "@/actions/requirement-queue";
-import { renderBodyTextAsHtml } from "@/lib/email/render";
+import { renderEmailHtml } from "@/lib/email/layout";
 import RequirementsPage from "@/app/account/bookings/[id]/requirements/page";
 
 let pg: PGlite;
@@ -200,9 +200,15 @@ it("adds form links to existing customized templates without overwriting or dupl
 });
 
 it("renders clickable form URLs while escaping customer HTML", () => {
-  const html = renderBodyTextAsHtml('<script>bad</script>\n\nhttps://example.test/form?a=1&b=2');
-  expect(html).not.toContain('<script>');
-  expect(html).toContain('<a href="https://example.test/form?a=1&amp;b=2">');
+  const html = renderEmailHtml({
+    body: '<script>bad</script>\n\nhttps://example.test/form?a=1&b=2',
+    variables: { bookingUrl: "https://example.test/form?a=1&b=2" },
+    buttonLabel: (v) => (v === "bookingUrl" ? "Complete the form" : undefined),
+    appUrl: "https://example.test",
+  });
+  expect(html).not.toContain('<script>bad');
+  expect(html).toContain('href="https://example.test/form?a=1&amp;b=2"');
+  expect(html).toContain("Complete the form");
 });
 
 describe("durable reminders", () => {

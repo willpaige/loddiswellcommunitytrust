@@ -26,6 +26,8 @@ export type EmailTemplateKey =
   | "raffle_results"
   | "raffle_draw_manager"
   | "raffle_on_sale"
+  | "raffle_week_reminder"
+  | "raffle_last_call"
   | "raffle_draw_reminder";
 
 export type EmailTemplateCategory = "bookings" | "lottery" | "raffles" | "system";
@@ -283,6 +285,24 @@ export const emailTemplateDefaults: EmailTemplateDefault[] = [
     subject: "Tickets on sale now: {{raffleTitle}}",
     body: "Hello,\n\nTickets for {{raffleTitle}} are on sale now at {{price}} each.\n\n{{tagline}}\n\nThe draw is on {{drawDate}}.\n\n{{raffleUrl}}\n\nYou're getting this because you've supported Loddiswell Playing Field & Village Hall Trust, through the lottery, a booking, a raffle or our newsletter. Don't want raffle news? Unsubscribe: {{unsubscribeUrl}}",
     variables: ["raffleTitle", "price", "tagline", "drawDate", "raffleUrl", "unsubscribeUrl"],
+  },
+  {
+    key: "raffle_week_reminder",
+    category: "raffles",
+    name: "Raffle: one week to go",
+    description: "Sent a week before ticket sales close, to everyone the Trust has an email address for, except people who have unsubscribed.",
+    subject: "One week left: {{raffleTitle}}",
+    body: "Hello,\n\nThere's one week left to get your tickets for {{raffleTitle}}. They're {{price}} each, and every ticket helps {{cause}}.\n\nTickets close {{closeDate}}. The draw is {{drawDate}}.\n\n{{raffleUrl}}\n\nYou're getting this because you've supported Loddiswell Playing Field & Village Hall Trust, through the lottery, a booking, a raffle or our newsletter. Don't want raffle news? Unsubscribe: {{unsubscribeUrl}}",
+    variables: ["raffleTitle", "price", "cause", "closeDate", "drawDate", "raffleUrl", "unsubscribeUrl"],
+  },
+  {
+    key: "raffle_last_call",
+    category: "raffles",
+    name: "Raffle: last chance",
+    description: "Sent the day before ticket sales close, to everyone the Trust has an email address for, except people who have unsubscribed.",
+    subject: "Last chance: {{raffleTitle}} tickets close tomorrow",
+    body: "Hello,\n\nTickets for {{raffleTitle}} close tomorrow, {{closeDate}}. If you'd like a chance to win, there's still time.\n\nThey're {{price}} each, and every ticket helps {{cause}}. The draw is {{drawDate}}.\n\n{{raffleUrl}}\n\nYou're getting this because you've supported Loddiswell Playing Field & Village Hall Trust, through the lottery, a booking, a raffle or our newsletter. Don't want raffle news? Unsubscribe: {{unsubscribeUrl}}",
+    variables: ["raffleTitle", "price", "cause", "closeDate", "drawDate", "raffleUrl", "unsubscribeUrl"],
   },
   {
     key: "raffle_draw_reminder",

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { runRaffleJobs } from "@/lib/raffles/jobs";
 
 // Hourly: releases checkout holds Stripe never told us about, sends "on sale
-// now" emails when a raffle opens, and the morning-of-the-draw reminder.
+// now" emails when a raffle opens, the follow-ups a week and a day before
+// sales close, and the morning-of-the-draw reminder.
 export async function GET(req: NextRequest) {
   const secret = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
   if (process.env.CRON_SECRET && secret !== process.env.CRON_SECRET) {

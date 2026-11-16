@@ -3,7 +3,10 @@ import { TZDate } from "@date-fns/tz";
 import { db } from "@/lib/db";
 import { raffleInterest, raffleOrders, raffleTickets, raffles } from "@/lib/db/schema";
 import { sendBulkTemplateEmails, type BulkEmail } from "@/lib/email/bulk-send";
-import { compressRanges, formatPence } from "@/lib/raffles/numbers";
+import { compressRanges, formatPence, formatRaffleSerial } from "@/lib/raffles/numbers";
+import { ticketsRemaining } from "@/lib/raffles/state";
+import { ordinal } from "@/lib/raffles/draw";
+import type { EmailExtras } from "@/lib/email/layout";
 import { formatUk } from "@/lib/raffles/time";
 import { releaseStaleRaffleOrders } from "@/lib/raffles/orders";
 import { unsubscribeUrl } from "@/lib/raffles/unsubscribe";
@@ -15,6 +18,34 @@ import { getRaffleLaunchAudience } from "@/lib/raffles/audience";
 
 function appUrl() {
   return process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+}
+
+type Raffle = typeof raffles.$inferSelect;
+
+/** The artwork, facts, prizes and button shared by the launch and follow-up emails. */
+export function raffleMarketingExtras(raffle: Raffle, eyebrow: string, preheader: string): EmailExtras {
+  const url = `${appUrl()}/raffles/${raffle.slug}`;
+  const prizes = [...raffle.prizes].sort((a, b) => a.rank - b.rank);
+  return {
+    preheader,
+    eyebrow: `Raffle ${formatRaffleSerial(raffle.serialNumber)} · ${eyebrow}`,
+    headline: raffle.title,
+    hero: raffle.heroImageUrl ? { src: raffle.heroImageUrl, alt: raffle.title, href: url } : undefined,
+    facts: [
+      { value: formatPence(raffle.ticketPricePence), label: "per ticket" },
+      { value: formatUk(raffle.drawAt, "EEE d MMM"), label: `draw at ${formatUk(raffle.drawAt, "h:mmaaa")}` },
+      { value: `${raffle.minAge}+`, label: "to enter" },
+    ],
+    cta: { label: "Buy tickets", url },
+    prizes: prizes.map((p) => ({
+      rank: ordinal(p.rank),
+      title: p.title,
+      description: [p.description, p.valuePence ? `Worth ${formatPence(p.valuePence)}.` : ""].filter(Boolean).join(" "),
+    })),
+    closing: raffle.causeTitle
+      ? { strong: `Raising money for ${raffle.causeTitle}.`, text: "We'll email you the moment the winner is drawn." }
+      : undefined,
+  };
 }
 
 /**
@@ -63,11 +94,88 @@ export async function sendRaffleOnSaleEmails(now = new Date()) {
           raffleUrl: `${appUrl()}/raffles/${raffle.slug}`,
           unsubscribeUrl: unsubscribeUrl(email),
         },
+        extras: raffleMarketingExtras(
+          raffle,
+          "Tickets on sale now",
+          `${formatPence(raffle.ticketPricePence)} a ticket · Drawn ${formatUk(raffle.drawAt, "EEEE d MMMM")}`
+        ),
       }));
     const result = await sendBulkTemplateEmails(emails, "raffle");
     sent += result.sent;
     if (interest.length) {
       await db.update(raffleInterest).set({ notifiedAt: now }).where(inArray(raffleInterest.id, interest.map((i) => i.id)));
+    }
+  }
+  return sent;
+}
+
+const FOLLOW_UPS = [
+  {
+    key: "raffle_week_reminder" as const,
+    column: "weekReminderSentAt" as const,
+    daysBefore: 7,
+    eyebrow: "One week left",
+  },
+  {
+    key: "raffle_last_call" as const,
+    column: "lastCallSentAt" as const,
+    daysBefore: 1,
+    eyebrow: "Last chance",
+  },
+];
+
+/**
+ * Follow-ups to the whole launch audience (everyone the Trust has an address
+ * for, minus unsubscribes), from 10am UK a week before and the day before
+ * ticket sales close. A follow-up only goes on its own day, so
+ * a raffle that opened late never sends a "one week left" with three days to
+ * go, and it is skipped when it would land within a day of the launch email.
+ */
+export async function sendRaffleFollowUps(now = new Date()) {
+  const uk = new TZDate(now, "Europe/London");
+  if (uk.getHours() < 10) return 0;
+  const today = formatUk(now, "yyyy-MM-dd");
+  const candidates = await db
+    .select()
+    .from(raffles)
+    .where(and(eq(raffles.published, true), isNull(raffles.cancelledAt), gt(raffles.salesCloseAt, now)));
+
+  let sent = 0;
+  for (const raffle of candidates) {
+    if (!raffle.openNotifiedAt || ticketsRemaining(raffle) === 0) continue;
+    for (const f of FOLLOW_UPS) {
+      if (raffle[f.column]) continue;
+      const due = formatUk(new Date(raffle.salesCloseAt.getTime() - f.daysBefore * 86_400_000), "yyyy-MM-dd");
+      if (due !== today) continue;
+      if (now.getTime() - raffle.openNotifiedAt.getTime() < 86_400_000) continue;
+
+      const [claimed] = await db
+        .update(raffles)
+        .set({ [f.column]: now })
+        .where(and(eq(raffles.id, raffle.id), isNull(raffles[f.column])))
+        .returning({ id: raffles.id });
+      if (!claimed) continue;
+
+      const addresses = await getRaffleLaunchAudience(raffle.id);
+
+      const closeDate = formatUk(raffle.salesCloseAt, "EEEE d MMMM 'at' h:mmaaa");
+      const emails: BulkEmail[] = addresses.map((email) => ({
+        key: f.key,
+        to: email,
+        relatedEntityId: `${raffle.id}:${f.key}:${email}`,
+        variables: {
+          raffleTitle: raffle.title,
+          price: formatPence(raffle.ticketPricePence),
+          cause: raffle.causeTitle || "Loddiswell's community facilities",
+          closeDate,
+          drawDate: formatUk(raffle.drawAt, "EEEE d MMMM 'at' h:mmaaa"),
+          raffleUrl: `${appUrl()}/raffles/${raffle.slug}`,
+          unsubscribeUrl: unsubscribeUrl(email),
+        },
+        extras: raffleMarketingExtras(raffle, f.eyebrow, `Tickets close ${closeDate}`),
+      }));
+      const result = await sendBulkTemplateEmails(emails, "raffle");
+      sent += result.sent;
     }
   }
   return sent;
@@ -129,6 +237,7 @@ export async function sendRaffleDrawReminders(now = new Date()) {
 export async function runRaffleJobs(now = new Date()) {
   const released = await releaseStaleRaffleOrders(now);
   const onSale = await sendRaffleOnSaleEmails(now);
+  const followUps = await sendRaffleFollowUps(now);
   const reminders = await sendRaffleDrawReminders(now);
-  return { released, onSale, reminders };
+  return { released, onSale, followUps, reminders };
 }

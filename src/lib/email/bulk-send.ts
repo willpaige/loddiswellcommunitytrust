@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { emailLogs } from "@/lib/db/schema";
 import { sendTemplateEmail } from "@/lib/email/send";
 import type { EmailTemplateKey } from "@/lib/email/defaults";
+import type { EmailExtras } from "@/lib/email/layout";
 
 // One email per recipient, sent one after another. Shared by the lottery and
 // raffle draws. Every send goes through sendTemplateEmail, which skips an
@@ -18,6 +19,7 @@ export type BulkEmail = {
   variables: Record<string, string | number | null | undefined>;
   /** Unique per recipient and purpose, e.g. `${drawId}:${email}`. */
   relatedEntityId: string;
+  extras?: EmailExtras;
 };
 
 export type BulkSendResult = {
@@ -41,6 +43,7 @@ export async function sendBulkTemplateEmails(
         variables: email.variables,
         relatedEntityType,
         relatedEntityId: email.relatedEntityId,
+        extras: email.extras,
       });
       if (outcome.sent) result.sent += 1;
       else result.skipped += 1;

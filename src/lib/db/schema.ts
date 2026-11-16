@@ -867,6 +867,9 @@ export const raffles = pgTable(
     ticketsIssued: integer("tickets_issued").notNull().default(0),
     openNotifiedAt: timestamp("open_notified_at"),
     reminderSentAt: timestamp("reminder_sent_at"),
+    // Follow-ups to the launch audience: a week, then a day, before sales close.
+    weekReminderSentAt: timestamp("week_reminder_sent_at"),
+    lastCallSentAt: timestamp("last_call_sent_at"),
     otherExpensesPence: integer("other_expenses_pence").notNull().default(0),
     returnSubmittedAt: timestamp("return_submitted_at"),
     createdBy: text("created_by").references(() => users.id),

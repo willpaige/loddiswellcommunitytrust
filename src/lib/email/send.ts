@@ -5,8 +5,9 @@ import { ServerClient } from "postmark";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { emailLogs, emailTemplates, siteSettings } from "@/lib/db/schema";
-import { renderBodyTextAsHtml } from "@/lib/email/render";
-import { rafflePromoText } from "@/lib/raffles/promo";
+import { renderEmailHtml, type EmailExtras } from "@/lib/email/layout";
+import { buttonLabelFor, decorate } from "@/lib/email/decor";
+import { rafflePromoForEmail } from "@/lib/raffles/promo";
 import {
   emailTemplateDefaults,
   type EmailTemplateKey,
@@ -19,6 +20,8 @@ type SendTemplateEmailInput = {
   relatedEntityType?: string;
   relatedEntityId?: string;
   dedupe?: boolean;
+  /** Structured parts of the HTML email that the text body can't carry. */
+  extras?: EmailExtras;
 };
 
 function getPostmark() {
@@ -30,37 +33,6 @@ function interpolate(template: string, variables: Record<string, string | number
     const value = variables[key];
     return value === null || value === undefined ? "" : String(value);
   });
-}
-
-function brandedEmailHtml(contentHtml: string) {
-  return `<!doctype html>
-<html>
-  <body style="margin:0;background:#f4f1ea;font-family:Arial,sans-serif;color:#2c2a27;">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f1ea;padding:32px 12px;">
-      <tr>
-        <td align="center">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;background:#ffffff;border:1px solid #d8d0c5;">
-            <tr>
-              <td style="background:#2f3b28;color:#ffffff;padding:28px 32px;font-family:Georgia,serif;font-size:24px;font-weight:bold;">
-                Loddiswell Community Trust
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:32px;font-size:16px;line-height:1.6;">
-                ${contentHtml}
-              </td>
-            </tr>
-            <tr>
-              <td style="border-top:1px solid #e6dfd6;padding:20px 32px;color:#766f66;font-size:13px;">
-                Loddiswell Playing Fields &amp; Village Hall Trust
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-  </body>
-</html>`;
 }
 
 export async function ensureEmailTemplates() {
@@ -91,6 +63,7 @@ export async function sendTemplateEmail({
   relatedEntityType,
   relatedEntityId,
   dedupe = true,
+  extras,
 }: SendTemplateEmailInput) {
   if (!process.env.POSTMARK_API_KEY || !to) return { sent: false, skipped: true, reason: "not_configured" };
   await ensureEmailTemplates();
@@ -117,15 +90,25 @@ export async function sendTemplateEmail({
 
   const [settings] = await db.select().from(siteSettings).limit(1);
   // Cross-sell: any template can include {{rafflePromo}}, which is the current
-  // raffle's one-liner, or nothing when no raffle is on sale.
-  const allVariables =
+  // raffle's one-liner (a card with its artwork in the HTML), or nothing when
+  // no raffle is on sale.
+  const promo =
     template.body.includes("{{rafflePromo}}") && variables.rafflePromo === undefined
-      ? { ...variables, rafflePromo: await rafflePromoText() }
-      : variables;
+      ? await rafflePromoForEmail()
+      : null;
+  const allVariables = promo ? { ...variables, rafflePromo: promo.text } : variables;
   const subject = interpolate(template.subject, allVariables);
   // An empty variable can leave a run of blank lines; tidy them up.
   const body = interpolate(template.body, allVariables).replace(/\n{3,}/g, "\n\n").trim();
-  const html = brandedEmailHtml(renderBodyTextAsHtml(body));
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://loddiswellcommunitytrust.org";
+  const html = renderEmailHtml({
+    body,
+    variables: allVariables,
+    extras: decorate(key, allVariables, body, { ...extras, promo: extras?.promo ?? promo?.card ?? null }),
+    buttonLabel: buttonLabelFor(key),
+    appUrl,
+  });
+  const unsubscribe = typeof variables.unsubscribeUrl === "string" ? variables.unsubscribeUrl : "";
 
   try {
     const result = await getPostmark().sendEmail({
@@ -136,6 +119,8 @@ export async function sendTemplateEmail({
       HtmlBody: html,
       MessageStream: "outbound",
       ReplyTo: settings?.emailAddress || undefined,
+      // Lets Gmail and Apple Mail show their own "Unsubscribe" button.
+      Headers: unsubscribe ? [{ Name: "List-Unsubscribe", Value: `<${unsubscribe}>` }] : undefined,
     });
     await db.insert(emailLogs).values({
       id: createId(),
