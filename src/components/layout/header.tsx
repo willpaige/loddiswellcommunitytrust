@@ -17,6 +17,17 @@ const baseNavigation = [
   { name: "Contact", href: "/contact" },
 ];
 
+// The header is see-through at the top of the page, with white text, because
+// most pages open with a dark green banner. These pages open on a light
+// background instead, so the header starts solid or its text is unreadable.
+const LIGHT_TOP_PAGES = [
+  /^\/raffles\/[^/]+\/success\/?$/,
+  /^\/raffles\/unsubscribe\/?$/,
+  /^\/lottery\/cancel\/?$/,
+  /^\/booking\/cancel\/?$/,
+  /^\/account\/verify\/?$/,
+];
+
 export function Header({ rafflePromo = null }: { rafflePromo?: RafflePromo | null }) {
   const pathname = usePathname();
   // The raffle gets a nav link while one is promoted, and a strip above the
@@ -35,7 +46,8 @@ export function Header({ rafflePromo = null }: { rafflePromo?: RafflePromo | nul
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  const showSolid = scrolled || mobileMenuOpen;
+  const lightTop = LIGHT_TOP_PAGES.some((re) => re.test(pathname));
+  const showSolid = scrolled || mobileMenuOpen || lightTop;
 
   function isActive(href: string) {
     return pathname === href || pathname.startsWith(`${href}/`);
