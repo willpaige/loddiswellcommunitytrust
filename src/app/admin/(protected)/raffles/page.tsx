@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { RaffleStateBadge } from "@/components/admin/raffle-state-badge";
 import { deriveRaffleState } from "@/lib/raffles/state";
-import { formatPence } from "@/lib/raffles/numbers";
+import { formatPence, formatRaffleSerial } from "@/lib/raffles/numbers";
 import { formatUk } from "@/lib/raffles/time";
 
 export const dynamic = "force-dynamic";
@@ -106,7 +106,7 @@ export default async function AdminRafflesPage() {
                       {r.title}
                     </Link>
                     <p className="text-xs text-muted-foreground">
-                      /raffles/{r.slug}
+                      {formatRaffleSerial(r.serialNumber)} · /raffles/{r.slug}
                       {r.featured ? " · featured" : ""}
                     </p>
                   </TableCell>

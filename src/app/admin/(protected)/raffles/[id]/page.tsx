@@ -15,7 +15,7 @@ import { getRaffleLaunchAudience } from "@/lib/raffles/audience";
 import { duplicateRaffle, getRaffleForAdmin } from "@/actions/raffles";
 import { closeRaffleSalesNow, getRaffleOrders, getRaffleSalesByDay, recordCashSale } from "@/actions/raffle-orders";
 import { deriveRaffleState } from "@/lib/raffles/state";
-import { formatPence, padTicket } from "@/lib/raffles/numbers";
+import { formatPence, padTicket, formatRaffleSerial } from "@/lib/raffles/numbers";
 import { formatUk } from "@/lib/raffles/time";
 import { cn } from "@/lib/utils";
 
@@ -74,7 +74,10 @@ export default async function RaffleDashboardPage({
       <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
         <div>
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-3xl font-bold">{raffle.title}</h1>
+            <h1 className="text-3xl font-bold">
+              {raffle.title}{" "}
+              <span className="font-normal text-muted-foreground">{formatRaffleSerial(raffle.serialNumber)}</span>
+            </h1>
             <RaffleStateBadge state={state} />
           </div>
           <p className="mt-1 text-muted-foreground">

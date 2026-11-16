@@ -6,7 +6,7 @@ import { CalendarPlus, Loader2, Mail } from "lucide-react";
 import { db } from "@/lib/db";
 import { raffleOrders, raffleTickets } from "@/lib/db/schema";
 import { getPublicRaffleBySlug } from "@/lib/raffles/public";
-import { formatPence, padTicket } from "@/lib/raffles/numbers";
+import { formatPence, padTicket, formatRaffleSerial } from "@/lib/raffles/numbers";
 import { formatUk } from "@/lib/raffles/time";
 import { Button } from "@/components/ui/button";
 import { ShareButtons } from "@/components/raffles/share-buttons";
@@ -67,7 +67,7 @@ export default async function RaffleSuccessPage({
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-copper-600">Payment received</p>
               <h1 className="mt-2 font-serif text-4xl">You&apos;re in{firstName ? `, ${firstName}` : ""}!</h1>
               <p className="mt-3 text-muted-foreground">
-                Here {tickets.length === 1 ? "is your ticket" : `are your ${tickets.length} tickets`} for {raffle.title}.
+                Here {tickets.length === 1 ? "is your ticket" : `are your ${tickets.length} tickets`} for {raffle.title} ({formatRaffleSerial(raffle.serialNumber)}).
               </p>
             </div>
             <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4" aria-label="Your ticket numbers">

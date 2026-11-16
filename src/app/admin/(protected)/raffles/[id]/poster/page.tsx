@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import QRCode from "qrcode";
 import { getRaffleForAdmin } from "@/actions/raffles";
-import { formatPence } from "@/lib/raffles/numbers";
+import { formatPence, formatRaffleSerial } from "@/lib/raffles/numbers";
 import { formatUk } from "@/lib/raffles/time";
 import { renderSmallPrint } from "@/lib/raffles/small-print";
 import { PrintButton } from "@/components/admin/print-button";
@@ -29,7 +29,7 @@ export default async function RafflePosterPage({ params }: { params: Promise<{ i
         <PrintButton label="Print poster" />
       </div>
       <article className="raffle-poster mx-auto flex h-[297mm] w-[210mm] flex-col bg-white p-[14mm] text-sage-950 shadow-lg print:shadow-none">
-        <p className="text-sm font-bold uppercase tracking-[0.3em] text-copper-700">Loddiswell village raffle</p>
+        <p className="text-sm font-bold uppercase tracking-[0.3em] text-copper-700">Loddiswell village raffle · {formatRaffleSerial(raffle.serialNumber)}</p>
         <h1 className="mt-3 font-serif text-[54px] leading-[1.02]">{raffle.title}</h1>
         {raffle.tagline && <p className="mt-3 text-xl leading-snug text-sage-800">{raffle.tagline}</p>}
         {raffle.heroImageUrl && (

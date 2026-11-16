@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { PrintButton } from "@/components/admin/print-button";
 import { getRaffleReturn, saveRaffleOtherExpenses, setRaffleReturnSubmitted } from "@/actions/raffle-return";
 import { formatUk } from "@/lib/raffles/time";
+import { formatRaffleSerial } from "@/lib/raffles/numbers";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +47,7 @@ export default async function RaffleReturnPage({ params }: { params: Promise<{ i
         <div>
           <h1 className="text-3xl font-bold">Lottery return for South Hams</h1>
           <p className="mt-1 text-muted-foreground">
-            {raffle.title} · due by <strong className="text-foreground">{formatUk(figures.dueBy, "d MMMM yyyy")}</strong> (3 months after the draw)
+            {raffle.title} ({formatRaffleSerial(raffle.serialNumber)}) · due by <strong className="text-foreground">{formatUk(figures.dueBy, "d MMMM yyyy")}</strong> (3 months after the draw)
             {raffle.returnSubmittedAt && ` · submitted ${formatUk(raffle.returnSubmittedAt, "d MMMM yyyy")}`}
           </p>
         </div>

@@ -239,6 +239,13 @@
       "when": 1794305643747,
       "tag": "0033_lottery_results_raffles",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1794840489342,
+      "tag": "0034_raffle_serial_number",
+      "breakpoints": true
     }
   ]
 }

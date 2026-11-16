@@ -826,6 +826,10 @@ export const raffles = pgTable(
     id: text("id")
       .primaryKey()
       .$defaultFn(() => createId()),
+    // The public lottery number, shown as L001, L002 and so on. Postgres hands
+    // out the next one on insert, so every raffle (duplicates included) is
+    // numbered without the app counting anything.
+    serialNumber: integer("serial_number").notNull().generatedByDefaultAsIdentity(),
     slug: text("slug").notNull(),
     title: text("title").notNull(),
     tagline: text("tagline"),
@@ -869,7 +873,10 @@ export const raffles = pgTable(
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
-  (table) => [uniqueIndex("raffles_slug_idx").on(table.slug)]
+  (table) => [
+    uniqueIndex("raffles_slug_idx").on(table.slug),
+    uniqueIndex("raffles_serial_number_idx").on(table.serialNumber),
+  ]
 );
 
 // One row per purchase, card or cash. Also the raffle's income-ledger row:

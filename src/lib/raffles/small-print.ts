@@ -1,4 +1,4 @@
-import { formatPence } from "@/lib/raffles/numbers";
+import { formatPence, formatRaffleSerial } from "@/lib/raffles/numbers";
 import { formatUk } from "@/lib/raffles/time";
 
 // Society lottery tickets must name the promoter, the society, the price and
@@ -7,11 +7,20 @@ import { formatUk } from "@/lib/raffles/time";
 export const DEFAULT_RAFFLE_SMALL_PRINT =
   "Promoted by Zoë Crockford on behalf of Loddiswell Playing Fields & Village Hall Trust, The Village Hall, TQ7 4RH. Registered with South Hams District Council under the Gambling Act 2005, to raise funds for LPFVHT. Tickets {price} each. Draw {drawDate}.";
 
+/**
+ * The raffle's lottery number always appears: where the trustees' wording puts
+ * {serial}, or at the start when it doesn't, so custom small print written
+ * before serial numbers existed still carries one.
+ */
 export function renderSmallPrint(
   template: string | null | undefined,
-  raffle: { ticketPricePence: number; drawAt: Date }
+  raffle: { ticketPricePence: number; drawAt: Date; serialNumber: number }
 ) {
-  return (template || DEFAULT_RAFFLE_SMALL_PRINT)
+  const serial = formatRaffleSerial(raffle.serialNumber);
+  const text = template || DEFAULT_RAFFLE_SMALL_PRINT;
+  const withSerial = text.includes("{serial}") ? text : `Lottery ${serial}. ${text}`;
+  return withSerial
+    .replaceAll("{serial}", serial)
     .replaceAll("{price}", formatPence(raffle.ticketPricePence))
     .replaceAll("{drawDate}", formatUk(raffle.drawAt, "d MMMM yyyy"));
 }

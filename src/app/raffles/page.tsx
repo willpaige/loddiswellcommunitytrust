@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Gift } from "lucide-react";
 import { getPromotedRaffle, getRecentDrawnRaffles } from "@/lib/raffles/public";
-import { formatPence, formatTicket } from "@/lib/raffles/numbers";
+import { formatPence, formatTicket, formatRaffleSerial } from "@/lib/raffles/numbers";
 import { formatUk } from "@/lib/raffles/time";
 import { PageHeader } from "@/components/layout/page-header";
 import { RaffleExtras } from "@/components/raffles/raffle-extras";
@@ -49,7 +49,7 @@ export default async function RafflesPage() {
                       <span>
                         <span className="font-semibold text-foreground">{r.title}</span>
                         <span className="block text-sm text-muted-foreground">
-                          Drawn {formatUk(r.drawAt, "d MMMM yyyy")} · {formatPence(r.raisedPence)} raised
+                          {formatRaffleSerial(r.serialNumber)} · Drawn {formatUk(r.drawAt, "d MMMM yyyy")} · {formatPence(r.raisedPence)} raised
                         </span>
                       </span>
                       {r.draw?.results[0] && (

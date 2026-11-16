@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { CalendarClock, EyeOff, Gift, Heart, Radio, Ticket } from "lucide-react";
 import { getPreviewRaffleBySlug, getPublicRaffleBySlug } from "@/lib/raffles/public";
 import { ticketsRemaining } from "@/lib/raffles/state";
-import { formatPence } from "@/lib/raffles/numbers";
+import { formatPence, formatRaffleSerial } from "@/lib/raffles/numbers";
 import { formatUk } from "@/lib/raffles/time";
 import { renderSmallPrint } from "@/lib/raffles/small-print";
 import { renderRichText, type TiptapJSON } from "@/lib/cms/render";
@@ -89,7 +89,7 @@ export default async function RafflePage(props: PageProps) {
               </p>
             )}
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-copper-300">
-              Raffle · Draw {formatUk(raffle.drawAt, "EEE d MMMM, h:mmaaa")}
+              Raffle {formatRaffleSerial(raffle.serialNumber)} · Draw {formatUk(raffle.drawAt, "EEE d MMMM, h:mmaaa")}
             </p>
             <h1 className="mt-3 font-serif text-4xl leading-tight tracking-tight sm:text-5xl">{raffle.title}</h1>
             {raffle.tagline && <p className="mt-4 max-w-2xl text-lg leading-relaxed text-sage-200">{raffle.tagline}</p>}
@@ -304,7 +304,7 @@ export default async function RafflePage(props: PageProps) {
               <div className="text-sm">
                 <p className="font-semibold">Fancy a chance every month?</p>
                 <p className="text-muted-foreground">
-                  The Community Lottery is £1 a month, drawn monthly.{" "}
+                  The Community Lottery is £12 a year per ticket, drawn monthly.{" "}
                   <Link href="/lottery" className="text-copper-700 underline">
                     Join the lottery
                   </Link>

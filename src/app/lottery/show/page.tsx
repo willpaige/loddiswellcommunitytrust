@@ -34,8 +34,8 @@ export default function LotteryShowSignupPage() {
             </h1>
 
             <p className="mt-6 max-w-2xl text-xl leading-relaxed text-sage-100 sm:text-2xl">
-              Pick your tickets now. It only takes a minute, costs £1 a month
-              per ticket, and helps look after the village hall, playing fields,
+              Pick your tickets now. It only takes a minute, costs £12 a year
+              per ticket (or £1 a month), and helps look after the village hall, playing fields,
               pavilion, play park, and tennis courts.
             </p>
 
@@ -45,8 +45,8 @@ export default function LotteryShowSignupPage() {
                   className="h-7 w-7 text-copper-200"
                   aria-hidden="true"
                 />
-                <p className="mt-3 text-2xl font-semibold">£1</p>
-                <p className="text-sm text-sage-200">per ticket each month</p>
+                <p className="mt-3 text-2xl font-semibold">£12</p>
+                <p className="text-sm text-sage-200">per ticket each year</p>
               </div>
               <div className="border-l-2 border-copper-300 pl-4">
                 <Ticket
@@ -84,7 +84,7 @@ export default function LotteryShowSignupPage() {
               </p>
             </div>
 
-            <LotteryCheckoutButton defaultInterval="month" source="show" />
+            <LotteryCheckoutButton source="show" />
 
             <div className="mt-6 flex items-start gap-3 border-t border-border pt-5 text-xs leading-relaxed text-muted-foreground">
               <ShieldCheck
