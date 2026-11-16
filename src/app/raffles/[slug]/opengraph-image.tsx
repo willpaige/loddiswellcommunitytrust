@@ -7,6 +7,10 @@ export const alt = "Loddiswell village raffle";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
+const BAND = 84;
+
+const pill = { display: "flex", flexShrink: 0, whiteSpace: "nowrap", padding: "10px 22px", borderRadius: 10, fontSize: 30 } as const;
+
 // The preview WhatsApp and Facebook show when a raffle link is shared, made
 // from the raffle itself so nobody has to design a graphic each month.
 export default async function RaffleShareImage({ params }: { params: Promise<{ slug: string }> }) {
@@ -22,26 +26,43 @@ export default async function RaffleShareImage({ params }: { params: Promise<{ s
     ? new URL(raffle.heroImageUrl, process.env.NEXT_PUBLIC_APP_URL || "https://loddiswellcommunitytrust.org").toString()
     : null;
 
-  return new ImageResponse(
-    (
-      <div style={{ width: "100%", height: "100%", display: "flex", background: "#1F2619", color: "#F2F4EF" }}>
-        <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", padding: "56px", width: hero ? "56%" : "100%" }}>
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            <div style={{ fontSize: 26, letterSpacing: 6, textTransform: "uppercase", color: "#D49A7D", fontWeight: 700 }}>Loddiswell raffle</div>
-            <div style={{ marginTop: 22, fontSize: title.length > 40 ? 58 : 72, lineHeight: 1.05, fontWeight: 800 }}>{title}</div>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <div style={{ display: "flex", gap: 16 }}>
-              {price && <div style={{ display: "flex", background: "#B5654A", color: "white", padding: "12px 22px", borderRadius: 10, fontSize: 32, fontWeight: 700 }}>{price}</div>}
-              {draw && <div style={{ display: "flex", border: "2px solid #9EAC8A", padding: "12px 22px", borderRadius: 10, fontSize: 32 }}>{draw}</div>}
-            </div>
-            <div style={{ fontSize: 26, color: "#C4CDB6" }}>{cause}</div>
+  const pills = (
+    <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+      {price && <div style={{ ...pill, background: "#B5654A", color: "white", fontWeight: 700 }}>{price}</div>}
+      {draw && <div style={{ ...pill, border: "2px solid #9EAC8A" }}>{draw}</div>}
+    </div>
+  );
+
+  // Raffle artwork is designed as a wide banner with the title written on it,
+  // so it is shown whole across the card rather than cropped into a side
+  // panel, with the price and draw date in a band underneath.
+  if (hero) {
+    return new ImageResponse(
+      (
+        <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", background: "#1F2619", color: "#F2F4EF" }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={hero} alt="" width={1200} height={630 - BAND} style={{ width: 1200, height: 630 - BAND, objectFit: "cover" }} />
+          <div style={{ display: "flex", height: BAND, alignItems: "center", justifyContent: "space-between", padding: "0 32px" }}>
+            {pills}
+            <div style={{ display: "flex", fontSize: 24, color: "#C4CDB6", whiteSpace: "nowrap" }}>{cause}</div>
           </div>
         </div>
-        {hero && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={hero} alt="" width={528} height={630} style={{ width: "44%", height: "100%", objectFit: "cover" }} />
-        )}
+      ),
+      size
+    );
+  }
+
+  return new ImageResponse(
+    (
+      <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", justifyContent: "space-between", padding: "56px", background: "#1F2619", color: "#F2F4EF" }}>
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          <div style={{ fontSize: 26, letterSpacing: 6, textTransform: "uppercase", color: "#D49A7D", fontWeight: 700 }}>Loddiswell raffle</div>
+          <div style={{ marginTop: 22, fontSize: title.length > 40 ? 64 : 80, lineHeight: 1.05, fontWeight: 800 }}>{title}</div>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {pills}
+          <div style={{ fontSize: 26, color: "#C4CDB6" }}>{cause}</div>
+        </div>
       </div>
     ),
     size
