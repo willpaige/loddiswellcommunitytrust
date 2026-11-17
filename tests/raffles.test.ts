@@ -39,7 +39,8 @@ import { sendTemplateEmail } from "@/lib/email/send";
 import { readFileSync } from "node:fs";
 import { computeRaffleReturn } from "@/lib/raffles/limits";
 import { getDueRaffleReturns, getRaffleReturn } from "@/actions/raffle-return";
-import { rafflesEmailSection } from "@/lib/raffles/email-section";
+import { rafflesEmailContent, rafflesEmailSection } from "@/lib/raffles/email-section";
+import { renderEmailHtml } from "@/lib/email/layout";
 import { getRaffleTicketsForEmail } from "@/lib/raffles/public";
 import { getRaffleSummaries, getRaffleTotals } from "@/lib/reports/queries";
 
@@ -784,6 +785,20 @@ describe("raffles in the lottery results email", () => {
     expect(text).toContain("/raffles/november");
     expect(text).toContain("Coming soon: Spring hamper. On sale Tuesday 1 December");
     expect(text).toContain("18+ only");
+  });
+
+  it("gives the raffle on sale an artwork card that replaces its line in the HTML", async () => {
+    await raffle({ causeTitle: "the pump track", heroImageUrl: "https://example.test/art.jpg" });
+    const content = await rafflesEmailContent(NOW);
+    expect(content.card).toMatchObject({ title: "Win a wheelbarrow of booze", imageUrl: "https://example.test/art.jpg" });
+    expect(content.card!.text).toContain("BeGambleAware");
+    expect(content.text).toBe(content.promoLine);
+    expect(content.text).toContain("/raffles/november");
+
+    const body = `Here are the results.\n\n1st: Pat ticket 12 — £50\n\n${content.text}`;
+    const html = renderEmailHtml({ body, variables: { raffles: content.text, rafflePromo: content.promoLine }, extras: { promo: content.card }, appUrl: "https://example.test" });
+    expect(html).toContain("https://example.test/art.jpg");
+    expect(html).not.toContain("on sale now");
   });
 });
 

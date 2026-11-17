@@ -99,7 +99,9 @@ export async function sendTemplateEmail({
   const allVariables = promo ? { ...variables, rafflePromo: promo.text } : variables;
   const subject = interpolate(template.subject, allVariables);
   // An empty variable can leave a run of blank lines; tidy them up.
-  const body = interpolate(template.body, allVariables).replace(/\n{3,}/g, "\n\n").trim();
+  // Templates edited in the admin come back with Windows line endings, which
+  // would stop the layout seeing paragraph breaks.
+  const body = interpolate(template.body.replace(/\r\n?/g, "\n"), allVariables).replace(/\n{3,}/g, "\n\n").trim();
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://loddiswellcommunitytrust.org";
   const html = renderEmailHtml({
     body,
