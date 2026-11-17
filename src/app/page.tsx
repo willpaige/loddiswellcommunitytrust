@@ -14,6 +14,7 @@ import { getPageContent } from "@/lib/cms/get-page-content";
 import { renderInline, renderRichText } from "@/lib/cms/render";
 import { getFacilities } from "@/actions/facilities";
 import { RaffleHomeBlock } from "@/components/raffles/raffle-home-block";
+import { RideNSlideBlock } from "@/components/home/ride-n-slide-block";
 
 export const dynamic = "force-dynamic";
 
@@ -177,6 +178,8 @@ export default async function HomePage() {
           </div>
         </div>
       </section>
+
+      <RideNSlideBlock blocks={blocks} />
 
       <section className="py-20 sm:py-24 bg-card">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">

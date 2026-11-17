@@ -33,6 +33,16 @@ const pageSeeds: PageSeed[] = [
           "The Playing Fields & Village Hall Trust maintains community facilities for the benefit of everyone in Loddiswell Parish."
         )
       ),
+      rns_eyebrow: inlineDoc("A village project"),
+      rns_title: inlineDoc("A new park and pump track for Loddiswell"),
+      rns_body: doc(
+        paragraph(
+          "The Trust and Loddiswell Parish Council are raising money for Loddiswell Ride N Slide: a pump track for bikes, scooters and skateboards, and a new play park, both on the playing field."
+        ),
+        paragraph(
+          "It’s for everyone from toddlers to teenagers. The nearest pump track today is 14 miles away."
+        )
+      ),
       facilities_eyebrow: inlineDoc("Our Facilities"),
       facilities_title: inlineDoc("Community Spaces for Everyone"),
       facilities_body: doc(
