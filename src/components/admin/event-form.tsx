@@ -138,6 +138,7 @@ export function EventForm({ action, facilities = [], initialData }: EventFormPro
               accept="image/jpeg,image/png,image/webp"
               maxBytes={4 * 1024 * 1024}
               contain
+              allowDrop
               folder="events"
               helpText="Upload a JPG, PNG or WebP up to 4 MB. AI will fill in any details it can read, and the poster will appear with the event. You can also enter the details manually."
             />

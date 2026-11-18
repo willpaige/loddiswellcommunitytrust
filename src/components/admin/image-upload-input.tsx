@@ -1,10 +1,11 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, type DragEvent } from "react";
 import Image from "next/image";
 import { Loader2, Upload, X, ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { uploadAsset } from "@/actions/uploads";
+import { cn } from "@/lib/utils";
 
 type Props = {
   value: string | null;
@@ -14,6 +15,7 @@ type Props = {
   accept?: string;
   maxBytes?: number;
   contain?: boolean;
+  allowDrop?: boolean;
   folder?: string;
   helpText?: string;
   aspect?: "wide" | "square";
@@ -27,12 +29,15 @@ export function ImageUploadInput({
   accept = "image/*",
   maxBytes,
   contain,
+  allowDrop = false,
   folder = "facilities",
   helpText,
   aspect = "wide",
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const uploadInProgress = useRef(false);
   const [uploading, setUploading] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function pick() {
@@ -40,11 +45,20 @@ export function ImageUploadInput({
   }
 
   async function handleFile(file: File) {
+    if (uploadInProgress.current) return;
     setError(null);
+    if (allowDrop && !accept.split(",").some((entry) => {
+      const type = entry.trim();
+      return type.endsWith("/*") ? file.type.startsWith(type.slice(0, -1)) : file.type === type;
+    })) {
+      setError("Choose a PNG, JPG or WebP image.");
+      return;
+    }
     if (maxBytes && file.size > maxBytes) {
       setError(`Choose an image up to ${maxBytes / (1024 * 1024)} MB.`);
       return;
     }
+    uploadInProgress.current = true;
     setUploading(true);
     onBusyChange?.(true);
     try {
@@ -61,6 +75,7 @@ export function ImageUploadInput({
     } catch {
       setError("Upload failed. Please try again.");
     } finally {
+      uploadInProgress.current = false;
       setUploading(false);
       onBusyChange?.(false);
     }
@@ -75,6 +90,31 @@ export function ImageUploadInput({
     e.target.value = "";
   }
 
+  function onDragOver(event: DragEvent<HTMLDivElement>) {
+    if (!event.dataTransfer.types.includes("Files")) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = uploadInProgress.current ? "none" : "copy";
+    setDragging(!uploadInProgress.current);
+  }
+
+  function onDragLeave(event: DragEvent<HTMLDivElement>) {
+    if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
+    setDragging(false);
+  }
+
+  function onDrop(event: DragEvent<HTMLDivElement>) {
+    if (!event.dataTransfer.types.includes("Files")) return;
+    event.preventDefault();
+    setDragging(false);
+    if (uploadInProgress.current) return;
+    const { files } = event.dataTransfer;
+    if (files.length !== 1) {
+      setError("Drop one image at a time.");
+      return;
+    }
+    void handleFile(files[0]);
+  }
+
   function remove() {
     setError(null);
     onChange(null);
@@ -83,7 +123,12 @@ export function ImageUploadInput({
   const aspectClass = aspect === "square" ? "aspect-square" : "aspect-[3/2]";
 
   return (
-    <div className="space-y-3">
+    <div
+      className="space-y-3"
+      onDragOver={allowDrop ? onDragOver : undefined}
+      onDragLeave={allowDrop ? onDragLeave : undefined}
+      onDrop={allowDrop ? onDrop : undefined}
+    >
       <input
         ref={inputRef}
         type="file"
@@ -99,11 +144,16 @@ export function ImageUploadInput({
           >
             <Image
               src={value}
-              alt="Hero preview"
+              alt={allowDrop ? "Poster preview" : "Hero preview"}
               fill
               sizes="(min-width: 768px) 28rem, 100vw"
               className={contain ? "object-contain" : "object-cover"}
             />
+            {dragging && (
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center border-2 border-dashed border-copper-400 bg-background/90 text-sm font-medium">
+                Drop to replace the poster
+              </div>
+            )}
             {uploading && (
               <div className="absolute inset-0 flex items-center justify-center bg-background/70">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -140,7 +190,10 @@ export function ImageUploadInput({
           type="button"
           onClick={pick}
           disabled={uploading}
-          className={`relative ${aspectClass} flex w-full max-w-md flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border bg-muted/30 px-4 py-6 text-sm text-muted-foreground transition-colors hover:border-copper-400 hover:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-60`}
+          className={cn(
+            `relative ${aspectClass} flex w-full max-w-md flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border bg-muted/30 px-4 py-6 text-sm text-muted-foreground transition-colors hover:border-copper-400 hover:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-60`,
+            dragging && "border-copper-400 bg-muted",
+          )}
         >
           {uploading ? (
             <>
@@ -152,9 +205,9 @@ export function ImageUploadInput({
               <ImageIcon className="h-6 w-6" aria-hidden="true" />
               <span>
                 <span className="font-medium text-foreground">
-                  Click to upload
+                  {dragging ? "Drop to upload" : allowDrop ? "Drag and drop a poster" : "Click to upload"}
                 </span>{" "}
-                an image
+                {!dragging && (allowDrop ? "or click to browse" : "an image")}
               </span>
               <span className="text-xs">PNG, JPG or WebP</span>
             </>
