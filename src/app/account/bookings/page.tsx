@@ -132,6 +132,17 @@ export default async function AccountBookingsPage() {
                     {booking.organisationName && (
                       <p className="mt-1 text-sm text-muted-foreground">{booking.organisationName}</p>
                     )}
+                    {booking.status === "pending_payment" && booking.paymentDueAt && (
+                      <p className="mt-1 text-sm font-medium text-destructive">
+                        Not paid yet. Held until {formatBookingDate(booking.paymentDueAt, "d MMM yyyy, HH:mm")}, then
+                        released for others to book.
+                      </p>
+                    )}
+                    {booking.status === "cancelled" && booking.releasedUnpaidAt && (
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Released on {formatBookingDate(booking.releasedUnpaidAt, "d MMM yyyy")} because it wasn&apos;t paid.
+                      </p>
+                    )}
                     {bookingBalance(booking) > 0 && booking.status === "confirmed" && (
                       <p className="mt-1 text-sm font-medium text-destructive">
                         {money(bookingBalance(booking))} still to pay

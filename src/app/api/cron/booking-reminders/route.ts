@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { sendDueBookingReminderEmails } from "@/actions/bookings";
+import { processUnpaidBookingHolds, sendDueBookingReminderEmails } from "@/actions/bookings";
 
 export async function GET(req: NextRequest) {
   const secret = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
@@ -7,6 +7,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const result = await sendDueBookingReminderEmails();
-  return NextResponse.json(result);
+  const reminders = await sendDueBookingReminderEmails();
+  // Hourly as well: unpaid-booking reminders, last calls and releases.
+  const unpaidHolds = await processUnpaidBookingHolds();
+  return NextResponse.json({ ...reminders, unpaidHolds });
 }

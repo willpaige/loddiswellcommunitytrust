@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Check } from "lucide-react";
-import { createBookingCheckout, getAvailableBookingSlots } from "@/actions/bookings";
+import { getAvailableBookingSlots } from "@/actions/bookings";
 import { validateBookingDiscountCode, type DiscountCodeResult } from "@/actions/booking-discount-codes";
 import {
   customerGroups,
@@ -192,14 +192,17 @@ export function BookingForm({
   }
 
   return (
-    <form action={createBookingCheckout} className="grid gap-6 lg:grid-cols-[1fr_22rem]">
+    // Submits to the review page (GET /booking?…), where every customer, signed
+    // in or not, confirms the conditions of hire before checkout.
+    <form action="/booking" method="get" className="grid gap-6 lg:grid-cols-[1fr_22rem]">
       <input type="hidden" name="facilityId" value={facilityId} />
       <input type="hidden" name="discountCode" value={discountCode} />
       <Card>
         <CardHeader>
           <CardTitle>Choose your booking</CardTitle>
           <CardDescription>
-            Select a venue, time, and customer type. Payment confirms the booking instantly.
+            Select a venue, time, and customer type. You&apos;ll check the details and the
+            conditions of hire before paying.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
@@ -628,9 +631,7 @@ export function BookingForm({
           >
             {loadingSlots
               ? "Checking availability..."
-              : recurring && repeatPaymentMode === "monthly_invoice"
-                ? "Continue"
-                : "Continue to payment"}
+              : "Review booking"}
           </Button>
           {!loadingSlots && !hasAvailability && (
             <p className="text-sm text-destructive">

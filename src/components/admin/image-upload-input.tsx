@@ -9,6 +9,11 @@ import { uploadAsset } from "@/actions/uploads";
 type Props = {
   value: string | null;
   onChange: (url: string | null) => void;
+  onUpload?: (file: File) => Promise<void>;
+  onBusyChange?: (busy: boolean) => void;
+  accept?: string;
+  maxBytes?: number;
+  contain?: boolean;
   folder?: string;
   helpText?: string;
   aspect?: "wide" | "square";
@@ -17,6 +22,11 @@ type Props = {
 export function ImageUploadInput({
   value,
   onChange,
+  onUpload,
+  onBusyChange,
+  accept = "image/*",
+  maxBytes,
+  contain,
   folder = "facilities",
   helpText,
   aspect = "wide",
@@ -31,17 +41,29 @@ export function ImageUploadInput({
 
   async function handleFile(file: File) {
     setError(null);
-    setUploading(true);
-    const formData = new FormData();
-    formData.set("file", file);
-    formData.set("folder", folder);
-    const result = await uploadAsset(formData);
-    setUploading(false);
-    if ("error" in result) {
-      setError(result.error);
+    if (maxBytes && file.size > maxBytes) {
+      setError(`Choose an image up to ${maxBytes / (1024 * 1024)} MB.`);
       return;
     }
-    onChange(result.url);
+    setUploading(true);
+    onBusyChange?.(true);
+    try {
+      const formData = new FormData();
+      formData.set("file", file);
+      formData.set("folder", folder);
+      const result = await uploadAsset(formData);
+      if ("error" in result) {
+        setError(result.error);
+        return;
+      }
+      onChange(result.url);
+      await onUpload?.(file);
+    } catch {
+      setError("Upload failed. Please try again.");
+    } finally {
+      setUploading(false);
+      onBusyChange?.(false);
+    }
   }
 
   function onInputChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -65,7 +87,7 @@ export function ImageUploadInput({
       <input
         ref={inputRef}
         type="file"
-        accept="image/*"
+        accept={accept}
         className="sr-only"
         onChange={onInputChange}
       />
@@ -80,7 +102,7 @@ export function ImageUploadInput({
               alt="Hero preview"
               fill
               sizes="(min-width: 768px) 28rem, 100vw"
-              className="object-cover"
+              className={contain ? "object-contain" : "object-cover"}
             />
             {uploading && (
               <div className="absolute inset-0 flex items-center justify-center bg-background/70">

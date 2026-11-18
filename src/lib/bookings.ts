@@ -109,3 +109,43 @@ export function money(amount: number) {
     currency: "GBP",
   }).format(amount / 100);
 }
+
+const HOUR_MS = 60 * 60 * 1000;
+
+/**
+ * When an unpaid online booking stops holding its slot: `holdDays` after it
+ * was made, or 24 hours before the session if that comes sooner, but never
+ * less than two hours after booking and never after the session starts.
+ */
+export function unpaidHoldDeadline(bookedAt: Date, sessionStart: Date, holdDays: number) {
+  const target = Math.min(bookedAt.getTime() + holdDays * 24 * HOUR_MS, sessionStart.getTime() - 24 * HOUR_MS);
+  return new Date(Math.min(sessionStart.getTime(), Math.max(bookedAt.getTime() + 2 * HOUR_MS, target)));
+}
+
+export type UnpaidHoldStep = "remind" | "last_call" | "release" | null;
+
+/**
+ * Which follow-up an unpaid booking is due at `now`: a first reminder an hour
+ * after booking, a last call 24 hours before the hold ends (only for holds of
+ * 36 hours or more; a shorter hold gets just the reminder), then release once
+ * the hold has ended.
+ */
+export function unpaidHoldStep(
+  booking: {
+    createdAt: Date;
+    paymentDueAt: Date;
+    paymentReminderSentAt: Date | null;
+    paymentLastCallSentAt: Date | null;
+  },
+  now: Date
+): UnpaidHoldStep {
+  const due = booking.paymentDueAt.getTime();
+  const t = now.getTime();
+  if (t >= due) return "release";
+  const remindAt = booking.createdAt.getTime() + HOUR_MS;
+  const hasLastCall = due - booking.createdAt.getTime() >= 36 * HOUR_MS;
+  const lastCallAt = due - 24 * HOUR_MS;
+  if (hasLastCall && t >= lastCallAt) return booking.paymentLastCallSentAt ? null : "last_call";
+  if (!booking.paymentReminderSentAt && t >= remindAt) return "remind";
+  return null;
+}

@@ -98,6 +98,9 @@ export const events = pgTable("events", {
   imageUrl: text("image_url"),
   externalUrl: text("external_url"),
   published: boolean("published").default(true),
+  reminderEnabled: boolean("reminder_enabled").notNull().default(false),
+  reminderClaimedAt: timestamp("reminder_claimed_at", { mode: "date" }),
+  reminderSentAt: timestamp("reminder_sent_at", { mode: "date" }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
   createdBy: text("created_by").references(() => users.id),
@@ -120,6 +123,9 @@ export const facilities = pgTable("facilities", {
   bookingInfo: text("booking_info"),
   externalBookingUrl: text("external_booking_url"),
   accessInstructions: text("access_instructions"),
+  // Hirers must tick "I confirm that the venue will be left as I found it"
+  // before booking. On for the Village Hall and Pavilion.
+  leaveAsFoundRequired: boolean("leave_as_found_required").notNull().default(false),
   bookableStartTime: text("bookable_start_time").notNull().default("08:00"),
   bookableEndTime: text("bookable_end_time").notNull().default("23:00"),
   bookable: boolean("bookable").default(true),
@@ -448,6 +454,18 @@ export const bookings = pgTable(
     requirementApprovedAt: timestamp("requirement_approved_at"),
     requirementApprovedBy: text("requirement_approved_by"),
     requirementApprovalNote: text("requirement_approval_note"),
+    // What the customer agreed to on the review page. Null for bookings made
+    // by the Trust, or before these were recorded.
+    termsVersion: text("terms_version"),
+    termsAcceptedAt: timestamp("terms_accepted_at"),
+    venueCareConfirmedAt: timestamp("venue_care_confirmed_at"),
+    // An unpaid online booking holds its slot until paymentDueAt, with
+    // reminders on the way, then is released. Null means no automatic release
+    // (bookings added by the Trust, invoiced bookings, or already paid).
+    paymentDueAt: timestamp("payment_due_at"),
+    paymentReminderSentAt: timestamp("payment_reminder_sent_at"),
+    paymentLastCallSentAt: timestamp("payment_last_call_sent_at"),
+    releasedUnpaidAt: timestamp("released_unpaid_at"),
     cancelledAt: timestamp("cancelled_at"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -722,6 +740,8 @@ export const siteSettings = pgTable("site_settings", {
   // goes out, and how many days overdue it may run before the sessions are released.
   monthlyInvoiceLeadDays: integer("monthly_invoice_lead_days").notNull().default(7),
   monthlyInvoiceGraceDays: integer("monthly_invoice_grace_days").notNull().default(7),
+  // How long an online booking that hasn't been paid keeps its slot.
+  unpaidBookingHoldDays: integer("unpaid_booking_hold_days").notNull().default(3),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
   updatedBy: text("updated_by").references(() => users.id),
 });

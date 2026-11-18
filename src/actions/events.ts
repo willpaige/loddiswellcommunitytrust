@@ -9,6 +9,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { logAudit } from "@/lib/audit";
 import { addMonths } from "date-fns";
+import { parseBookingDateTime } from "@/lib/booking-time";
 
 export async function getEvents() {
   return db.select().from(events).orderBy(desc(events.startDate));
@@ -58,10 +59,11 @@ export async function getEventFacilityOptions() {
 }
 
 function eventDatesFromForm(formData: FormData) {
-  const startDate = new Date(formData.get("startDate") as string);
-  const endDate = formData.get("endDate")
-    ? new Date(formData.get("endDate") as string)
-    : null;
+  const [startDay, startTime] = String(formData.get("startDate") ?? "").split("T");
+  const startDate = parseBookingDateTime(startDay, startTime);
+  const end = formData.get("endDate");
+  const [endDay, endTime] = String(end ?? "").split("T");
+  const endDate = end ? parseBookingDateTime(endDay, endTime) : null;
   return { startDate, endDate };
 }
 
@@ -197,7 +199,8 @@ async function syncEventBookingBlock({
 
 export async function createEvent(formData: FormData) {
   const session = await auth();
-  if (!session?.user) throw new Error("Unauthorized");
+  const role = (session?.user as { role?: string } | undefined)?.role;
+  if (!session?.user || (role !== "admin" && role !== "editor")) throw new Error("Unauthorized");
   const sessionUserId = session.user.id;
 
   const recurring = formData.get("recurringEvent") === "on";
@@ -209,6 +212,7 @@ export async function createEvent(formData: FormData) {
   const externalUrl = (formData.get("externalUrl") as string) || null;
   const allDay = formData.get("allDay") === "on";
   const published = formData.get("published") !== "off";
+  const reminderEnabled = formData.get("reminderEnabled") === "on";
   const shouldBlock = formData.get("blockBookings") === "on";
   const blockFacilityId = String(formData.get("blockFacilityId") || "");
 
@@ -254,6 +258,7 @@ export async function createEvent(formData: FormData) {
         imageUrl,
         externalUrl,
         published,
+        reminderEnabled,
         createdBy: sessionUserId,
       }))
     );
@@ -298,6 +303,7 @@ export async function createEvent(formData: FormData) {
     imageUrl,
     externalUrl,
     published,
+    reminderEnabled,
     createdBy: sessionUserId,
   });
   await syncEventBookingBlock({
@@ -323,7 +329,8 @@ export async function createEvent(formData: FormData) {
 
 export async function updateEvent(id: string, formData: FormData) {
   const session = await auth();
-  if (!session?.user) throw new Error("Unauthorized");
+  const role = (session?.user as { role?: string } | undefined)?.role;
+  if (!session?.user || (role !== "admin" && role !== "editor")) throw new Error("Unauthorized");
   const sessionUserId = session.user.id;
 
   const title = formData.get("title") as string;
@@ -341,6 +348,7 @@ export async function updateEvent(id: string, formData: FormData) {
       imageUrl: (formData.get("imageUrl") as string) || null,
       externalUrl: (formData.get("externalUrl") as string) || null,
       published: formData.get("published") !== "off",
+      reminderEnabled: sql`case when ${events.reminderSentAt} is not null then ${events.reminderEnabled} else ${formData.get("reminderEnabled") === "on"} end`,
       updatedAt: new Date(),
     })
     .where(eq(events.id, id));

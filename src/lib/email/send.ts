@@ -1,7 +1,7 @@
 "use server";
 
 import { createId } from "@paralleldrive/cuid2";
-import { ServerClient } from "postmark";
+import { ServerClient, Errors } from "postmark";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { emailLogs, emailTemplates, siteSettings } from "@/lib/db/schema";
@@ -103,10 +103,11 @@ export async function sendTemplateEmail({
   // would stop the layout seeing paragraph breaks.
   const body = interpolate(template.body.replace(/\r\n?/g, "\n"), allVariables).replace(/\n{3,}/g, "\n\n").trim();
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://loddiswellcommunitytrust.org";
+  const broadcast = key === "event_reminder";
   const html = renderEmailHtml({
     body,
     variables: allVariables,
-    extras: decorate(key, allVariables, body, { ...extras, promo: extras?.promo ?? promo?.card ?? null }),
+    extras: decorate(key, allVariables, body, { ...extras, broadcast, promo: extras?.promo ?? promo?.card ?? null }),
     buttonLabel: buttonLabelFor(key),
     appUrl,
   });
@@ -117,9 +118,11 @@ export async function sendTemplateEmail({
       From: process.env.EMAIL_FROM || "hello@loddiswellcommunitytrust.org",
       To: to,
       Subject: subject,
-      TextBody: body,
+      TextBody: broadcast
+        ? `${body}\n\nYou received this because you signed up for Trust news. Unsubscribe: {{{ pm:unsubscribe }}}`
+        : body,
       HtmlBody: html,
-      MessageStream: "outbound",
+      MessageStream: broadcast ? process.env.POSTMARK_BROADCAST_STREAM || "broadcast" : "outbound",
       ReplyTo: settings?.emailAddress || undefined,
       // Lets Gmail and Apple Mail show their own "Unsubscribe" button.
       Headers: unsubscribe ? [{ Name: "List-Unsubscribe", Value: `<${unsubscribe}>` }] : undefined,
@@ -135,15 +138,19 @@ export async function sendTemplateEmail({
     });
     return { sent: true, skipped: false, messageId: result.MessageID };
   } catch (error) {
+    const suppressed = broadcast && error instanceof Errors.InactiveRecipientsError;
     await db.insert(emailLogs).values({
       id: createId(),
       templateKey: key,
       recipient: to,
       relatedEntityType,
       relatedEntityId,
-      status: "failed",
+      status: suppressed ? "skipped" : "failed",
       error: error instanceof Error ? error.message : "Unknown email error",
     });
+    if (suppressed) {
+      return { sent: false, skipped: true, reason: "suppressed" };
+    }
     throw error;
   }
 }

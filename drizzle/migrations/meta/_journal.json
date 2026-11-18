@@ -253,6 +253,27 @@
       "when": 1794847567980,
       "tag": "0035_raffle_follow_ups",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1795030451795,
+      "tag": "0036_booking_agreements",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1795031671337,
+      "tag": "0037_unpaid_booking_holds",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1795031826746,
+      "tag": "0038_event_reminders",
+      "breakpoints": true
     }
   ]
 }

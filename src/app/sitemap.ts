@@ -19,6 +19,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     "/facilities/playing-field",
     "/facilities/pump-track",
     "/booking",
+    "/booking/terms",
     "/events",
     "/lottery",
     "/lottery/terms",

@@ -37,6 +37,7 @@ export default function EditFacilityPage() {
   const [heroImageUrl, setHeroImageUrl] = useState("");
   const [bookable, setBookable] = useState(true);
   const [published, setPublished] = useState(true);
+  const [leaveAsFoundRequired, setLeaveAsFoundRequired] = useState(false);
   const [loading, setLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
 
@@ -70,6 +71,7 @@ export default function EditFacilityPage() {
         setHeroImageUrl(facility.heroImageUrl || "");
         setBookable(facility.bookable ?? true);
         setPublished(facility.published ?? true);
+        setLeaveAsFoundRequired(facility.leaveAsFoundRequired ?? false);
       }
       setPageLoading(false);
     }
@@ -112,6 +114,7 @@ export default function EditFacilityPage() {
     formData.set("heroImageUrl", heroImageUrl);
     formData.set("bookable", bookable ? "on" : "off");
     formData.set("published", published ? "on" : "off");
+    formData.set("leaveAsFoundRequired", leaveAsFoundRequired ? "on" : "off");
 
     try {
       await updateFacility(id, formData);
@@ -310,6 +313,22 @@ export default function EditFacilityPage() {
               <Label htmlFor="published" className="font-normal">
                 Published (visible on the website)
               </Label>
+            </div>
+            <div className="flex items-start gap-3">
+              <Checkbox
+                id="leaveAsFoundRequired"
+                checked={leaveAsFoundRequired}
+                onCheckedChange={(v) => setLeaveAsFoundRequired(v === true)}
+                className="mt-0.5"
+              />
+              <div>
+                <Label htmlFor="leaveAsFoundRequired" className="font-normal">
+                  Ask hirers to confirm they&apos;ll leave the venue as they found it
+                </Label>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Adds a required checkbox when booking, and a reminder in the booking emails.
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>

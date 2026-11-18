@@ -5,6 +5,10 @@ export type EmailTemplateKey =
   | "manual_booking_payment_link"
   | "booking_cancellation"
   | "booking_payment_failed"
+  | "booking_payment_reminder"
+  | "booking_payment_last_call"
+  | "booking_payment_released"
+  | "booking_payment_released_manager"
   | "booking_reminder"
   | "booking_extension_conflict"
   | "booking_requirements_customer"
@@ -28,7 +32,8 @@ export type EmailTemplateKey =
   | "raffle_on_sale"
   | "raffle_week_reminder"
   | "raffle_last_call"
-  | "raffle_draw_reminder";
+  | "raffle_draw_reminder"
+  | "event_reminder";
 
 export type EmailTemplateCategory = "bookings" | "lottery" | "raffles" | "system";
 
@@ -44,13 +49,22 @@ export type EmailTemplateDefault = {
 
 export const emailTemplateDefaults: EmailTemplateDefault[] = [
   {
+    key: "event_reminder",
+    category: "system",
+    name: "Event reminder",
+    description: "Sent to active Trust newsletter subscribers the day before a published event when reminders are enabled.",
+    subject: "Tomorrow in Loddiswell: {{eventTitle}}",
+    body: "A quick reminder that {{eventTitle}} is tomorrow.\n\nWhen: {{eventWhen}}{{eventLocation}}\n\n{{eventUrl}}\n\n{{rafflePromo}}\n\n{{eventsPromo}}\n\n{{lotteryPromo}}",
+    variables: ["eventTitle", "eventWhen", "eventLocation", "eventUrl", "rafflePromo", "eventsPromo", "lotteryPromo"],
+  },
+  {
     key: "booking_confirmation",
     category: "bookings",
     name: "Booking confirmation",
     description: "Sent to a customer when an online booking is confirmed.",
     subject: "Your Loddiswell booking is confirmed",
-    body: "Hi {{customerName}},\n\nYour booking for {{facilityName}} is confirmed.\n\nBooking: {{offeringName}}\nSchedule: {{schedule}}\nAmount paid: {{amount}}\n\nAccess information:\n{{accessInstructions}}\n\nYou can manage your booking from your account.\n\n{{requirementsNotice}}\n\n{{rafflePromo}}",
-    variables: ["requirementsNotice", "customerName", "facilityName", "offeringName", "startDate", "endTime", "schedule", "amount", "accessInstructions", "bookingUrl", "rafflePromo"],
+    body: "Hi {{customerName}},\n\nYour booking for {{facilityName}} is confirmed.\n\nBooking: {{offeringName}}\nSchedule: {{schedule}}\nAmount paid: {{amount}}\n\nAccess information:\n{{accessInstructions}}\n\nYou can manage your booking from your account.\n\n{{venueCareNotice}}\n\n{{requirementsNotice}}\n\n{{rafflePromo}}",
+    variables: ["venueCareNotice", "requirementsNotice", "customerName", "facilityName", "offeringName", "startDate", "endTime", "schedule", "amount", "accessInstructions", "bookingUrl", "rafflePromo"],
   },
   {
     key: "booking_manager_notification",
@@ -58,8 +72,8 @@ export const emailTemplateDefaults: EmailTemplateDefault[] = [
     name: "Booking manager notification",
     description: "Sent to the booking manager when a customer booking is confirmed.",
     subject: "New booking: {{facilityName}} on {{startDate}}",
-    body: "A new booking has been confirmed.\n\nCustomer: {{customerName}}\nEmail: {{customerEmail}}\nPhone: {{customerPhone}}\nVenue: {{facilityName}}\nBooking: {{offeringName}}\nSchedule: {{schedule}}\nAmount: {{amount}}\n\nNotes: {{notes}}",
-    variables: ["customerName", "customerEmail", "customerPhone", "facilityName", "offeringName", "startDate", "endTime", "schedule", "amount", "notes"],
+    body: "A new booking has been confirmed.\n\nCustomer: {{customerName}}\nEmail: {{customerEmail}}\nPhone: {{customerPhone}}\nVenue: {{facilityName}}\nBooking: {{offeringName}}\nSchedule: {{schedule}}\nAmount: {{amount}}\n\nNotes: {{notes}}\n\n{{agreementRecord}}",
+    variables: ["agreementRecord", "customerName", "customerEmail", "customerPhone", "facilityName", "offeringName", "startDate", "endTime", "schedule", "amount", "notes"],
   },
   {
     key: "manual_booking_confirmation",
@@ -67,8 +81,8 @@ export const emailTemplateDefaults: EmailTemplateDefault[] = [
     name: "Manual booking confirmation",
     description: "Sent to a customer when an admin creates a manual booking.",
     subject: "Your Loddiswell booking has been added",
-    body: "Hi {{customerName}},\n\nYour booking for {{facilityName}} has been added by the Trust.\n\nBooking: {{offeringName}}\nSchedule: {{schedule}}\n\nAccess information:\n{{accessInstructions}}\n\nPlease contact us if anything looks wrong.\n\n{{requirementsNotice}}",
-    variables: ["requirementsNotice", "customerName", "facilityName", "offeringName", "startDate", "endTime", "schedule", "accessInstructions"],
+    body: "Hi {{customerName}},\n\nYour booking for {{facilityName}} has been added by the Trust.\n\nBooking: {{offeringName}}\nSchedule: {{schedule}}\n\nAccess information:\n{{accessInstructions}}\n\nPlease contact us if anything looks wrong.\n\n{{venueCareNotice}}\n\n{{requirementsNotice}}",
+    variables: ["venueCareNotice", "requirementsNotice", "customerName", "facilityName", "offeringName", "startDate", "endTime", "schedule", "accessInstructions"],
   },
   {
     key: "manual_booking_payment_link",
@@ -85,8 +99,8 @@ export const emailTemplateDefaults: EmailTemplateDefault[] = [
     name: "Booking changed",
     description: "Sent to a customer when the date or time of their booking changes.",
     subject: "Your Loddiswell booking has been changed",
-    body: "Hi {{customerName}},\n\nYour booking for {{facilityName}} has been changed.\n\nWas: {{previousSchedule}}\nNow: {{schedule}}\n\nPrice: {{amount}}\n{{settlementLine}}\n\nPlease contact us if anything looks wrong.\n\n{{requirementsNotice}}",
-    variables: ["requirementsNotice", "customerName", "facilityName", "offeringName", "previousSchedule", "schedule", "amount", "settlementLine", "bookingUrl"],
+    body: "Hi {{customerName}},\n\nYour booking for {{facilityName}} has been changed.\n\nWas: {{previousSchedule}}\nNow: {{schedule}}\n\nPrice: {{amount}}\n{{settlementLine}}\n\nPlease contact us if anything looks wrong.\n\n{{venueCareNotice}}\n\n{{requirementsNotice}}",
+    variables: ["venueCareNotice", "requirementsNotice", "customerName", "facilityName", "offeringName", "previousSchedule", "schedule", "amount", "settlementLine", "bookingUrl"],
   },
   {
     key: "booking_change_payment_link",
@@ -114,6 +128,42 @@ export const emailTemplateDefaults: EmailTemplateDefault[] = [
     subject: "Payment issue with your Loddiswell booking",
     body: "Hi {{customerName}},\n\nThere was a problem taking payment for your booking at {{facilityName}}.\n\nPlease use your account to review the booking or update payment details.",
     variables: ["customerName", "facilityName", "bookingUrl"],
+  },
+  {
+    key: "booking_payment_reminder",
+    category: "bookings",
+    name: "Unpaid booking reminder",
+    description: "Sent about an hour after a customer leaves checkout without paying, while the booking is held.",
+    subject: "Your {{facilityName}} booking is waiting for payment",
+    body: "Hi {{customerName}},\n\nYou started a booking for {{facilityName}}, but we haven't received payment yet. We're holding it for you until {{holdUntil}}.\n\nBooking: {{offeringName}}\nSchedule: {{schedule}}\nAmount due: {{amount}}\n\nPay now to confirm your booking:\n\n{{paymentUrl}}\n\nIf it isn't paid by {{holdUntil}}, the booking will be released so the date can be booked by someone else. If you no longer need it, you don't need to do anything.",
+    variables: ["customerName", "facilityName", "offeringName", "schedule", "amount", "holdUntil", "paymentUrl"],
+  },
+  {
+    key: "booking_payment_last_call",
+    category: "bookings",
+    name: "Unpaid booking last call",
+    description: "Sent 24 hours before an unpaid booking is released.",
+    subject: "Last chance to confirm your {{facilityName}} booking",
+    body: "Hi {{customerName}},\n\nWe still haven't received payment for your booking at {{facilityName}}. We'll hold it until {{holdUntil}}, then release the date for others to book.\n\nBooking: {{offeringName}}\nSchedule: {{schedule}}\nAmount due: {{amount}}\n\nPay now to keep your booking:\n\n{{paymentUrl}}",
+    variables: ["customerName", "facilityName", "offeringName", "schedule", "amount", "holdUntil", "paymentUrl"],
+  },
+  {
+    key: "booking_payment_released",
+    category: "bookings",
+    name: "Unpaid booking released",
+    description: "Sent to the customer when an unpaid booking is released after its hold ends.",
+    subject: "Your {{facilityName}} booking has been released",
+    body: "Hi {{customerName}},\n\nWe didn't receive payment for your booking at {{facilityName}} by {{holdUntil}}, so it has been released and the date is open for others to book. No payment was taken.\n\nBooking: {{offeringName}}\nSchedule: {{schedule}}\n\nIf you'd still like to book, you can make a new booking while the date is free:\n\n{{bookingPageUrl}}",
+    variables: ["customerName", "facilityName", "offeringName", "schedule", "holdUntil", "bookingPageUrl"],
+  },
+  {
+    key: "booking_payment_released_manager",
+    category: "bookings",
+    name: "Unpaid booking released (manager)",
+    description: "Sent to the booking manager when an unpaid booking is released.",
+    subject: "Unpaid booking released: {{facilityName}} on {{startDate}}",
+    body: "An unpaid booking has been released and the date is open again.\n\nCustomer: {{customerName}}\nEmail: {{customerEmail}}\nPhone: {{customerPhone}}\nVenue: {{facilityName}}\nBooking: {{offeringName}}\nSchedule: {{schedule}}\nAmount: {{amount}}\nHeld until: {{holdUntil}}",
+    variables: ["customerName", "customerEmail", "customerPhone", "facilityName", "offeringName", "startDate", "schedule", "amount", "holdUntil"],
   },
   {
     key: "booking_invoice_issued",
@@ -175,8 +225,8 @@ export const emailTemplateDefaults: EmailTemplateDefault[] = [
     name: "Booking reminder and access",
     description: "Sent 24 hours before a confirmed booking.",
     subject: "Reminder: {{facilityName}} booking tomorrow",
-    body: "Hi {{customerName}},\n\nThis is a reminder for your booking at {{facilityName}}.\n\nBooking: {{offeringName}}\nDate and time: {{startDate}} to {{endTime}}\n\nAccess information:\n{{accessInstructions}}\n\n{{requirementsNotice}}",
-    variables: ["requirementsNotice", "customerName", "facilityName", "offeringName", "startDate", "endTime", "accessInstructions"],
+    body: "Hi {{customerName}},\n\nThis is a reminder for your booking at {{facilityName}}.\n\nBooking: {{offeringName}}\nDate and time: {{startDate}} to {{endTime}}\n\nAccess information:\n{{accessInstructions}}\n\n{{venueCareNotice}}\n\n{{requirementsNotice}}",
+    variables: ["venueCareNotice", "requirementsNotice", "customerName", "facilityName", "offeringName", "startDate", "endTime", "accessInstructions"],
   },
   {
     key: "booking_extension_conflict",

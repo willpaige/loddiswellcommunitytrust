@@ -3,12 +3,24 @@
 // Source: 2026 Pavilion & VH Terms & Conditions of hire V3.
 
 export type TermsSection = {
+  /** Anchor on /booking/terms, for linking straight to a clause. */
+  id?: string;
   heading: string;
   paragraphs?: string[];
   bullets?: string[];
 };
 
 export const TERMS_VERSION = "January 2026";
+
+/** Public page holding the full conditions, with an anchor per linked clause. */
+export const TERMS_PATH = "/booking/terms";
+export const DAMAGE_CLAUSE_PATH = `${TERMS_PATH}#damage`;
+
+// "Leave it as you found it" — asked only for facilities with
+// leaveAsFoundRequired (the Village Hall and Pavilion).
+export const LEAVE_AS_FOUND_LABEL = "I confirm that the venue will be left as I found it.";
+export const LEAVE_AS_FOUND_DETAIL =
+  "Clean and tidy, rubbish taken away, tables and chairs put back, lights and heating off, doors and windows locked.";
 
 export const TERMS_INTRO =
   "If the Hirer is in any doubt as to the meaning of any of these conditions, the Booking Secretary should be contacted immediately.";
@@ -30,6 +42,7 @@ export const BOOKING_TERMS: TermsSection[] = [
     ],
   },
   {
+    id: "damage",
     heading: "",
     paragraphs: [
       "As directed by the Booking Secretary, the Hirer shall make good or pay for all damage (including accidental damage) to the premises or to the fixtures, fittings, or contents and for the loss of contents. At the discretion of Trust, a returnable deposit may be required (see also clause 27 – No Alterations).",
@@ -234,6 +247,7 @@ export const BOOKING_TERMS: TermsSection[] = [
     ],
   },
   {
+    id: "end-of-hire",
     heading: "End of hire",
     paragraphs: [
       "The Hirer shall vacate the premises promptly at the end of the hire period. The Hirer shall be responsible for leaving the premises and surrounding area in a clean and tidy condition, properly locked and secured unless directed otherwise and any contents temporarily removed from their usual positions replaced; otherwise, the Trust shall be at liberty to make an additional charge.",

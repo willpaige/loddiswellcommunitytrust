@@ -5,7 +5,9 @@ import {
   deleteBookingBlockSeries,
   getAdminBookingSetup,
   getMonthlyInvoiceSettings,
+  getUnpaidBookingHoldDays,
   updateBookingCancellationSettings,
+  updateUnpaidBookingHoldSettings,
   updateMonthlyInvoiceSettings,
   updateRepeatBookingDiscount,
   updateFacilityBookableHours,
@@ -27,11 +29,12 @@ import { Label } from "@/components/ui/label";
 export const dynamic = "force-dynamic";
 
 export default async function AdminBookingSettingsPage() {
-  const [setup, requirementOfferings, requirementSets, monthlyInvoice] = await Promise.all([
+  const [setup, requirementOfferings, requirementSets, monthlyInvoice, holdDays] = await Promise.all([
     getAdminBookingSetup(),
     getAdminOfferingsForRequirements(),
     getRequirementSets(),
     getMonthlyInvoiceSettings(),
+    getUnpaidBookingHoldDays(),
   ]);
   const uniqueOfferings = setup.offerings.filter(
     (offering, index, all) =>
@@ -181,6 +184,45 @@ export default async function AdminBookingSettingsPage() {
               <div className="flex items-end">
                 <Button type="submit" variant="outline">
                   Save invoicing settings
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Unpaid bookings</CardTitle>
+            <CardDescription>
+              When a customer leaves checkout without paying, their booking keeps its slot for a while so
+              they can come back and pay. If it&apos;s still unpaid when the hold ends, it is released and
+              the date opens up again.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form action={updateUnpaidBookingHoldSettings} className="grid gap-4 sm:grid-cols-3">
+              <div className="space-y-2">
+                <Label htmlFor="unpaidBookingHoldDays">Hold for</Label>
+                <Input
+                  id="unpaidBookingHoldDays"
+                  name="holdDays"
+                  type="number"
+                  min="1"
+                  max="14"
+                  step="1"
+                  defaultValue={holdDays}
+                  required
+                />
+                <p className="text-xs text-muted-foreground">Days after booking.</p>
+              </div>
+              <p className="text-xs text-muted-foreground sm:col-span-1 sm:self-center">
+                The hold always ends at least 24 hours before the session. The customer gets a reminder an
+                hour after leaving checkout and a last call 24 hours before release. The customer and the
+                booking manager are both told when it&apos;s released.
+              </p>
+              <div className="flex items-end">
+                <Button type="submit" variant="outline">
+                  Save hold setting
                 </Button>
               </div>
             </form>

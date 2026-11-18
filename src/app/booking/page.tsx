@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { CalendarCheck, Clock, CreditCard } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { BrandLogo } from "@/components/layout/brand-logo";
@@ -36,7 +37,15 @@ export default async function BookingPage({
     auth(),
   ]);
   const pending = pendingBookingFromParams(params);
+  // The form submits here to reach the review page. Signed-out customers sign
+  // in first and come straight back with the same details.
+  if (pending && !session?.user?.email) {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(pending)) if (value) query.set(key, value);
+    redirect(`/account/login?callbackUrl=${encodeURIComponent(`/booking?${query.toString()}`)}`);
+  }
   const showReview = Boolean(session?.user?.email && pending);
+  const agreementError = firstParam(params, "agreementError") === "1";
   const initialDate = firstParam(params, "date");
   const customerDiscountPercent = session?.user?.email
     ? await getCustomerDiscountPercent(session.user.email)
@@ -66,6 +75,7 @@ export default async function BookingPage({
               repeatDiscount={bookingData.repeatDiscount}
               customerDiscountPercent={customerDiscountPercent}
               discountCodeResult={discountCodeResult}
+              agreementError={agreementError}
             />
           </div>
         </main>
@@ -130,6 +140,7 @@ export default async function BookingPage({
                 repeatDiscount={bookingData.repeatDiscount}
                 customerDiscountPercent={customerDiscountPercent}
                 discountCodeResult={discountCodeResult}
+                agreementError={agreementError}
               />
             ) : (
               <BookingForm

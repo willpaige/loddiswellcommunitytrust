@@ -5,10 +5,11 @@ import type { DiscountCodeResult } from "@/actions/booking-discount-codes";
 import { money, recurrenceIntervalLabel, recurrenceLabel } from "@/lib/bookings";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { BookingTermsButton } from "@/components/booking/booking-terms-button";
+import { BookingAgreements } from "@/components/booking/booking-agreements";
 
 type OfferingRow = {
   facilityName: string;
+  facilityLeaveAsFoundRequired: boolean;
   offeringId: string;
   offeringName: string;
   offeringType: string;
@@ -62,12 +63,14 @@ export function BookingReview({
   repeatDiscount,
   customerDiscountPercent = 0,
   discountCodeResult = null,
+  agreementError = false,
 }: {
   offerings: OfferingRow[];
   pending: PendingBooking;
   repeatDiscount: { threshold: number; percent: number };
   customerDiscountPercent?: number;
   discountCodeResult?: DiscountCodeResult | null;
+  agreementError?: boolean;
 }) {
   const offering = offerings.find((row) => row.offeringId === pending.offeringId);
   const pricedOffering = offerings.find(
@@ -140,7 +143,7 @@ export function BookingReview({
         <CardHeader>
           <CardTitle>Review your booking</CardTitle>
           <CardDescription>
-            Check the details below, then continue to secure card payment.
+            Check the details below and confirm the conditions of hire before you book.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -238,16 +241,31 @@ export function BookingReview({
             </div>
           )}
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
-            <Button variant="outline" asChild>
-              <Link href="/booking">Start again</Link>
-            </Button>
           {discountCodeResult?.valid === false ? (
-            <Button asChild className="w-full"><Link href="/booking">Change discount code</Link></Button>
+            <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+              <Button variant="outline" asChild>
+                <Link href="/booking">Start again</Link>
+              </Button>
+              <Button asChild><Link href="/booking">Change discount code</Link></Button>
+            </div>
           ) : (
-            <BookingTermsButton />
+            <div className="space-y-3">
+              <BookingAgreements
+                leaveAsFoundRequired={offering.facilityLeaveAsFoundRequired}
+                submitLabel={
+                  amount <= 0 || (recurring && repeatPaymentMode === "monthly_invoice")
+                    ? "Confirm booking"
+                    : "Continue to payment"
+                }
+                initialError={agreementError}
+              />
+              <p className="text-sm">
+                <Link href="/booking" className="text-muted-foreground underline underline-offset-2">
+                  Start again
+                </Link>
+              </p>
+            </div>
           )}
-          </div>
         </CardContent>
       </Card>
     </form>

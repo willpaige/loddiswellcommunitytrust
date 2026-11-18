@@ -51,6 +51,9 @@ export async function updateFacility(id: string, formData: FormData) {
       heroImageUrl: (formData.get("heroImageUrl") as string) || null,
       bookable: formData.get("bookable") !== "off",
       published: formData.get("published") !== "off",
+      ...(formData.has("leaveAsFoundRequired")
+        ? { leaveAsFoundRequired: formData.get("leaveAsFoundRequired") === "on" }
+        : {}),
       updatedAt: new Date(),
     })
     .where(eq(facilities.id, id));

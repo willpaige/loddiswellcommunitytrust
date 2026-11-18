@@ -10,6 +10,7 @@ import {
   extendSubscriptionBookingOccurrences,
   sendBookingConfirmedEmails,
   sendBookingPaymentFailedEmail,
+  resolvePaymentForReleasedBooking,
 } from "@/actions/bookings";
 import { and, eq, sql } from "drizzle-orm";
 import { addYears } from "date-fns";
@@ -287,10 +288,20 @@ export async function POST(req: NextRequest) {
           break;
         }
         if (session.metadata?.type === "booking" && session.metadata.bookingId) {
+          // Paid after the unpaid hold ran out: put it back if the slot is
+          // still free, otherwise it has been refunded and stays released.
+          const late = await resolvePaymentForReleasedBooking(session.metadata.bookingId, {
+            paymentIntentId:
+              typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id,
+            subscriptionId:
+              typeof session.subscription === "string" ? session.subscription : session.subscription?.id,
+          });
+          if (late === "refunded") break;
           await db
             .update(bookings)
             .set({
               status: "confirmed",
+              paymentDueAt: null,
               // What Stripe actually collected, so a later change to the booking
               // has a real balance to settle against.
               paidAmount: session.amount_total ?? undefined,

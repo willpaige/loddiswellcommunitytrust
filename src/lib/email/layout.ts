@@ -36,6 +36,8 @@ export type EmailExtras = {
   /** A tinted closing band inside the card. */
   closing?: { strong: string; text?: string };
   promo?: EmailPromoCard | null;
+  promoCards?: Record<string, EmailPromoCard>;
+  broadcast?: boolean;
 };
 
 export type RenderEmailInput = {
@@ -280,9 +282,18 @@ export function renderBody(ctx: Ctx, hideRow?: RegExp) {
   const promoText = typeof variables.rafflePromo === "string" ? variables.rafflePromo.trim() : "";
   const smallPrint = typeof variables.smallPrint === "string" ? variables.smallPrint.trim() : "";
 
+  const promoCards: EmailPromoCard[] = [];
+  const promoBlocks = new Map(Object.entries(extras?.promoCards ?? {})
+    .map(([key, card]) => [String(variables[key] ?? "").trim(), card] as const));
+
   for (const raw of body.split(/\n{2,}/)) {
     const para = raw.trim();
     if (!para) continue;
+    const promoCard = promoBlocks.get(para);
+    if (promoCard) {
+      promoCards.push(promoCard);
+      continue;
+    }
 
     if (ctx.unsubscribeUrl && para.includes(ctx.unsubscribeUrl) && !para.includes("\n")) {
       footerNotes.push(inline(para, ctx));
@@ -313,7 +324,7 @@ export function renderBody(ctx: Ctx, hideRow?: RegExp) {
     }
     blocks.push(renderLines(lines, ctx, hideRow));
   }
-  return { html: blocks.join("\n"), footerNotes };
+  return { html: blocks.join("\n"), footerNotes, promoCards };
 }
 
 // ---------- The whole email ----------
@@ -326,7 +337,7 @@ export function renderEmailHtml(input: RenderEmailInput) {
   }
   const unsubscribeUrl = typeof variables.unsubscribeUrl === "string" && variables.unsubscribeUrl ? variables.unsubscribeUrl : undefined;
   const ctx: Ctx = { ...input, urlVars, unsubscribeUrl };
-  const { html: bodyHtml, footerNotes } = renderBody(ctx, extras.chips?.length ? /ticket numbers?/i : undefined);
+  const { html: bodyHtml, footerNotes, promoCards } = renderBody(ctx, extras.chips?.length ? /ticket numbers?/i : undefined);
   const site = appUrl.replace(/\/$/, "");
   const pad = "padding-left:36px;padding-right:36px;";
 
@@ -345,6 +356,7 @@ ${bodyHtml}
 ${extras.facts?.length ? `<tr><td class="pad" style="padding:0 31px 4px;">${facts(extras.facts)}</td></tr>` : ""}
 ${extras.cta ? `<tr><td class="pad" style="${pad}">${button(extras.cta.label, extras.cta.url, !!extras.facts?.length)}</td></tr>` : ""}
 ${extras.prizes?.length ? `<tr><td class="pad" style="${pad}padding-bottom:12px;">${prizes(extras.prizes)}</td></tr>` : ""}
+${promoCards.length ? `<tr><td class="pad" style="${pad}padding-bottom:16px;">${subheading("More from the Trust")}${promoCards.map((card) => promoCard(card, appUrl)).join("")}</td></tr>` : ""}
 ${extras.promo ? `<tr><td class="pad" style="${pad}padding-bottom:16px;">${promoCard(extras.promo, appUrl)}</td></tr>` : ""}
 ${
   extras.closing
@@ -356,7 +368,7 @@ ${
 
   const footer = `<strong style="font-weight:600;">Loddiswell Playing Fields &amp; Village Hall Trust</strong><br>
 The Village Hall, South Brent Road, Loddiswell, Kingsbridge TQ7 4RH<br>
-<a class="lk" href="${escapeHtml(site)}" style="color:${C.link};text-decoration:underline;">${escapeHtml(shortUrl(site))}</a> · Questions? Just reply to this email.${footerNotes.map((n) => `<br><br>${n}`).join("")}`;
+<a class="lk" href="${escapeHtml(site)}" style="color:${C.link};text-decoration:underline;">${escapeHtml(shortUrl(site))}</a> · Questions? Just reply to this email.${footerNotes.map((n) => `<br><br>${n}`).join("")}${extras.broadcast ? '<br><br>You received this because you signed up for Trust news. <a href="{{{ pm:unsubscribe }}}">Unsubscribe</a>' : ""}`;
 
   const preheader = extras.preheader
     ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;">${escapeHtml(extras.preheader)}${"&#847;&zwnj;&nbsp;".repeat(40)}</div>`

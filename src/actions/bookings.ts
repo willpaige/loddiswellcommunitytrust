@@ -33,12 +33,15 @@ import {
   suggestRecurringAmount,
   type CustomerGroup,
   type Recurrence,
+  unpaidHoldDeadline,
+  unpaidHoldStep,
 } from "@/lib/bookings";
 import { sendTemplateEmail } from "@/lib/email/send";
 import { sendRequirementRequest } from "@/lib/requirement-reminders";
 import { getBookingRequirementDetail } from "@/lib/booking-requirements";
 import { getNextRequirementSessions } from "@/lib/requirement-schedule";
 import { findInvoiceCoveringSessions } from "@/lib/booking-invoice-coverage";
+import { DAMAGE_CLAUSE_PATH, LEAVE_AS_FOUND_DETAIL, TERMS_VERSION } from "@/lib/booking/terms";
 import { requirementDeadline } from "@/lib/requirement-policy";
 import { upsertCustomerRecord } from "@/actions/customer-records";
 import { validateBookingDiscountCode } from "@/actions/booking-discount-codes";
@@ -357,6 +360,10 @@ async function sendBookingChangedEmail(
       startDate: bookings.startDate,
       facilityName: facilities.name,
       offeringName: bookingOfferings.name,
+      leaveAsFoundRequired: facilities.leaveAsFoundRequired,
+      termsVersion: bookings.termsVersion,
+      termsAcceptedAt: bookings.termsAcceptedAt,
+      venueCareConfirmedAt: bookings.venueCareConfirmedAt,
     })
     .from(bookings)
     .innerJoin(facilities, eq(bookings.facilityId, facilities.id))
@@ -364,6 +371,7 @@ async function sendBookingChangedEmail(
     .where(eq(bookings.id, bookingId))
     .limit(1);
   if (!booking) return;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
   const settlementLine = {
     balanced: "Nothing further to pay.",
@@ -390,7 +398,8 @@ async function sendBookingChangedEmail(
         formatBookingDate(booking.startDate, "d MMM yyyy, HH:mm"),
       amount: moneyText(booking.amount),
       settlementLine,
-      bookingUrl: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/account/bookings`,
+      venueCareNotice: bookingAgreementText(booking, appUrl).venueCareNotice,
+      bookingUrl: `${appUrl}/account/bookings`,
     },
     relatedEntityType: "booking",
     relatedEntityId: bookingId,
@@ -423,6 +432,10 @@ async function getBookingEmailData(bookingId: string) {
       endDate: bookings.endDate,
       facilityName: facilities.name,
       accessInstructions: facilities.accessInstructions,
+      leaveAsFoundRequired: facilities.leaveAsFoundRequired,
+      termsVersion: bookings.termsVersion,
+      termsAcceptedAt: bookings.termsAcceptedAt,
+      venueCareConfirmedAt: bookings.venueCareConfirmedAt,
       offeringName: bookingOfferings.name,
     })
     .from(bookings)
@@ -441,10 +454,13 @@ async function getBookingEmailData(bookingId: string) {
 Answer the questions and upload any supporting documents requested. Sign in using the email address on your booking.
 ${appUrl}/account/bookings/${bookingId}/requirements`
     : detail.hasRequirements && detail.complete ? "Your required information is complete. Thank you." : "";
+  const { venueCareNotice, agreementRecord } = bookingAgreementText(booking, appUrl);
   return {
     ...booking,
     variables: {
       requirementsNotice,
+      venueCareNotice,
+      agreementRecord,
       customerName: booking.customerName,
       organisationName: booking.organisationName || "",
       customerEmail: booking.customerEmail,
@@ -460,6 +476,36 @@ ${appUrl}/account/bookings/${bookingId}/requirements`
       bookingUrl: `${appUrl}/account/bookings`,
     },
   };
+}
+
+/**
+ * The "leave it as you found it" wording for customer emails, and the record
+ * of what was agreed for the booking manager. Both are empty for facilities
+ * that don't ask, so those emails read as before.
+ */
+function bookingAgreementText(
+  booking: {
+    leaveAsFoundRequired: boolean;
+    termsVersion: string | null;
+    termsAcceptedAt: Date | null;
+    venueCareConfirmedAt: Date | null;
+  },
+  appUrl: string
+) {
+  const detail = LEAVE_AS_FOUND_DETAIL.charAt(0).toLowerCase() + LEAVE_AS_FOUND_DETAIL.slice(1);
+  const damageLine = `Any damage is covered by the damage clause in the hire conditions: ${appUrl}${DAMAGE_CLAUSE_PATH}`;
+  const venueCareNotice = !booking.leaveAsFoundRequired
+    ? ""
+    : booking.venueCareConfirmedAt
+      ? `Leaving the venue:\nWhen you booked, you confirmed that the venue will be left as you found it: ${detail}\n${damageLine}`
+      : `Leaving the venue:\nPlease leave the venue as you found it: ${detail}\n${damageLine}`;
+  const termsLine = booking.termsAcceptedAt
+    ? `Terms: Accepted (${booking.termsVersion || TERMS_VERSION}) on ${formatBookingDate(booking.termsAcceptedAt, "d MMM yyyy, HH:mm")}`
+    : "Terms: Not recorded (added by the Trust, or booked before this was asked)";
+  const venueLine = booking.leaveAsFoundRequired
+    ? `\nLeave as found: ${booking.venueCareConfirmedAt ? "Confirmed" : "Not recorded"}`
+    : "";
+  return { venueCareNotice, agreementRecord: `Hire agreement:\n${termsLine}${venueLine}` };
 }
 
 async function createBookingStripeCheckoutSession(bookingId: string) {
@@ -771,6 +817,35 @@ export async function getMonthlyInvoiceSettings() {
     .from(siteSettings)
     .limit(1);
   return { leadDays: settings?.leadDays ?? 7, graceDays: settings?.graceDays ?? 7 };
+}
+
+export async function getUnpaidBookingHoldDays() {
+  const [settings] = await db
+    .select({ holdDays: siteSettings.unpaidBookingHoldDays })
+    .from(siteSettings)
+    .limit(1);
+  return settings?.holdDays ?? 3;
+}
+
+export async function updateUnpaidBookingHoldSettings(formData: FormData) {
+  const session = await requireAdmin();
+  const holdDays = Math.max(1, Math.min(14, Math.round(Number(formData.get("holdDays") || 3))));
+  const [existing] = await db.select({ id: siteSettings.id }).from(siteSettings).limit(1);
+  if (existing) {
+    await db
+      .update(siteSettings)
+      .set({ unpaidBookingHoldDays: holdDays, updatedAt: new Date(), updatedBy: session.user?.id ?? null })
+      .where(eq(siteSettings.id, existing.id));
+  } else {
+    await db.insert(siteSettings).values({ unpaidBookingHoldDays: holdDays, updatedBy: session.user?.id ?? null });
+  }
+  await logAudit({
+    action: "update",
+    entity: "booking",
+    description: "Updated unpaid booking hold",
+    metadata: { holdDays },
+  });
+  revalidatePath("/admin/bookings/settings");
 }
 
 export async function updateMonthlyInvoiceSettings(formData: FormData) {
@@ -1494,6 +1569,226 @@ export async function sendDueBookingReminderEmails() {
   return { checked: rows.length, sent };
 }
 
+function bookingPayUrl(bookingId: string) {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  return `${appUrl}/account/bookings/${bookingId}/pay`;
+}
+
+function holdUntilText(date: Date) {
+  return formatBookingDate(date, "EEEE d MMMM yyyy, HH:mm");
+}
+
+/**
+ * Unpaid online bookings hold their slot until paymentDueAt. Run hourly: sends
+ * the reminder and last call as they fall due, then releases the booking.
+ */
+export async function processUnpaidBookingHolds(now = new Date()) {
+  const rows = await db
+    .select({
+      id: bookings.id,
+      createdAt: bookings.createdAt,
+      paymentDueAt: bookings.paymentDueAt,
+      paymentReminderSentAt: bookings.paymentReminderSentAt,
+      paymentLastCallSentAt: bookings.paymentLastCallSentAt,
+    })
+    .from(bookings)
+    .where(
+      and(
+        eq(bookings.status, "pending_payment"),
+        sql`${bookings.paymentDueAt} is not null`,
+        sql`${bookings.releasedUnpaidAt} is null`
+      )
+    );
+
+  const result = { checked: rows.length, reminded: 0, lastCalls: 0, released: 0 };
+  for (const row of rows) {
+    const step = unpaidHoldStep({ ...row, paymentDueAt: row.paymentDueAt! }, now);
+    try {
+      if (step === "release") {
+        if (await releaseUnpaidBooking(row.id)) result.released += 1;
+      } else if (step === "remind" || step === "last_call") {
+        await sendUnpaidBookingEmail(row.id, step, row.paymentDueAt!);
+        await db
+          .update(bookings)
+          .set(
+            step === "remind"
+              ? { paymentReminderSentAt: now }
+              : { paymentLastCallSentAt: now, paymentReminderSentAt: row.paymentReminderSentAt ?? now }
+          )
+          .where(eq(bookings.id, row.id));
+        if (step === "remind") result.reminded += 1;
+        else result.lastCalls += 1;
+      }
+    } catch (error) {
+      console.error("Unpaid booking hold step failed", row.id, step, error);
+    }
+  }
+  return result;
+}
+
+async function sendUnpaidBookingEmail(bookingId: string, step: "remind" | "last_call", dueAt: Date) {
+  const booking = await getBookingEmailData(bookingId);
+  if (!booking) return;
+  await sendTemplateEmail({
+    key: step === "remind" ? "booking_payment_reminder" : "booking_payment_last_call",
+    to: booking.customerEmail,
+    variables: { ...booking.variables, holdUntil: holdUntilText(dueAt), paymentUrl: bookingPayUrl(bookingId) },
+    relatedEntityType: "booking",
+    relatedEntityId: `${bookingId}:${step === "remind" ? "payment-reminder" : "payment-last-call"}`,
+  });
+}
+
+/**
+ * Cancels an unpaid booking whose hold has ended and frees its slot. Checks
+ * Stripe first, so a payment whose webhook hasn't landed is never released,
+ * and closes the open checkout so it can't be paid afterwards.
+ */
+async function releaseUnpaidBooking(bookingId: string) {
+  const [booking] = await db
+    .select({
+      status: bookings.status,
+      stripeCheckoutSessionId: bookings.stripeCheckoutSessionId,
+      paymentDueAt: bookings.paymentDueAt,
+    })
+    .from(bookings)
+    .where(eq(bookings.id, bookingId))
+    .limit(1);
+  if (!booking || booking.status !== "pending_payment") return false;
+
+  if (booking.stripeCheckoutSessionId) {
+    const stripe = getStripe();
+    const checkout = await stripe.checkout.sessions.retrieve(booking.stripeCheckoutSessionId);
+    if (checkout.status === "complete") {
+      console.error("Unpaid booking has a completed checkout; not releasing", bookingId, checkout.id);
+      return false;
+    }
+    if (checkout.status === "open") await stripe.checkout.sessions.expire(checkout.id);
+  }
+
+  // Read the schedule before the sessions are cancelled, for the emails.
+  const emailData = await getBookingEmailData(bookingId);
+  const now = new Date();
+  const released = await db
+    .update(bookings)
+    .set({ status: "cancelled", cancelledAt: now, releasedUnpaidAt: now, updatedAt: now })
+    .where(and(eq(bookings.id, bookingId), eq(bookings.status, "pending_payment")))
+    .returning({ id: bookings.id });
+  if (released.length === 0) return false;
+  await db
+    .update(bookingOccurrences)
+    .set({ status: "cancelled" })
+    .where(and(eq(bookingOccurrences.bookingId, bookingId), eq(bookingOccurrences.status, "pending_payment")));
+
+  await logAudit({
+    action: "update",
+    entity: "booking",
+    entityId: bookingId,
+    description: "Released unpaid booking after its hold ended",
+  });
+
+  if (emailData) {
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const variables = {
+      ...emailData.variables,
+      holdUntil: holdUntilText(booking.paymentDueAt ?? now),
+      bookingPageUrl: `${appUrl}/booking`,
+    };
+    const managerEmail = await getBookingManagerEmail();
+    const results = await Promise.allSettled([
+      sendTemplateEmail({
+        key: "booking_payment_released",
+        to: emailData.customerEmail,
+        variables,
+        relatedEntityType: "booking",
+        relatedEntityId: `${bookingId}:payment-released`,
+      }),
+      ...(managerEmail
+        ? [sendTemplateEmail({
+            key: "booking_payment_released_manager",
+            to: managerEmail,
+            variables,
+            relatedEntityType: "booking",
+            relatedEntityId: `${bookingId}:payment-released-manager`,
+          })]
+        : []),
+    ]);
+    for (const r of results) if (r.status === "rejected") console.error("Release email failed", bookingId, r.reason);
+  }
+  return true;
+}
+
+/**
+ * A payment that arrives for a booking already released (it can only happen
+ * in the moment between the release check and closing the checkout). Puts the
+ * booking back if its slot is still free, otherwise refunds the customer.
+ */
+export async function resolvePaymentForReleasedBooking(
+  bookingId: string,
+  payment: { paymentIntentId?: string | null; subscriptionId?: string | null }
+): Promise<"not_released" | "reinstated" | "refunded"> {
+  const [booking] = await db
+    .select({
+      status: bookings.status,
+      releasedUnpaidAt: bookings.releasedUnpaidAt,
+      facilityId: bookings.facilityId,
+      capacity: bookingOfferings.capacity,
+    })
+    .from(bookings)
+    .leftJoin(bookingOfferings, eq(bookings.offeringId, bookingOfferings.id))
+    .where(eq(bookings.id, bookingId))
+    .limit(1);
+  if (!booking || booking.status !== "cancelled" || !booking.releasedUnpaidAt) return "not_released";
+
+  const sessions = await db
+    .select({ startDate: bookingOccurrences.startDate, endDate: bookingOccurrences.endDate })
+    .from(bookingOccurrences)
+    .where(eq(bookingOccurrences.bookingId, bookingId));
+  let free = true;
+  for (const range of sessions) {
+    if (!(await isRangeAvailable(booking.facilityId, booking.capacity ?? 1, range, bookingId))) {
+      free = false;
+      break;
+    }
+  }
+  if (free) {
+    await db.update(bookings).set({ cancelledAt: null }).where(eq(bookings.id, bookingId));
+    return "reinstated";
+  }
+
+  const stripe = getStripe();
+  if (payment.paymentIntentId) await stripe.refunds.create({ payment_intent: payment.paymentIntentId });
+  if (payment.subscriptionId) await stripe.subscriptions.cancel(payment.subscriptionId);
+  console.error("Paid after release and the slot was taken; refunded", bookingId, payment);
+  await logAudit({
+    action: "update",
+    entity: "booking",
+    entityId: bookingId,
+    description: "Refunded a payment that arrived after the unpaid booking was released and rebooked",
+  });
+  return "refunded";
+}
+
+/** The pay link in hold emails: a fresh checkout for the signed-in customer. */
+export async function startHeldBookingPayment(bookingId: string) {
+  const session = await auth();
+  if (!session?.user?.email) {
+    return { redirect: `/account/login?callbackUrl=${encodeURIComponent(`/account/bookings/${bookingId}/pay`)}` };
+  }
+  const [booking] = await db
+    .select({ status: bookings.status, customerEmail: bookings.customerEmail, paymentType: bookings.paymentType })
+    .from(bookings)
+    .where(eq(bookings.id, bookingId))
+    .limit(1);
+  if (!booking || booking.customerEmail !== session.user.email.toLowerCase()) {
+    return { redirect: "/account/bookings" };
+  }
+  if (booking.status === "pending_payment" && booking.paymentType !== "invoice") {
+    return { redirect: await createBookingStripeCheckoutSession(bookingId) };
+  }
+  if (booking.status === "cancelled") return { redirect: `/booking/cancel?booking_id=${bookingId}` };
+  return { redirect: "/account/bookings" };
+}
+
 async function sendBookingCancellationEmails(bookingId: string) {
   const booking = await getBookingEmailData(bookingId);
   if (!booking) return;
@@ -1582,6 +1877,7 @@ export async function getPublicBookingData() {
       facilityHeroImageUrl: facilities.heroImageUrl,
       facilityBookableStartTime: facilities.bookableStartTime,
       facilityBookableEndTime: facilities.bookableEndTime,
+      facilityLeaveAsFoundRequired: facilities.leaveAsFoundRequired,
       offeringId: bookingOfferings.id,
       offeringName: bookingOfferings.name,
       offeringType: bookingOfferings.type,
@@ -2314,6 +2610,15 @@ export async function createBookingCheckout(formData: FormData) {
     .from(facilities)
     .where(eq(facilities.id, offering.facilityId))
     .limit(1);
+  // The review page asks for these; check again here so a booking can't skip
+  // them. Missing either sends the customer back to the review page.
+  const termsAccepted = formData.get("termsAccepted") === "true";
+  const venueCareRequired = facility[0]?.leaveAsFoundRequired ?? false;
+  const venueCareConfirmed = formData.get("venueCareConfirmed") === "true";
+  if (!termsAccepted || (venueCareRequired && !venueCareConfirmed)) {
+    redirect(`${bookingCallbackUrl(formData)}&agreementError=1`);
+  }
+  const agreedAt = new Date();
   const customerName = String(formData.get("customerName") || customer.name || "").trim();
   const organisationName = String(formData.get("organisationName") || "").trim() || null;
   const customerPhone = String(formData.get("customerPhone") || "").trim() || null;
@@ -2416,6 +2721,14 @@ export async function createBookingCheckout(formData: FormData) {
     promoteOnSite,
     promotionUrl,
     requirementSetId: offering.requirementSetId ?? null,
+    termsVersion: TERMS_VERSION,
+    termsAcceptedAt: agreedAt,
+    // Held while the customer pays; released automatically if they don't.
+    paymentDueAt:
+      isFree || isMonthlyInvoice
+        ? null
+        : unpaidHoldDeadline(agreedAt, start, await getUnpaidBookingHoldDays()),
+    venueCareConfirmedAt: venueCareRequired ? agreedAt : null,
     ...(isMonthlyInvoice ? billing : {}),
   });
   // A monthly-invoiced booking's sessions are priced invoice by invoice, so
@@ -2607,6 +2920,8 @@ export async function getCustomerBookings() {
       paymentType: bookings.paymentType,
       amount: bookings.amount,
       paidAmount: bookings.paidAmount,
+      paymentDueAt: bookings.paymentDueAt,
+      releasedUnpaidAt: bookings.releasedUnpaidAt,
       offeringId: bookings.offeringId,
       stripePaymentIntentId: bookings.stripePaymentIntentId,
       scheduleType: bookings.scheduleType,
@@ -3177,7 +3492,13 @@ export async function getAdminBooking(id: string) {
       stripeInvoiceId: bookings.stripeInvoiceId,
       invoiceStatus: bookings.invoiceStatus,
       invoiceHostedUrl: bookings.invoiceHostedUrl,
+      termsVersion: bookings.termsVersion,
+      termsAcceptedAt: bookings.termsAcceptedAt,
+      venueCareConfirmedAt: bookings.venueCareConfirmedAt,
       facilityName: facilities.name,
+      facilityLeaveAsFoundRequired: facilities.leaveAsFoundRequired,
+      paymentDueAt: bookings.paymentDueAt,
+      releasedUnpaidAt: bookings.releasedUnpaidAt,
       offeringName: bookingOfferings.name,
     })
     .from(bookings)

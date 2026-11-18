@@ -68,6 +68,52 @@ export default async function AdminEditBookingPage({
         offerings={uniqueOfferings}
       />
 
+      {booking.status === "pending_payment" && booking.paymentDueAt && (
+        <div className="mt-6 max-w-4xl rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+          <p className="font-medium">Awaiting payment</p>
+          <p>
+            Held until {formatBookingDate(booking.paymentDueAt, "d MMM yyyy, HH:mm")}. If it isn&apos;t paid by
+            then, it is released automatically and the customer and booking manager are emailed.
+          </p>
+        </div>
+      )}
+      {booking.status === "cancelled" && booking.releasedUnpaidAt && (
+        <div className="mt-6 max-w-4xl rounded-md border p-4 text-sm text-muted-foreground">
+          Released unpaid on {formatBookingDate(booking.releasedUnpaidAt, "d MMM yyyy, HH:mm")}.
+        </div>
+      )}
+
+      <Card className="mt-6 max-w-4xl">
+        <CardHeader><CardTitle>Hire agreement</CardTitle></CardHeader>
+        <CardContent>
+          <dl className="grid gap-4 text-sm sm:grid-cols-2">
+            <div>
+              <dt className="text-muted-foreground">Terms and Conditions of Hire</dt>
+              <dd className="font-medium">
+                {booking.termsAcceptedAt
+                  ? `Accepted (${booking.termsVersion}) · ${formatBookingDate(booking.termsAcceptedAt, "d MMM yyyy, HH:mm")}`
+                  : "Not recorded"}
+              </dd>
+            </div>
+            {(booking.facilityLeaveAsFoundRequired || booking.venueCareConfirmedAt) && (
+              <div>
+                <dt className="text-muted-foreground">Leave the venue as found</dt>
+                <dd className="font-medium">
+                  {booking.venueCareConfirmedAt
+                    ? `Confirmed · ${formatBookingDate(booking.venueCareConfirmedAt, "d MMM yyyy, HH:mm")}`
+                    : "Not recorded"}
+                </dd>
+              </div>
+            )}
+          </dl>
+          {!booking.termsAcceptedAt && (
+            <p className="mt-3 text-xs text-muted-foreground">
+              Bookings added by the Trust, and online bookings made before 18 Nov 2026, have no record.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
       {booking.paymentType === "invoice" && invoiceSettings && (
         <BookingInvoicesCard invoices={invoices} graceDays={invoiceSettings.graceDays} />
       )}
