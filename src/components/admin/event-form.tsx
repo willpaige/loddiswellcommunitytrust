@@ -39,6 +39,9 @@ export function EventForm({ action, facilities = [], initialData }: EventFormPro
     initialData?.imageUrl || ""
   );
   const [recurringEvent, setRecurringEvent] = useState(false);
+  const [recurrence, setRecurrence] = useState("selected_dates");
+  const [selectedDates, setSelectedDates] = useState([0]);
+  const nextDateId = useRef(1);
   const [loading, setLoading] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const [posterBusy, setPosterBusy] = useState(false);
@@ -167,7 +170,7 @@ export function EventForm({ action, facilities = [], initialData }: EventFormPro
               <RichTextEditor key={descriptionVersion} content={description} onChange={setDescription} />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className={recurringEvent ? "hidden" : "grid gap-4 sm:grid-cols-2"}>
               <div className="space-y-2">
                 <Label htmlFor="startDate">Start date *</Label>
                 <Input
@@ -238,11 +241,73 @@ export function EventForm({ action, facilities = [], initialData }: EventFormPro
                   onCheckedChange={(checked) => setRecurringEvent(checked === true)}
                 />
                 <Label htmlFor="recurringEvent" className="font-normal">
-                  Create this as a recurring monthly event
+                  Create this event on multiple dates
                 </Label>
               </div>
 
               {recurringEvent && (
+                <div className="space-y-2">
+                  <Label htmlFor="recurrence">Schedule</Label>
+                  <select
+                    id="recurrence"
+                    name="recurrence"
+                    value={recurrence}
+                    onChange={(event) => setRecurrence(event.target.value)}
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="selected_dates">Choose individual dates</option>
+                    <option value="monthly_nth_weekday">Repeat monthly</option>
+                  </select>
+                </div>
+              )}
+
+              {recurringEvent && recurrence === "selected_dates" && (
+                <div className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    Add each date you want to list. The same times apply to every date.
+                  </p>
+                  {selectedDates.map((id, index) => (
+                    <div key={id} className="space-y-2">
+                      <Label htmlFor={`occurrenceDate-${id}`}>Date {index + 1}</Label>
+                      <div className="flex items-center gap-2">
+                        <Input id={`occurrenceDate-${id}`} name="occurrenceDate" type="date" required />
+                        {selectedDates.length > 1 && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            aria-label={`Remove date ${index + 1}`}
+                            onClick={() => setSelectedDates((dates) => dates.filter((dateId) => dateId !== id))}
+                          >
+                            Remove
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      const id = nextDateId.current++;
+                      setSelectedDates((dates) => [...dates, id]);
+                    }}
+                  >
+                    Add another date
+                  </Button>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="selectedStartTime">Start time</Label>
+                      <Input id="selectedStartTime" name="seriesStartTime" type="time" required defaultValue="14:00" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="selectedEndTime">End time</Label>
+                      <Input id="selectedEndTime" name="seriesEndTime" type="time" required defaultValue="16:00" />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {recurringEvent && recurrence === "monthly_nth_weekday" && (
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="weekOfMonth">Week of month</Label>
@@ -257,6 +322,7 @@ export function EventForm({ action, facilities = [], initialData }: EventFormPro
                       <option value="3">Third</option>
                       <option value="4">Fourth</option>
                       <option value="5">Fifth</option>
+                      <option value="-1">Last</option>
                     </select>
                   </div>
 
@@ -418,7 +484,7 @@ export function EventForm({ action, facilities = [], initialData }: EventFormPro
                 ? "The reminder has already been sent."
                 : "For published events, from 10am UK time to active Trust newsletter subscribers. Includes any current raffle, upcoming events and the village lottery."}
             </p>
-            {recurringEvent && <p className="text-sm text-muted-foreground">Applies to each occurrence in this series.</p>}
+            {recurringEvent && <p className="text-sm text-muted-foreground">Applies to each event date.</p>}
           </CardContent>
         </Card>
 

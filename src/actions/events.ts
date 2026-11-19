@@ -8,8 +8,7 @@ import { createId } from "@paralleldrive/cuid2";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { logAudit } from "@/lib/audit";
-import { addMonths } from "date-fns";
-import { parseBookingDateTime } from "@/lib/booking-time";
+import { bookingDateKey, parseBookingDateTime } from "@/lib/booking-time";
 
 export async function getEvents() {
   return db.select().from(events).orderBy(desc(events.startDate));
@@ -85,35 +84,43 @@ function parseTime(value: string) {
 function combineDateAndTime(date: Date, time: string) {
   const { hours, minutes } = parseTime(time);
   const next = new Date(date);
-  next.setHours(hours, minutes, 0, 0);
+  next.setUTCHours(hours, minutes, 0, 0);
   return next;
 }
 
 function nthWeekdayOfMonth(year: number, monthIndex: number, weekday: number, weekOfMonth: number) {
-  const first = new Date(year, monthIndex, 1);
-  const offset = (weekday - first.getDay() + 7) % 7;
-  return new Date(year, monthIndex, 1 + offset + (weekOfMonth - 1) * 7);
+  if (weekOfMonth === -1) {
+    const last = new Date(Date.UTC(year, monthIndex + 1, 0));
+    last.setUTCDate(last.getUTCDate() - (last.getUTCDay() - weekday + 7) % 7);
+    return last;
+  }
+  const first = new Date(Date.UTC(year, monthIndex, 1));
+  const offset = (weekday - first.getUTCDay() + 7) % 7;
+  return new Date(Date.UTC(year, monthIndex, 1 + offset + (weekOfMonth - 1) * 7));
 }
 
 function recurringEventDates(formData: FormData) {
-  const weekOfMonth = Math.max(1, Math.min(5, Number(formData.get("weekOfMonth") || 2)));
+  const weekOfMonth = formData.get("weekOfMonth") === "-1"
+    ? -1
+    : Math.max(1, Math.min(5, Number(formData.get("weekOfMonth") || 2)));
   const weekday = Math.max(0, Math.min(6, Number(formData.get("weekday") || 4)));
   const startTime = String(formData.get("seriesStartTime") || "");
   const endTime = String(formData.get("seriesEndTime") || "");
   const monthsAhead = Math.max(1, Math.min(36, Number(formData.get("monthsAhead") || 18)));
   const startMonth = new Date(String(formData.get("seriesStartMonth") || ""));
   if (Number.isNaN(startMonth.getTime())) throw new Error("Choose a recurrence start month.");
-  startMonth.setDate(1);
-  startMonth.setHours(0, 0, 0, 0);
+  startMonth.setUTCDate(1);
+  startMonth.setUTCHours(0, 0, 0, 0);
   const excludeMonths = formData.getAll("excludeMonths").map((value) => Number(value));
 
   const dates: Array<{ startDate: Date; endDate: Date }> = [];
   for (let index = 0; index < monthsAhead; index += 1) {
-    const month = addMonths(startMonth, index);
-    const monthNumber = month.getMonth() + 1;
+    const month = new Date(startMonth);
+    month.setUTCMonth(startMonth.getUTCMonth() + index);
+    const monthNumber = month.getUTCMonth() + 1;
     if (excludeMonths.includes(monthNumber)) continue;
-    const day = nthWeekdayOfMonth(month.getFullYear(), month.getMonth(), weekday, weekOfMonth);
-    if (day.getMonth() !== month.getMonth()) continue;
+    const day = nthWeekdayOfMonth(month.getUTCFullYear(), month.getUTCMonth(), weekday, weekOfMonth);
+    if (day.getUTCMonth() !== month.getUTCMonth()) continue;
     const startDate = combineDateAndTime(day, startTime);
     const endDate = combineDateAndTime(day, endTime);
     if (endDate <= startDate) throw new Error("Recurring event end time must be after start time.");
@@ -130,6 +137,22 @@ function recurringEventDates(formData: FormData) {
     excludeMonths,
     dates,
   };
+}
+
+function selectedEventDates(formData: FormData) {
+  const startTime = String(formData.get("seriesStartTime") || "");
+  const endTime = String(formData.get("seriesEndTime") || "");
+  parseTime(startTime);
+  parseTime(endTime);
+  if (endTime <= startTime) throw new Error("Event end time must be after start time.");
+
+  const days = [...new Set(formData.getAll("occurrenceDate").map(String))].sort();
+  return days.map((day) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error("Choose a valid event date.");
+    const startDate = parseBookingDateTime(day, startTime);
+    if (bookingDateKey(startDate) !== day) throw new Error("Choose a valid event date.");
+    return { startDate, endDate: parseBookingDateTime(day, endTime) };
+  });
 }
 
 async function createEventBookingBlock({
@@ -218,13 +241,15 @@ export async function createEvent(formData: FormData) {
 
   if (recurring) {
     if (shouldBlock && !blockFacilityId) throw new Error("Choose a venue to block for this event.");
-    const rule = recurringEventDates(formData);
-    if (rule.dates.length === 0) {
-      throw new Error("No event dates were generated for this recurring rule.");
-    }
-    const seriesId = createId();
-    await db.insert(eventSeries).values({
-      id: seriesId,
+    const rule = formData.get("recurrence") === "selected_dates"
+      ? null
+      : recurringEventDates(formData);
+    const dates = rule ? rule.dates : selectedEventDates(formData);
+    if (dates.length === 0) throw new Error("Choose at least one event date.");
+
+    const seriesId = rule ? id : null;
+    const seriesInsert = rule && db.insert(eventSeries).values({
+      id,
       title,
       description,
       location,
@@ -244,9 +269,9 @@ export async function createEvent(formData: FormData) {
       createdBy: sessionUserId,
     });
 
-    const occurrenceIds = rule.dates.map(() => createId());
-    await db.insert(events).values(
-      rule.dates.map((date, index) => ({
+    const occurrenceIds = dates.map(() => createId());
+    const eventsInsert = db.insert(events).values(
+      dates.map((date, index) => ({
         id: occurrenceIds[index],
         seriesId,
         title,
@@ -262,26 +287,27 @@ export async function createEvent(formData: FormData) {
         createdBy: sessionUserId,
       }))
     );
-    if (shouldBlock) {
-      await db.insert(bookingBlocks).values(
-        rule.dates.map((date, index) => ({
-          facilityId: blockFacilityId,
-          eventId: occurrenceIds[index],
-          title: `Event: ${title}`,
-          startDate: date.startDate,
-          endDate: date.endDate,
-          notes: "Created from recurring event calendar",
-          createdBy: sessionUserId,
-        }))
-      );
-    }
+    const blocksInsert = shouldBlock && db.insert(bookingBlocks).values(
+      dates.map((date, index) => ({
+        facilityId: blockFacilityId,
+        eventId: occurrenceIds[index],
+        title: `Event: ${title}`,
+        startDate: date.startDate,
+        endDate: date.endDate,
+        notes: "Created from event calendar",
+        createdBy: sessionUserId,
+      }))
+    );
+
+    const inserts = blocksInsert ? [eventsInsert, blocksInsert] as const : [eventsInsert] as const;
+    await db.batch(seriesInsert ? [seriesInsert, ...inserts] : inserts);
 
     await logAudit({
       action: "create",
       entity: "event",
-      entityId: seriesId,
-      description: `Created recurring event series: ${title}`,
-      metadata: { occurrences: rule.dates.length },
+      entityId: seriesId ?? occurrenceIds[0],
+      description: `Created ${dates.length} event dates for ${title}`,
+      metadata: { occurrences: dates.length },
     });
 
     revalidatePath("/admin/events");
