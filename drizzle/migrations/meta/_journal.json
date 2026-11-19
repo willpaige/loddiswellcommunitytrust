@@ -274,6 +274,13 @@
       "when": 1795031826746,
       "tag": "0038_event_reminders",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1795034990630,
+      "tag": "0039_lottery_returns",
+      "breakpoints": true
     }
   ]
 }

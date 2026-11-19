@@ -22,6 +22,7 @@ type SendTemplateEmailInput = {
   dedupe?: boolean;
   /** Structured parts of the HTML email that the text body can't carry. */
   extras?: EmailExtras;
+  attachments?: { name: string; content: Uint8Array; contentType: string }[];
 };
 
 function getPostmark() {
@@ -64,6 +65,7 @@ export async function sendTemplateEmail({
   relatedEntityId,
   dedupe = true,
   extras,
+  attachments,
 }: SendTemplateEmailInput) {
   if (!process.env.POSTMARK_API_KEY || !to) return { sent: false, skipped: true, reason: "not_configured" };
   await ensureEmailTemplates();
@@ -126,6 +128,12 @@ export async function sendTemplateEmail({
       ReplyTo: settings?.emailAddress || undefined,
       // Lets Gmail and Apple Mail show their own "Unsubscribe" button.
       Headers: unsubscribe ? [{ Name: "List-Unsubscribe", Value: `<${unsubscribe}>` }] : undefined,
+      Attachments: attachments?.map((a) => ({
+        Name: a.name,
+        Content: Buffer.from(a.content).toString("base64"),
+        ContentType: a.contentType,
+        ContentID: null,
+      })),
     });
     await db.insert(emailLogs).values({
       id: createId(),

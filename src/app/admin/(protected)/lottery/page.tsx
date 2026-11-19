@@ -7,6 +7,7 @@ import {
   Trophy,
   Shuffle,
   UserPlus,
+  FileText,
 } from "lucide-react";
 import { db } from "@/lib/db";
 import { lotteryTickets } from "@/lib/db/schema";
@@ -98,11 +99,19 @@ export default async function AdminLotteryPage() {
 
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold">Lottery</h1>
-        <p className="mt-1 text-muted-foreground">
-          Subscribers, draws, and notifications.
-        </p>
+      <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold">Lottery</h1>
+          <p className="mt-1 text-muted-foreground">
+            Subscribers, draws, and notifications.
+          </p>
+        </div>
+        <Button variant="outline" asChild>
+          <Link href="/admin/lottery/returns">
+            <FileText className="h-4 w-4" aria-hidden="true" />
+            Council returns
+          </Link>
+        </Button>
       </div>
 
       {/* Stats */}

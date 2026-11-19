@@ -54,6 +54,12 @@ const DECOR: Partial<Record<EmailTemplateKey, Decor>> = {
   },
   lottery_payment_failed: { eyebrow: "Payment problem", headline: () => "Your lottery subscription", cta: "manageUrl" },
   lottery_draw_results: { eyebrow: "Community Lottery", headline: (v) => `${s(v.drawDate)} results`, preheader: () => "This month's winners" },
+  lottery_council_return: {
+    eyebrow: "South Hams return",
+    headline: (v) => `Lottery return ${s(v.period)}`,
+    preheader: (v) => `Ready to sign · due by ${s(v.dueBy)}`,
+    buttons: { adminUrl: "Review in the admin" },
+  },
   lottery_manage_link: { eyebrow: "Community Lottery", headline: () => "Manage your subscription" },
   raffle_tickets: {
     eyebrow: "You're in the draw",

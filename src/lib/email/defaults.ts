@@ -17,6 +17,7 @@ export type EmailTemplateKey =
   | "lottery_payment_failed"
   | "lottery_draw_results"
   | "lottery_manage_link"
+  | "lottery_council_return"
   | "booking_changed"
   | "booking_change_payment_link"
   | "booking_invoice_issued"
@@ -290,6 +291,15 @@ export const emailTemplateDefaults: EmailTemplateDefault[] = [
     subject: "Manage your Loddiswell lottery subscription",
     body: "Hi,\n\nUse the link below to manage your Loddiswell Community Lottery subscription, update payment details, cancel, or download invoices.\n\n{{manageUrl}}\n\nThis link will expire shortly.",
     variables: ["manageUrl"],
+  },
+  {
+    key: "lottery_council_return",
+    category: "lottery",
+    name: "Lottery council return",
+    description: "Sent to the Trust on 1 August with the year's South Hams lottery return attached, filled in and ready to sign.",
+    subject: "Lottery return for South Hams, {{period}}: ready to sign",
+    body: "Hello,\n\nThe small society lottery return for {{period}} is attached, filled in from the lottery records and ready to sign.\n\nTotal proceeds: {{proceeds}}\nPrizes: {{prizes}}\nExpenses: {{expenses}}\nBalance for the Trust: {{balance}}\n\nWhat to do:\n1. Check the figures. Expenses come from the lines entered in the admin; if anything is missing, add it there and resend the PDF.\n2. The promoter signs page 1, and two trustees appointed in writing sign page 2.\n3. Email it to licensing@southhams.gov.uk with a copy of their letters of appointment by {{dueBy}}.\n4. Mark it as submitted in the admin.\n\n{{adminUrl}}{{warnings}}",
+    variables: ["period", "proceeds", "prizes", "expenses", "balance", "dueBy", "adminUrl", "warnings"],
   },
   {
     key: "raffle_tickets",

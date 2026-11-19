@@ -742,6 +742,10 @@ export const siteSettings = pgTable("site_settings", {
   monthlyInvoiceGraceDays: integer("monthly_invoice_grace_days").notNull().default(7),
   // How long an online booking that hasn't been paid keeps its slot.
   unpaidBookingHoldDays: integer("unpaid_booking_hold_days").notNull().default(3),
+  // The small society lottery registration with South Hams, printed on the
+  // annual council return.
+  lotteryRegistrationNumber: text("lottery_registration_number").notNull().default("SL0269"),
+  lotteryPromoterName: text("lottery_promoter_name").notNull().default("Zoë Crockford"),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
   updatedBy: text("updated_by").references(() => users.id),
 });
@@ -816,6 +820,61 @@ export const lotteryPayments = pgTable(
     index("lottery_payments_ticket_idx").on(table.ticketId),
     index("lottery_payments_paid_at_idx").on(table.paidAt),
   ]
+);
+
+// The annual South Hams return for the monthly lottery, one row per lottery
+// year (1 August to 31 July). Income and prizes come from the ledger and the
+// draws; expenses are lines the treasurer adds during the year. `figures` is
+// frozen when the return is emailed, so the record shows what was sent even if
+// a refund lands later.
+export type LotteryReturnExpense = {
+  id: string;
+  category: "lottery" | "commission" | "other";
+  description: string;
+  amountPence: number;
+};
+
+export type LotteryReturnFigures = {
+  drawCount: number;
+  firstDrawAt: string | null;
+  lastDrawAt: string | null;
+  salesPence: number;
+  otherProceedsPence: number;
+  totalProceedsPence: number;
+  lotteryExpensesPence: number;
+  commissionPence: number;
+  otherExpensesPence: number;
+  otherExpensesLabel: string;
+  totalExpensesPence: number;
+  prizesPence: number;
+  balancePence: number;
+  /** Prize strings that couldn't be read as an amount, e.g. "Hamper". */
+  unpricedPrizes: string[];
+};
+
+export const lotteryReturns = pgTable(
+  "lottery_returns",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    /** 1 August, UK midnight, of the lottery year this return covers. */
+    periodStart: timestamp("period_start", { mode: "date" }).notNull(),
+    /** The following 1 August (exclusive). */
+    periodEnd: timestamp("period_end", { mode: "date" }).notNull(),
+    expenses: jsonb("expenses").$type<LotteryReturnExpense[]>().notNull().default([]),
+    otherProceedsPence: integer("other_proceeds_pence").notNull().default(0),
+    purpose: text("purpose")
+      .notNull()
+      .default("Upkeep and improvement of Loddiswell's community facilities"),
+    figures: jsonb("figures").$type<LotteryReturnFigures>(),
+    emailedAt: timestamp("emailed_at"),
+    emailedTo: text("emailed_to"),
+    submittedAt: timestamp("submitted_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex("lottery_returns_period_idx").on(table.periodStart)]
 );
 
 // ── Raffles ──

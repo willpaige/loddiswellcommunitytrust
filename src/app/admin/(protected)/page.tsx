@@ -14,6 +14,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { getDueRaffleReturns } from "@/actions/raffle-return";
+import { getDueLotteryReturns } from "@/actions/lottery-return";
 import { formatUk } from "@/lib/raffles/time";
 import {
   Card,
@@ -94,7 +95,7 @@ const quickActions = [
 export const dynamic = "force-dynamic";
 
 export default async function AdminDashboard() {
-  const dueReturns = await getDueRaffleReturns();
+  const [dueReturns, dueLotteryReturns] = await Promise.all([getDueRaffleReturns(), getDueLotteryReturns()]);
   return (
     <div>
       <h1 className="text-3xl font-bold">Dashboard</h1>
@@ -114,6 +115,27 @@ export default async function AdminDashboard() {
                 <span key={r.id} className="block">
                   <Link href={`/admin/raffles/${r.id}/return`} className="font-medium text-foreground underline">
                     {r.title}
+                  </Link>{" "}
+                  · {r.overdue ? "overdue since" : "due by"} {formatUk(r.dueBy, "d MMMM yyyy")}
+                </span>
+              ))}
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      )}
+
+      {dueLotteryReturns.length > 0 && (
+        <Card className="mt-8 border-copper-300 bg-copper-50/50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <AlertTriangle className="h-4 w-4 text-copper-700" aria-hidden="true" />
+              Lottery return due to South Hams
+            </CardTitle>
+            <CardDescription>
+              {dueLotteryReturns.map((r) => (
+                <span key={r.id} className="block">
+                  <Link href={`/admin/lottery/returns/${r.id}`} className="font-medium text-foreground underline">
+                    Lottery year {r.label}
                   </Link>{" "}
                   · {r.overdue ? "overdue since" : "due by"} {formatUk(r.dueBy, "d MMMM yyyy")}
                 </span>
