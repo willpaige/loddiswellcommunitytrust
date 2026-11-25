@@ -35,12 +35,12 @@ afterEach(() => {
 });
 afterAll(async () => { await pg?.close(); });
 
-it("sends tomorrow's published reminder at 10am UK time and retries only failed recipients", async () => {
+it("sends both published event reminders at 10am UK time and retries only failed recipients", async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.stubEnv("POSTMARK_API_KEY", "test");
   vi.stubEnv("POSTMARK_BROADCAST_STREAM", "trust-news");
   vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://example.test");
-  vi.setSystemTime(new Date("2026-07-19T08:59:00Z"));
+  vi.setSystemTime(new Date("2026-07-13T08:59:00Z"));
   const tomorrow = new Date("2026-07-20T09:30:00Z");
   await state.db.insert(schema.events).values([
     { id: "coffee", title: "Coffee Morning", location: "Village Hall", startDate: tomorrow, reminderEnabled: true },
@@ -55,12 +55,23 @@ it("sends tomorrow's published reminder at 10am UK time and retries only failed 
     { email: "three@example.test", status: "unsubscribed" },
     { email: "THREE@example.test" },
   ]);
-  state.postmark.mockResolvedValueOnce({ MessageID: "first" })
-    .mockRejectedValueOnce(new Error("Temporary provider failure"))
-    .mockResolvedValueOnce({ MessageID: "second" });
-
   expect(await sendEventReminders()).toEqual({ sent: 0, failed: 0 });
   expect(state.postmark).not.toHaveBeenCalled();
+
+  vi.setSystemTime(new Date("2026-07-13T09:00:00Z"));
+  state.postmark.mockReset().mockResolvedValue({ MessageID: "week" });
+  expect(await sendEventReminders()).toEqual({ sent: 2, failed: 0 });
+  expect(state.postmark.mock.calls.map(([message]) => message.To)).toEqual(["one@example.test", "two@example.test"]);
+  expect(state.postmark.mock.calls[0][0]).toMatchObject({
+    Subject: "In one week in Loddiswell: Coffee Morning",
+    MessageStream: "trust-news",
+  });
+  expect(state.postmark.mock.calls[0][0].HtmlBody).toContain("{{{ pm:unsubscribe }}}");
+  expect(await sendEventReminders()).toEqual({ sent: 0, failed: 0 });
+
+  state.postmark.mockReset().mockResolvedValueOnce({ MessageID: "first" })
+    .mockRejectedValueOnce(new Error("Temporary provider failure"))
+    .mockResolvedValueOnce({ MessageID: "second" });
 
   vi.setSystemTime(new Date("2026-07-19T09:00:00Z"));
   const runs = await Promise.all([sendEventReminders(), sendEventReminders()]);

@@ -34,7 +34,8 @@ export type EmailTemplateKey =
   | "raffle_week_reminder"
   | "raffle_last_call"
   | "raffle_draw_reminder"
-  | "event_reminder";
+  | "event_reminder"
+  | "event_week_reminder";
 
 export type EmailTemplateCategory = "bookings" | "lottery" | "raffles" | "system";
 
@@ -56,6 +57,15 @@ export const emailTemplateDefaults: EmailTemplateDefault[] = [
     description: "Sent to active Trust newsletter subscribers the day before a published event when reminders are enabled.",
     subject: "Tomorrow in Loddiswell: {{eventTitle}}",
     body: "A quick reminder that {{eventTitle}} is tomorrow.\n\nWhen: {{eventWhen}}{{eventLocation}}\n\n{{eventUrl}}\n\n{{rafflePromo}}\n\n{{eventsPromo}}\n\n{{lotteryPromo}}",
+    variables: ["eventTitle", "eventWhen", "eventLocation", "eventUrl", "rafflePromo", "eventsPromo", "lotteryPromo"],
+  },
+  {
+    key: "event_week_reminder",
+    category: "system",
+    name: "Event reminder (7 days before)",
+    description: "Sent to active Trust newsletter subscribers seven days before a published event when reminders are enabled.",
+    subject: "In one week in Loddiswell: {{eventTitle}}",
+    body: "A quick reminder that {{eventTitle}} is in one week.\n\nWhen: {{eventWhen}}{{eventLocation}}\n\n{{eventUrl}}\n\n{{rafflePromo}}\n\n{{eventsPromo}}\n\n{{lotteryPromo}}",
     variables: ["eventTitle", "eventWhen", "eventLocation", "eventUrl", "rafflePromo", "eventsPromo", "lotteryPromo"],
   },
   {

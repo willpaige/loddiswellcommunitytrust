@@ -101,6 +101,7 @@ export const events = pgTable("events", {
   reminderEnabled: boolean("reminder_enabled").notNull().default(false),
   reminderClaimedAt: timestamp("reminder_claimed_at", { mode: "date" }),
   reminderSentAt: timestamp("reminder_sent_at", { mode: "date" }),
+  weekReminderSentAt: timestamp("week_reminder_sent_at", { mode: "date" }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
   createdBy: text("created_by").references(() => users.id),

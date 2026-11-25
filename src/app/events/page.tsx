@@ -119,15 +119,22 @@ export default async function EventsPage() {
                     <div className="flex flex-col sm:flex-row gap-6">
                       <div className="flex-shrink-0">
                         {event.imageUrl ? (
-                          <div className="relative h-24 w-24 sm:h-28 sm:w-28 overflow-hidden rounded-lg">
+                          <a
+                            href={event.imageUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label={`Open full poster for ${event.title}`}
+                            className="block w-full max-w-72 sm:w-44"
+                          >
                             <Image
                               src={event.imageUrl}
                               alt={event.title}
-                              fill
-                              sizes="112px"
-                              className="object-cover"
+                              width={576}
+                              height={576}
+                              sizes="(min-width: 640px) 176px, 288px"
+                              className="h-auto w-full rounded-md"
                             />
-                          </div>
+                          </a>
                         ) : (
                           <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-sage-100 text-sage-700">
                             <CalendarDays

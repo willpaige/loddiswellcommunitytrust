@@ -105,7 +105,7 @@ export async function sendTemplateEmail({
   // would stop the layout seeing paragraph breaks.
   const body = interpolate(template.body.replace(/\r\n?/g, "\n"), allVariables).replace(/\n{3,}/g, "\n\n").trim();
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://loddiswellcommunitytrust.org";
-  const broadcast = key === "event_reminder";
+  const broadcast = key === "event_reminder" || key === "event_week_reminder";
   const html = renderEmailHtml({
     body,
     variables: allVariables,

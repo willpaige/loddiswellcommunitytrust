@@ -30,14 +30,22 @@ export async function sendEventReminders() {
   const midnight = new TZDate(uk.getFullYear(), uk.getMonth(), uk.getDate() + 1, "Europe/London");
   const deadline = Math.min(Date.now() + 240_000, midnight.getTime());
   const tomorrow = wallDate(uk, 1);
-  const followingDay = wallDate(uk, 2);
+  const weekAhead = wallDate(uk, 7);
+  const dayBeforeReminder = and(
+    isNull(events.reminderSentAt),
+    gte(events.startDate, tomorrow),
+    lt(events.startDate, wallDate(uk, 2)),
+  );
+  const weekBeforeReminder = and(
+    isNull(events.weekReminderSentAt),
+    gte(events.startDate, weekAhead),
+    lt(events.startDate, wallDate(uk, 8)),
+  );
   const eligible = and(
     eq(events.published, true),
     eq(events.reminderEnabled, true),
-    isNull(events.reminderSentAt),
     or(isNull(events.reminderClaimedAt), lt(events.reminderClaimedAt, new Date(now.getTime() - 360_000))),
-    gte(events.startDate, tomorrow),
-    lt(events.startDate, followingDay),
+    or(dayBeforeReminder, weekBeforeReminder),
   );
   const due = await db.select({ id: events.id }).from(events).where(eligible).orderBy(events.startDate);
   if (!due.length) return { sent, failed };
@@ -52,6 +60,8 @@ export async function sendEventReminders() {
       .where(and(eq(events.id, id), eligible)).returning();
     if (!event) continue;
 
+    const isWeekReminder = event.startDate >= weekAhead;
+    const key = isWeekReminder ? "event_week_reminder" : "event_reminder";
     let complete = true;
     try {
       const relatedEntityId = `${event.id}:${event.startDate.toISOString().slice(0, 10)}`;
@@ -62,7 +72,7 @@ export async function sendEventReminders() {
           sql`not exists (
             select 1 from ${emailLogs}
             where ${emailLogs.recipient} = ${recipientEmail}
-              and ${emailLogs.templateKey} = 'event_reminder'
+              and ${emailLogs.templateKey} = ${key}
               and ${emailLogs.relatedEntityType} = 'event'
               and ${emailLogs.relatedEntityId} = ${relatedEntityId}
               and ${emailLogs.status} in ('sent', 'skipped')
@@ -104,7 +114,7 @@ export async function sendEventReminders() {
         }
         try {
           const result = await sendTemplateEmail({
-            key: "event_reminder",
+            key,
             to: email,
             relatedEntityType: "event",
             relatedEntityId,
@@ -119,7 +129,7 @@ export async function sendEventReminders() {
             },
             extras: {
               preheader: [eventWhen, event.location].filter(Boolean).join(" · "),
-              eyebrow: "Happening tomorrow",
+              eyebrow: isWeekReminder ? "Happening in one week" : "Happening tomorrow",
               headline: event.title,
               cta: { label: "View event details", url: eventUrl },
               promoCards,
@@ -142,7 +152,7 @@ export async function sendEventReminders() {
     } finally {
       await db.update(events).set({
         reminderClaimedAt: null,
-        ...(complete ? { reminderSentAt: new Date() } : {}),
+        ...(complete ? { [isWeekReminder ? "weekReminderSentAt" : "reminderSentAt"]: new Date() } : {}),
       }).where(and(eq(events.id, id), eq(events.reminderClaimedAt, claim)));
     }
   }

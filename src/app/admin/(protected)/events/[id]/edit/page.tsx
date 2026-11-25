@@ -33,7 +33,14 @@ export default async function EditEventPage({ params }: Props) {
           Back to Events
         </Link>
       </Button>
-      <h1 className="text-3xl font-bold mb-8">Edit Event</h1>
+      <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-3xl font-bold">Edit Event</h1>
+        {event.published && (
+          <Button variant="outline" asChild>
+            <Link href={`/admin/qr-codes?destination=event-${event.id}`}>Poster QR code</Link>
+          </Button>
+        )}
+      </div>
       <EventForm action={handleUpdate} initialData={event} facilities={facilities} />
     </div>
   );

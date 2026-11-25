@@ -1,0 +1,1 @@
+ALTER TABLE "events" ADD COLUMN "week_reminder_sent_at" timestamp;

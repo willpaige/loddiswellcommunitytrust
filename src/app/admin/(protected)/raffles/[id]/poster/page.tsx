@@ -1,9 +1,12 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import QRCode from "qrcode";
 import { getRaffleForAdmin } from "@/actions/raffles";
 import { formatPence, formatRaffleSerial } from "@/lib/raffles/numbers";
 import { formatUk } from "@/lib/raffles/time";
 import { renderSmallPrint } from "@/lib/raffles/small-print";
+import { Button } from "@/components/ui/button";
+import { posterQrOptions, publicPosterUrl } from "@/lib/poster-qr";
 import { PrintButton } from "@/components/admin/print-button";
 
 export const dynamic = "force-dynamic";
@@ -15,10 +18,8 @@ export default async function RafflePosterPage({ params }: { params: Promise<{ i
   const raffle = await getRaffleForAdmin(id);
   if (!raffle) notFound();
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://loddiswellcommunitytrust.org";
-  const url = `${appUrl}/raffles/${raffle.slug}`;
-  // Generated from our own URL, so it is safe to inline.
-  const qr = await QRCode.toString(url, { type: "svg", margin: 0, errorCorrectionLevel: "M", color: { dark: "#11150E", light: "#FFFFFF" } });
+  const url = publicPosterUrl(`/raffles/${raffle.slug}`);
+  const qr = await QRCode.toString(url, { ...posterQrOptions, type: "svg" });
   const [first, ...others] = raffle.prizes;
   const displayUrl = url.replace(/^https?:\/\//, "");
 
@@ -26,6 +27,11 @@ export default async function RafflePosterPage({ params }: { params: Promise<{ i
     <div className="fixed inset-0 z-50 overflow-auto bg-muted print:static print:bg-white">
       <style>{`@page { size: A4; margin: 0 } @media print { body * { visibility: hidden } .raffle-poster, .raffle-poster * { visibility: visible } .raffle-poster { position: absolute; left: 0; top: 0 } }`}</style>
       <div className="mx-auto flex max-w-[210mm] justify-end gap-2 p-4 print:hidden">
+        {raffle.published && (
+          <Button asChild variant="outline">
+            <Link href={`/admin/qr-codes?destination=raffle-${raffle.id}`}>Download QR code</Link>
+          </Button>
+        )}
         <PrintButton label="Print poster" />
       </div>
       <article className="raffle-poster mx-auto flex h-[297mm] w-[210mm] flex-col bg-white p-[14mm] text-sage-950 shadow-lg print:shadow-none">

@@ -27,6 +27,7 @@ interface EventFormProps {
     published: boolean | null;
     reminderEnabled: boolean;
     reminderSentAt: Date | null;
+    weekReminderSentAt: Date | null;
     blockFacilityId?: string | null;
   };
 }
@@ -476,13 +477,15 @@ export function EventForm({ action, facilities = [], initialData }: EventFormPro
                 aria-describedby="reminder-help"
               />
               <Label htmlFor="reminderEnabled" className="font-normal">
-                Send a reminder the day before
+                Send reminders 7 days before and the day before
               </Label>
             </div>
             <p id="reminder-help" className="text-sm text-muted-foreground">
               {initialData?.reminderSentAt
-                ? "The reminder has already been sent."
-                : "For published events, from 10am UK time to active Trust newsletter subscribers. Includes any current raffle, upcoming events and the village lottery."}
+                ? "The day-before reminder has already been sent."
+                : initialData?.weekReminderSentAt
+                  ? "The 7-day reminder has already been sent."
+                  : "Sent from 10am UK time to active Trust newsletter subscribers for published events."}
             </p>
             {recurringEvent && <p className="text-sm text-muted-foreground">Applies to each event date.</p>}
           </CardContent>

@@ -27,7 +27,8 @@ export function NewsletterSignup() {
 
   return (
     <section
-      className="newsletter-signup bg-sage-50 border-t border-sage-100"
+      id="newsletter-signup"
+      className="newsletter-signup scroll-mt-28 bg-sage-50 border-t border-sage-100"
       aria-labelledby="newsletter-heading"
     >
       <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
